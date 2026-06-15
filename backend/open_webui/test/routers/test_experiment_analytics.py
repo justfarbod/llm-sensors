@@ -100,6 +100,8 @@ def test_session_dto_shape_handles_missing_historical_data():
     assert row['session_duration'] is None
     assert row['essay_word_count'] is None
     assert row['total_tokens'] == 0
+    assert row['total_keystrokes'] == 0
+    assert row['telemetry_summary']['total_time_away_ms'] == 0
 
 
 def test_histogram_handles_empty_and_zero_usage():
@@ -121,3 +123,14 @@ def test_anonymized_exports_remove_identity_fields():
     response = _export_response(rows, ExportRequest(ids=['session'], format='json', anonymized=True), 'test')
     assert response.media_type == 'application/json'
     assert rows == [{'session_id': 'session', 'participant_id': 'P-123'}]
+
+
+def test_participant_exports_keep_summary_json_but_flatten_csv():
+    json_rows = [{'session_id': 'session', 'total_keystrokes': 12, 'telemetry_summary': {'total_keystrokes': 12}}]
+    _export_response(json_rows, ExportRequest(ids=['session'], format='json'), 'test')
+    assert json_rows[0]['telemetry_summary'] == {'total_keystrokes': 12}
+    assert 'telemetry_events' not in json_rows[0]
+
+    csv_rows = [{'session_id': 'session', 'total_keystrokes': 12, 'telemetry_summary': {'total_keystrokes': 12}}]
+    _export_response(csv_rows, ExportRequest(ids=['session'], format='csv'), 'test')
+    assert csv_rows == [{'session_id': 'session', 'total_keystrokes': 12}]

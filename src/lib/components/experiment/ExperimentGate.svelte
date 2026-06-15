@@ -39,6 +39,9 @@
 	const setExperimentState = (next: Awaited<ReturnType<typeof getCurrentExperiment>>) => {
 		const enteredWriting = next.state === 'IN_PROGRESS' && $experimentCurrent?.state !== 'IN_PROGRESS';
 		if (!sameExperimentState($experimentCurrent, next)) experimentCurrent.set(next);
+		window.dispatchEvent(
+			new CustomEvent('open-webui-experiment-state', { detail: { state: next.state } })
+		);
 		if (enteredWriting) showEssaySidebar.set(true);
 	};
 
@@ -82,6 +85,9 @@
 	};
 
 	const signOut = async () => {
+		window.dispatchEvent(
+			new CustomEvent('open-webui-experiment-state', { detail: { state: 'SIGNED_OUT' } })
+		);
 		const result = await userSignOut();
 		user.set(undefined);
 		localStorage.removeItem('token');

@@ -78,6 +78,7 @@
 
 		submitting = true;
 		try {
+			window.dispatchEvent(new CustomEvent('open-webui-experiment-telemetry-flush'));
 			await submitEssay(localStorage.token, normalizedContent);
 			content = normalizedContent;
 			lastSubmittedContent = normalizedContent;
@@ -155,6 +156,7 @@
 
 		<textarea
 			bind:value={content}
+			data-experiment-field="essay"
 			class="min-h-0 w-full min-w-0 flex-1 resize-none bg-transparent p-4 text-sm leading-6 text-gray-900 outline-hidden placeholder:text-gray-400 dark:text-gray-100"
 			placeholder={$i18n.t('Start writing your essay...')}
 		></textarea>

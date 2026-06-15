@@ -1458,6 +1458,7 @@
 													json={true}
 													richText={$settings?.richTextInput ?? true}
 													messageInput={true}
+													experimentField="chat"
 													showFormattingToolbar={$settings?.showFormattingToolbar ?? false}
 													floatingMenuPlacement={'top-start'}
 													insertPromptAsRichText={$settings?.insertPromptAsRichText ?? false}

@@ -202,6 +202,8 @@
 		value ? new Date(value * 1000).toLocaleString() : 'Not available';
 	const fmtDuration = (value: number | null | undefined) =>
 		value === null || value === undefined ? 'Not available' : `${Math.round(value / 60)} min`;
+	const fmtMsDuration = (value: number | null | undefined) =>
+		value === null || value === undefined ? 'Not available' : `${Math.round(value / 1000)} sec`;
 	const yesNo = (value: boolean) => (value ? 'Yes' : 'No');
 	const distributions = (value: any) => Object.entries(value ?? {}) as [string, any[]][];
 
@@ -360,6 +362,8 @@
 							><button on:click={() => sortBy('prompts')}>Prompts</button></th
 						><th><button on:click={() => sortBy('total_tokens')}>Tokens</button></th><th
 							><button on:click={() => sortBy('essay_word_count')}>Essay words</button></th
+						><th>Keystrokes</th><th>Pauses</th><th>Pasted chars</th><th>Tab leaves</th><th
+							>Time away</th
 						></tr
 					></thead
 				>
@@ -396,10 +400,12 @@
 							<td>{fmtDate(row.session_start_time)}</td><td>{fmtDuration(row.session_duration)}</td
 							><td>{row.prompts}</td><td>{row.total_tokens}</td><td
 								>{row.essay_word_count ?? 'Not available'}</td
-							>
+							><td>{row.total_keystrokes}</td><td>{row.pause_count}</td><td
+								>{row.total_pasted_chars}</td
+							><td>{row.tab_switch_count}</td><td>{fmtMsDuration(row.total_time_away_ms)}</td>
 						</tr>
 					{:else}<tr
-							><td colspan="11" class="py-12 text-center text-gray-400"
+							><td colspan="16" class="py-12 text-center text-gray-400"
 								>No participants match these filters.</td
 							></tr
 						>{/each}
@@ -666,6 +672,15 @@
 						detail.writing_duration
 					)} · Post-survey: {fmtDuration(detail.post_survey_duration)}
 				</p>
+				<h3 class="mb-2 mt-6 font-semibold">Interaction telemetry</h3>
+				<div class="grid gap-2 sm:grid-cols-2">
+					{#each Object.entries(detail.telemetry_summary ?? {}) as [name, value]}<div
+							class="rounded-xl bg-gray-50 p-3 dark:bg-gray-850"
+						>
+							<div class="text-xs text-gray-400">{name.replaceAll('_', ' ')}</div>
+							<div class="mt-1 text-sm">{value ?? 'Not available'}</div>
+						</div>{/each}
+				</div>
 				<h3 class="mb-2 mt-6 font-semibold">Pre-survey</h3>
 				<pre class="research-json">{JSON.stringify(
 						detail.pre_survey ?? 'Not available',

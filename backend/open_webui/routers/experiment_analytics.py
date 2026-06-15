@@ -19,6 +19,7 @@ from open_webui.env import WEBUI_SECRET_KEY
 from open_webui.internal.db import get_async_session
 from open_webui.models.chat_messages import ChatMessage, _token_columns
 from open_webui.models.essays import Essay, EssayTopics
+from open_webui.models.experiment_telemetry import ExperimentTelemetrySummary, ExperimentTelemetrySummaryModel
 from open_webui.models.experiments import ACTIVE_STATES, ExperimentSession, ExperimentState
 from open_webui.models.groups import Group, GroupMember, Groups
 from open_webui.models.users import User
@@ -157,7 +158,29 @@ async def _essays_by_ids(db: AsyncSession, essay_ids: list[str]):
     return {row.id: row for row in rows}
 
 
-def _session_row(session, group, user, essay, usage):
+async def _telemetry_by_session(db: AsyncSession, session_ids: list[str]):
+    if not session_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(ExperimentTelemetrySummary).where(
+                ExperimentTelemetrySummary.experiment_session_id.in_(session_ids)
+            )
+        )
+    ).scalars().all()
+    return {row.experiment_session_id: row for row in rows}
+
+
+def _telemetry_payload(summary):
+    return (
+        ExperimentTelemetrySummaryModel.model_validate(summary).model_dump()
+        if summary
+        else ExperimentTelemetrySummaryModel().model_dump()
+    )
+
+
+def _session_row(session, group, user, essay, usage, telemetry=None):
+    telemetry_payload = _telemetry_payload(telemetry)
     return {
         'session_id': session.id,
         'user_id': session.user_id,
@@ -187,6 +210,8 @@ def _session_row(session, group, user, essay, usage):
         'essay_id': session.essay_id,
         'essay_word_count': essay.word_count if essay else None,
         'essay_character_count': essay.character_count if essay else None,
+        **telemetry_payload,
+        'telemetry_summary': telemetry_payload,
     }
 
 
@@ -230,6 +255,7 @@ async def _participant_rows(db: AsyncSession, filters: DashboardFilters):
     records = (await db.execute(stmt)).all()
     sessions = [record[2] for record in records if record[2]]
     usage = await _usage_by_session(db, [session.id for session in sessions])
+    telemetry = await _telemetry_by_session(db, [session.id for session in sessions])
     essays = await _essays_by_ids(db, [session.essay_id for session in sessions if session.essay_id])
     rows = []
     for member, user, session in records:
@@ -241,6 +267,7 @@ async def _participant_rows(db: AsyncSession, filters: DashboardFilters):
                     user,
                     essays.get(session.essay_id),
                     usage.get(session.id, {}),
+                    telemetry.get(session.id),
                 )
             )
         else:
@@ -274,6 +301,8 @@ async def _participant_rows(db: AsyncSession, filters: DashboardFilters):
                     'essay_id': None,
                     'essay_word_count': None,
                     'essay_character_count': None,
+                    **_telemetry_payload(None),
+                    'telemetry_summary': _telemetry_payload(None),
                 }
             )
     return rows
@@ -423,7 +452,8 @@ async def session_detail(
         else None
     )
     usage = (await _usage_by_session(db, [session.id])).get(session.id, {})
-    row = _session_row(session, group, participant, essay, usage)
+    telemetry = (await _telemetry_by_session(db, [session.id])).get(session.id)
+    row = _session_row(session, group, participant, essay, usage, telemetry)
     row.update(
         {
             'topic_question': session.topic_question,
@@ -730,6 +760,8 @@ def _export_response(rows, form: ExportRequest, filename: str):
             row.pop('username', None)
             row.pop('email', None)
     if form.format == 'csv':
+        for row in rows:
+            row.pop('telemetry_summary', None)
         headers = list(rows[0].keys()) if rows else []
         return StreamingResponse(
             _csv_stream(headers, rows),
@@ -755,9 +787,17 @@ async def export_participants(
     users = await _users_by_ids(db, [session.user_id for session in sessions])
     essays = await _essays_by_ids(db, [session.essay_id for session in sessions if session.essay_id])
     usage = await _usage_by_session(db, [session.id for session in sessions])
+    telemetry = await _telemetry_by_session(db, [session.id for session in sessions])
     _, groups = await _group_context(db)
     rows = [
-        _session_row(session, groups.get(session.group_id), users.get(session.user_id), essays.get(session.essay_id), usage.get(session.id, {}))
+        _session_row(
+            session,
+            groups.get(session.group_id),
+            users.get(session.user_id),
+            essays.get(session.essay_id),
+            usage.get(session.id, {}),
+            telemetry.get(session.id),
+        )
         for session in sessions
     ]
     return _export_response(rows, form, 'experiment-participants')

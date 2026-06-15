@@ -286,6 +286,7 @@
 	export let generateAutoCompletion: Function = async () => null;
 	export let autocomplete = false;
 	export let messageInput = false;
+	export let experimentField: 'chat' | '' = '';
 	export let shiftEnter = false;
 	export let largeTextAsFile = false;
 	export let insertPromptAsRichText = false;
@@ -1333,6 +1334,7 @@
 
 <div
 	bind:this={element}
+	data-experiment-field={experimentField || undefined}
 	dir="auto"
 	class="relative w-full min-w-full {className} {!editable ? 'cursor-not-allowed' : ''}"
 />

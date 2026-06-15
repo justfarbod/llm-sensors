@@ -90,6 +90,7 @@ from open_webui.routers import (
     notes,
     essays,
     experiments,
+    experiment_telemetry,
     experiment_analytics,
     folders,
     configs,
@@ -1443,6 +1444,11 @@ app.include_router(chats.router, prefix='/api/v1/chats', tags=['chats'])
 app.include_router(notes.router, prefix='/api/v1/notes', tags=['notes'])
 app.include_router(essays.router, prefix='/api/v1/essays', tags=['essays'])
 app.include_router(experiments.router, prefix='/api/v1/experiments', tags=['experiments'])
+app.include_router(
+    experiment_telemetry.router,
+    prefix='/api/v1/experiments/telemetry',
+    tags=['experiment-telemetry'],
+)
 app.include_router(
     experiment_analytics.router,
     prefix='/api/v1/analytics/experiments',
