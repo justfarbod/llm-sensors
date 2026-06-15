@@ -1,120 +1,142 @@
 <script lang="ts">
-	import { onMount, getContext } from 'svelte';
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-
-	import { WEBUI_NAME, config, mobile, showSidebar, user } from '$lib/stores';
 	import { page } from '$app/stores';
-	import Tooltip from '$lib/components/common/Tooltip.svelte';
+	import { DropdownMenu } from 'bits-ui';
 
-	import Sidebar from '$lib/components/icons/Sidebar.svelte';
-
-	const i18n = getContext('i18n');
+	import { WEBUI_API_BASE_URL } from '$lib/constants';
+	import { WEBUI_NAME, user } from '$lib/stores';
+	import UserMenu from '$lib/components/layout/Sidebar/UserMenu.svelte';
+	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte';
 
 	let loaded = false;
+	let showAdvanced = false;
+	let hoverCloseTimer: ReturnType<typeof setTimeout>;
+
+	const primaryLinks = [
+		{ label: 'Research Dashboard', href: '/admin/analytics/overview', match: '/admin/analytics' },
+		{ label: 'Users', href: '/admin/users', match: '/admin/users' },
+		{ label: 'Essays', href: '/admin/essays', match: '/admin/essays' }
+	];
+
+	const advancedLinks = [
+		{ label: 'Functions', href: '/admin/functions' },
+		{ label: 'Evaluations', href: '/admin/evaluations' },
+		{ label: 'Settings', href: '/admin/settings' },
+		{ label: 'System Analytics', href: '/admin/system-analytics' }
+	];
+
+	const supportsHover = () => window.matchMedia('(hover: hover)').matches;
+	const openAdvanced = () => {
+		if (!supportsHover()) return;
+		clearTimeout(hoverCloseTimer);
+		showAdvanced = true;
+	};
+	const scheduleAdvancedClose = () => {
+		if (!supportsHover()) return;
+		hoverCloseTimer = setTimeout(() => (showAdvanced = false), 160);
+	};
 
 	onMount(async () => {
 		if ($user?.role !== 'admin') {
 			await goto('/');
+			return;
 		}
 		loaded = true;
 	});
 </script>
 
 <svelte:head>
-	<title>
-		{$i18n.t('Admin Panel')} • {$WEBUI_NAME}
-	</title>
+	<title>Admin Panel • {$WEBUI_NAME}</title>
 </svelte:head>
 
 {#if loaded}
-	<div
-		class=" flex flex-col h-screen max-h-[100dvh] flex-1 transition-width duration-200 ease-in-out {$showSidebar
-			? 'md:max-w-[calc(100%-var(--sidebar-width))]'
-			: ' md:max-w-[calc(100%-49px)]'}  w-full max-w-full"
-	>
-		<nav class="   px-2.5 pt-1.5 backdrop-blur-xl drag-region select-none">
-			<div class=" flex items-center gap-1">
-				{#if $mobile}
-					<div class="{$showSidebar ? 'md:hidden' : ''} flex flex-none items-center self-end">
-						<Tooltip
-							content={$showSidebar ? $i18n.t('Close Sidebar') : $i18n.t('Open Sidebar')}
-							interactive={true}
-						>
-							<button
-								id="sidebar-toggle-button"
-								class=" cursor-pointer flex rounded-lg hover:bg-gray-100 dark:hover:bg-gray-850 transition cursor-"
-								on:click={() => {
-									showSidebar.set(!$showSidebar);
-								}}
-							>
-								<div class=" self-center p-1.5">
-									<Sidebar />
-								</div>
-							</button>
-						</Tooltip>
-					</div>
-				{/if}
+	<div class="flex h-screen max-h-[100dvh] w-full flex-1 flex-col bg-white dark:bg-gray-950">
+		<header
+			class="z-20 flex min-h-14 items-center gap-3 border-b border-gray-100 bg-white/95 px-3 backdrop-blur-xl dark:border-gray-850 dark:bg-gray-950/95 sm:px-5"
+		>
+			<a
+				href="/admin/analytics/overview"
+				class="mr-1 shrink-0 rounded-lg px-2 py-1 text-sm font-semibold text-gray-900 hover:bg-gray-100 dark:text-white dark:hover:bg-gray-850"
+			>
+				AI-Assisted Writing Study
+			</a>
 
-				<div class=" flex w-full">
-					<div
-						class="flex gap-1 scrollbar-none overflow-x-auto w-fit text-center text-sm font-medium rounded-full bg-transparent pt-1"
+			<nav
+				aria-label="Admin navigation"
+				class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+			>
+				{#each primaryLinks as link}
+					<a
+						href={link.href}
+						class="min-w-fit rounded-lg px-2.5 py-1.5 text-sm font-medium transition {$page.url.pathname.startsWith(
+							link.match
+						)
+							? 'bg-gray-100 text-gray-900 dark:bg-gray-850 dark:text-white'
+							: 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-900 dark:hover:text-white'}"
 					>
-						<a
-							draggable="false"
-							class="min-w-fit p-1.5 {$page.url.pathname.includes('/admin/essays')
-								? ''
-								: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition select-none"
-							href="/admin/essays">{$i18n.t('Essays')}</a
-						>
+						{link.label}
+					</a>
+				{/each}
 
-						<a
-							draggable="false"
-							class="min-w-fit p-1.5 {$page.url.pathname.includes('/admin/users')
-								? ''
-								: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition select-none"
-							href="/admin">{$i18n.t('Users')}</a
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div on:mouseenter={openAdvanced} on:mouseleave={scheduleAdvancedClose}>
+					<DropdownMenu.Root bind:open={showAdvanced}>
+						<DropdownMenu.Trigger
+							id="admin-advanced-trigger"
+							class="flex min-w-fit items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-900 dark:hover:text-white"
 						>
-
-						{#if $config?.features.enable_admin_analytics ?? true}
-							<a
-								draggable="false"
-								class="min-w-fit p-1.5 {$page.url.pathname.includes('/admin/analytics')
-									? ''
-									: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition select-none"
-								href="/admin/analytics">{$i18n.t('Analytics')}</a
+							<EllipsisHorizontal className="size-4" />
+							<span>Advanced</span>
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Portal>
+							<DropdownMenu.Content
+								align="start"
+								sideOffset={4}
+								class="z-[9999] w-52 rounded-xl border border-gray-100 bg-white p-1 shadow-xl outline-none dark:border-gray-800 dark:bg-gray-900"
+								onmouseenter={openAdvanced}
+								onmouseleave={scheduleAdvancedClose}
 							>
-						{/if}
-
-						<a
-							draggable="false"
-							class="min-w-fit p-1.5 {$page.url.pathname.includes('/admin/evaluations')
-								? ''
-								: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition select-none"
-							href="/admin/evaluations">{$i18n.t('Evaluations')}</a
-						>
-
-						<a
-							draggable="false"
-							class="min-w-fit p-1.5 {$page.url.pathname.includes('/admin/functions')
-								? ''
-								: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition select-none"
-							href="/admin/functions">{$i18n.t('Functions')}</a
-						>
-
-						<a
-							draggable="false"
-							class="min-w-fit p-1.5 {$page.url.pathname.includes('/admin/settings')
-								? ''
-								: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition select-none"
-							href="/admin/settings">{$i18n.t('Settings')}</a
-						>
-					</div>
+								{#each advancedLinks as link}
+									<DropdownMenu.Item textValue={link.label}>
+										{#snippet child({ props })}
+											<a
+												{...props}
+												href={link.href}
+												class="block rounded-lg px-3 py-2 text-sm outline-none {$page.url.pathname.startsWith(
+													link.href
+												)
+													? 'bg-gray-100 font-medium text-gray-900 dark:bg-gray-800 dark:text-white'
+													: 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus:bg-gray-100 focus:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white dark:focus:bg-gray-800 dark:focus:text-white'}"
+											>
+												{link.label}
+											</a>
+										{/snippet}
+									</DropdownMenu.Item>
+								{/each}
+							</DropdownMenu.Content>
+						</DropdownMenu.Portal>
+					</DropdownMenu.Root>
 				</div>
-			</div>
-		</nav>
+			</nav>
 
-		<div class="  pb-1 flex-1 max-h-full overflow-y-auto">
+			<UserMenu restricted={true} role="admin" showActiveUsers={false}>
+				<button
+					type="button"
+					aria-label="Account menu"
+					class="rounded-full p-0.5 hover:bg-gray-100 dark:hover:bg-gray-850"
+				>
+					<img
+						src={`${WEBUI_API_BASE_URL}/users/${$user?.id}/profile/image`}
+						class="size-8 rounded-full object-cover"
+						alt=""
+					/>
+				</button>
+			</UserMenu>
+		</header>
+
+		<main class="min-h-0 flex-1 overflow-y-auto">
 			<slot />
-		</div>
+		</main>
 	</div>
 {/if}

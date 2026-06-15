@@ -22,8 +22,10 @@
 		settings,
 		temporaryChatEnabled,
 		TTSWorker,
-		user
+		user,
+		experimentCurrent
 	} from '$lib/stores';
+	import { allowsPromptSuggestions } from '$lib/utils/experiments';
 	import { synthesizeOpenAISpeech } from '$lib/apis/audio';
 	import { imageGenerations } from '$lib/apis/images';
 	import {
@@ -1498,7 +1500,7 @@
 						/>
 					{/if}
 
-					{#if (isLastMessage || ($settings?.keepFollowUpPrompts ?? false)) && message.done && !readOnly && (message?.followUps ?? []).length > 0}
+					{#if allowsPromptSuggestions($user, $experimentCurrent) && (isLastMessage || ($settings?.keepFollowUpPrompts ?? false)) && message.done && !readOnly && (message?.followUps ?? []).length > 0}
 						<div class="mt-2.5" in:fade={{ duration: 100 }}>
 							<FollowUps
 								followUps={message?.followUps}

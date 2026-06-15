@@ -17,7 +17,11 @@
 
 	import { WEBUI_VERSION, WEBUI_API_BASE_URL } from '$lib/constants';
 	import { compareVersion } from '$lib/utils';
-	import { experimentAllowsApp } from '$lib/utils/experiments';
+	import {
+		appAccessRedirect,
+		experimentAllowsApp,
+		isExperimentParticipant
+	} from '$lib/utils/experiments';
 
 	import {
 		config,
@@ -44,6 +48,7 @@
 	} from '$lib/stores';
 
 	import Sidebar from '$lib/components/layout/Sidebar.svelte';
+	import ExperimentSidebar from '$lib/components/experiment/ExperimentSidebar.svelte';
 	import SettingsModal from '$lib/components/chat/SettingsModal.svelte';
 	import ChangelogModal from '$lib/components/ChangelogModal.svelte';
 	import AccountPending from '$lib/components/layout/Overlay/AccountPending.svelte';
@@ -59,6 +64,19 @@
 	let localDBChats = [];
 
 	let version;
+
+	$: restrictedParticipant = isExperimentParticipant($user, $experimentCurrent);
+	$: if ($user && $experimentCurrent) {
+		const redirect = appAccessRedirect($page.url.pathname, $user, $experimentCurrent);
+		if (redirect && redirect !== $page.url.pathname) goto(redirect);
+		if ($user.role === 'admin' || restrictedParticipant) {
+			showSettings.set(false);
+			showShortcuts.set(false);
+			showSearch.set(false);
+			showControls.set(false);
+			temporaryChatEnabled.set(false);
+		}
+	}
 
 	const clearChatInputStorage = () => {
 		const chatInputKeys = Object.keys(localStorage).filter((key) => key.startsWith('chat-input'));
@@ -203,6 +221,17 @@
 		if (!['user', 'admin'].includes($user?.role)) {
 			return;
 		}
+		if ($user?.role === 'admin') {
+			showSidebar.set(false);
+			showSettings.set(false);
+			showShortcuts.set(false);
+			experimentCurrent.set({ state: 'NOT_APPLICABLE' });
+			loaded = true;
+			if (!$page.url.pathname.startsWith('/admin')) {
+				await goto('/admin/analytics/overview');
+			}
+			return;
+		}
 
 		clearChatInputStorage();
 		await Promise.all([
@@ -246,6 +275,15 @@
 
 		const setupKeyboardShortcuts = () => {
 			document.addEventListener('keydown', async (event) => {
+				if (
+					restrictedParticipant &&
+					[Shortcut.SEARCH, Shortcut.OPEN_SETTINGS, Shortcut.SHOW_SHORTCUTS].some((shortcut) =>
+						isShortcutMatch(event, shortcuts[shortcut])
+					)
+				) {
+					event.preventDefault();
+					return;
+				}
 				if (isShortcutMatch(event, shortcuts[Shortcut.SEARCH])) {
 					console.log('Shortcut triggered: SEARCH');
 					event.preventDefault();
@@ -364,6 +402,11 @@
 			}
 		});
 
+		if (restrictedParticipant) {
+			showControls.set(false);
+			temporaryChatEnabled.set(false);
+		}
+
 		await tick();
 
 		loaded = true;
@@ -379,9 +422,13 @@
 	};
 </script>
 
-<SettingsModal bind:show={$showSettings} />
-<ChangelogModal bind:show={$showChangelog} />
-<ExperimentGate />
+{#if $user?.role !== 'admin' && !restrictedParticipant}
+	<SettingsModal bind:show={$showSettings} />
+{/if}
+{#if $user?.role !== 'admin' && !restrictedParticipant}<ChangelogModal
+		bind:show={$showChangelog}
+	/>{/if}
+{#if $user?.role !== 'admin'}<ExperimentGate />{/if}
 
 {#if version && compareVersion(version.latest, version.current) && ($settings?.showUpdateToast ?? true)}
 	<div class=" absolute bottom-8 right-8 z-50" in:fade={{ duration: 100 }}>
@@ -403,7 +450,7 @@
 			{#if !['user', 'admin'].includes($user?.role)}
 				<AccountPending />
 			{:else}
-				{#if localDBChats.length > 0}
+				{#if $user?.role !== 'admin' && localDBChats.length > 0}
 					<div class="fixed w-full h-full flex z-50">
 						<div
 							class="absolute w-full h-full backdrop-blur-md bg-white/20 dark:bg-gray-900/50 flex justify-center"
@@ -458,20 +505,28 @@
 					</div>
 				{/if}
 
-				{#if $experimentCurrent === undefined}
-					<div class="w-full flex-1 h-full flex items-center justify-center"><Spinner className="size-5" /></div>
-				{:else if experimentAllowsApp($experimentCurrent)}
-					<Sidebar />
-					{#if loaded}
-					<slot />
-					{:else}
-					<div
-						class="w-full flex-1 h-full flex items-center justify-center {$showSidebar
-							? '  md:max-w-[calc(100%-var(--sidebar-width))]'
-							: ' '}"
-					>
+				{#if $user?.role === 'admin'}
+					{#if loaded}<slot />{:else}<div
+							class="w-full flex-1 h-full flex items-center justify-center"
+						>
+							<Spinner className="size-5" />
+						</div>{/if}
+				{:else if $experimentCurrent === undefined}
+					<div class="w-full flex-1 h-full flex items-center justify-center">
 						<Spinner className="size-5" />
 					</div>
+				{:else if experimentAllowsApp($experimentCurrent)}
+					{#if restrictedParticipant}<ExperimentSidebar />{:else}<Sidebar />{/if}
+					{#if loaded}
+						<slot />
+					{:else}
+						<div
+							class="w-full flex-1 h-full flex items-center justify-center {$showSidebar
+								? '  md:max-w-[calc(100%-var(--sidebar-width))]'
+								: ' '}"
+						>
+							<Spinner className="size-5" />
+						</div>
 					{/if}
 				{/if}
 			{/if}

@@ -1,11 +1,12 @@
 import asyncio
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
+from starlette.requests import Request
 
 from open_webui.models.experiments import (
     ExperimentSession,
@@ -17,6 +18,7 @@ from open_webui.models.experiments import (
     require_experiment_chat_access,
 )
 from open_webui.routers.experiments import response_for
+from open_webui.utils.experiments import require_chat_access_dependency, require_non_experiment_user_dependency
 
 @asynccontextmanager
 async def fake_db_context(db=None):
@@ -71,6 +73,71 @@ def test_chat_access_allows_only_not_applicable_or_in_progress(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         run(require_experiment_chat_access(user))
     assert exc.value.status_code == 403
+
+
+def test_chat_access_rejects_admin_even_when_experiment_is_not_applicable():
+    with pytest.raises(HTTPException) as exc:
+        run(require_experiment_chat_access(SimpleNamespace(id='admin', role='admin')))
+    assert exc.value.status_code == 403
+    assert 'Admin Panel' in exc.value.detail
+
+
+def test_admin_chat_router_policy_preserves_only_admin_database_export():
+    admin = SimpleNamespace(id='admin', role='admin')
+    blocked = Request({'type': 'http', 'method': 'GET', 'path': '/api/v1/chats', 'headers': []})
+    allowed = Request({'type': 'http', 'method': 'GET', 'path': '/api/v1/chats/all/db', 'headers': []})
+
+    with pytest.raises(HTTPException) as exc:
+        run(require_chat_access_dependency(blocked, admin, AsyncMock()))
+    assert exc.value.status_code == 403
+    assert run(require_chat_access_dependency(allowed, admin, AsyncMock())) == ExperimentState.NOT_APPLICABLE
+
+
+def test_experiment_user_cannot_access_archived_chats(monkeypatch):
+    user = SimpleNamespace(id='user', role='user')
+    request = Request({'type': 'http', 'method': 'GET', 'path': '/api/v1/chats/archived', 'headers': []})
+    monkeypatch.setattr(
+        'open_webui.utils.experiments.require_experiment_chat_access',
+        AsyncMock(return_value=ExperimentState.IN_PROGRESS),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        run(require_chat_access_dependency(request, user, AsyncMock()))
+    assert exc.value.status_code == 403
+
+
+def test_experiment_and_admin_users_cannot_access_personal_settings(monkeypatch):
+    admin = SimpleNamespace(id='admin', role='admin')
+    with pytest.raises(HTTPException):
+        run(require_non_experiment_user_dependency(admin, AsyncMock()))
+
+    participant = SimpleNamespace(id='user', role='user')
+    monkeypatch.setattr(
+        Experiments,
+        'get_current',
+        AsyncMock(return_value=(ExperimentState.IN_PROGRESS, None, None)),
+    )
+    with pytest.raises(HTTPException):
+        run(require_non_experiment_user_dependency(participant, AsyncMock()))
+
+
+def test_pre_survey_records_submission_timestamp(monkeypatch):
+    user = SimpleNamespace(id='user', role='user')
+    transition = AsyncMock(return_value=SimpleNamespace(id='session'))
+    monkeypatch.setattr(Experiments, '_transition', transition)
+    form = PreSurveyForm(
+        school_class=' Grade 10 ',
+        ai_familiarity=3,
+        ai_schoolwork_frequency='Sometimes',
+        essay_writing_confidence=4,
+        age_range='15–16',
+    )
+
+    run(Experiments.submit_pre_survey(user, form, AsyncMock()))
+
+    values = transition.await_args.args[3]
+    assert values['pre_survey']['school_class'] == 'Grade 10'
+    assert isinstance(values['pre_survey_submitted_at'], int)
 
 
 def test_out_of_order_and_duplicate_transitions_are_rejected(monkeypatch):
@@ -180,3 +247,32 @@ def test_duplicate_experiment_essay_submission_is_rejected(monkeypatch):
         run(Experiments.submit_essay(user, 'Essay', db))
     assert exc.value.status_code == 409
     db.rollback.assert_awaited_once()
+
+
+def test_experiment_essay_stores_word_and_character_counts(monkeypatch):
+    user = SimpleNamespace(id='user', role='user')
+    session = ExperimentSessionModel(
+        id='session',
+        user_id='user',
+        group_id='group',
+        topic_id='topic',
+        topic_title='Title',
+        topic_question='Question',
+        state=ExperimentState.IN_PROGRESS,
+        created_at=1,
+        updated_at=1,
+    )
+    db = AsyncMock()
+    db.add = MagicMock()
+    db.execute.return_value.rowcount = 1
+    db.refresh.side_effect = lambda essay: setattr(essay, 'id', essay.id)
+    monkeypatch.setattr(
+        Experiments,
+        'get_current',
+        AsyncMock(return_value=(ExperimentState.IN_PROGRESS, session, None)),
+    )
+
+    essay = run(Experiments.submit_essay(user, 'One two three.', db))
+
+    assert essay.word_count == 3
+    assert essay.character_count == len('One two three.')

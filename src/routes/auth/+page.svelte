@@ -60,7 +60,12 @@
 			}
 
 			if (!redirectPath) {
-				redirectPath = $page.url.searchParams.get('redirect') || '/';
+				redirectPath =
+					sessionUser.role === 'admin'
+						? '/admin/analytics/overview'
+						: $page.url.searchParams.get('redirect') || '/';
+			} else if (sessionUser.role === 'admin' && !redirectPath.startsWith('/admin')) {
+				redirectPath = '/admin/analytics/overview';
 			}
 
 			goto(redirectPath);
@@ -168,7 +173,7 @@
 	onMount(async () => {
 		const redirectPath = $page.url.searchParams.get('redirect');
 		if ($user !== undefined) {
-			goto(redirectPath || '/');
+			goto($user?.role === 'admin' ? '/admin/analytics/overview' : redirectPath || '/');
 		} else {
 			if (redirectPath) {
 				localStorage.setItem('redirectPath', redirectPath);
@@ -196,7 +201,7 @@
 
 <svelte:head>
 	<title>
-		{`${$WEBUI_NAME}`}
+		{$i18n.t('AI-Assisted Writing Study')}
 	</title>
 </svelte:head>
 
@@ -225,7 +230,7 @@
 							class="flex items-center justify-center gap-3 text-xl sm:text-2xl text-center font-medium dark:text-gray-200"
 						>
 							<div>
-								{$i18n.t('Signing in to {{WEBUI_NAME}}', { WEBUI_NAME: $WEBUI_NAME })}
+								{$i18n.t('Signing in to the AI-Assisted Writing Study')}
 							</div>
 
 							<div>
@@ -256,15 +261,12 @@
 							>
 								<div class="mb-1">
 									<div class=" text-2xl font-medium">
-										{#if $config?.onboarding ?? false}
-											{$i18n.t(`Get started with {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })}
-										{:else if mode === 'ldap'}
-											{$i18n.t(`Sign in to {{WEBUI_NAME}} with LDAP`, { WEBUI_NAME: $WEBUI_NAME })}
-										{:else if mode === 'signin'}
-											{$i18n.t(`Sign in to {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })}
-										{:else}
-											{$i18n.t(`Sign up to {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })}
-										{/if}
+										{$i18n.t('AI-Assisted Writing Study')}
+									</div>
+									<div class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+										{mode === 'signup'
+											? $i18n.t('Create an account to participate')
+											: $i18n.t('Sign in to continue your research session')}
 									</div>
 
 									{#if $config?.onboarding ?? false}

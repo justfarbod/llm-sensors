@@ -39,6 +39,7 @@ class ExperimentSession(Base):
     pre_survey = Column(JSONField, nullable=True)
     post_survey = Column(JSONField, nullable=True)
     consented_at = Column(BigInteger, nullable=True)
+    pre_survey_submitted_at = Column(BigInteger, nullable=True)
     topic_shown_at = Column(BigInteger, nullable=True)
     writing_started_at = Column(BigInteger, nullable=True)
     essay_submitted_at = Column(BigInteger, nullable=True)
@@ -50,6 +51,9 @@ class ExperimentSession(Base):
     __table_args__ = (
         UniqueConstraint('user_id', 'group_id', name='uq_experiment_session_user_group'),
         Index('ix_experiment_session_user_state', 'user_id', 'state'),
+        Index('ix_experiment_session_group_created', 'group_id', 'created_at'),
+        Index('ix_experiment_session_topic_created', 'topic_id', 'created_at'),
+        Index('ix_experiment_session_state_created', 'state', 'created_at'),
     )
 
 
@@ -65,6 +69,7 @@ class ExperimentSessionModel(BaseModel):
     essay_id: Optional[str] = None
     state: ExperimentState
     consented_at: Optional[int] = None
+    pre_survey_submitted_at: Optional[int] = None
     topic_shown_at: Optional[int] = None
     writing_started_at: Optional[int] = None
     essay_submitted_at: Optional[int] = None
@@ -223,7 +228,7 @@ class ExperimentTable:
             raise HTTPException(status_code=422, detail='School class is required.')
         return await self._transition(
             user, ExperimentState.PRE_SURVEY_REQUIRED, ExperimentState.TOPIC_REQUIRED,
-            {'pre_survey': data}, db,
+            {'pre_survey': data, 'pre_survey_submitted_at': int(time.time_ns())}, db,
         )
 
     async def start(self, user, db: AsyncSession):
@@ -245,6 +250,8 @@ class ExperimentTable:
             topic_id=session_model.topic_id,
             topic_title=session_model.topic_title,
             topic_question=session_model.topic_question,
+            word_count=len(content.split()),
+            character_count=len(content),
             created_at=now,
             updated_at=now,
         )
@@ -291,6 +298,12 @@ Experiments = ExperimentTable()
 
 
 async def require_experiment_chat_access(user, db: Optional[AsyncSession] = None):
+    if user.role == 'admin':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='Administrators can only access the Admin Panel.',
+        )
     state, _, _ = await Experiments.get_current(user, db=db)
     if state not in {ExperimentState.NOT_APPLICABLE, ExperimentState.IN_PROGRESS}:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f'Experiment step required: {state.value}')
+    return state

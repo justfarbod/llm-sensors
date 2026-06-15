@@ -62,6 +62,7 @@
 
 	export let selected = false;
 	export let shiftKey = false;
+	export let restricted = false;
 
 	export let onDragEnd = () => {};
 
@@ -517,6 +518,7 @@
 		</a>
 	{/if}
 
+	{#if !restricted}
 	<!-- svelte-ignore a11y-no-static-element-interactions -->
 	<div
 		id="sidebar-chat-item-menu"
@@ -652,4 +654,5 @@
 			</div>
 		{/if}
 	</div>
+	{/if}
 </div>

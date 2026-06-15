@@ -10,8 +10,8 @@ describe('Settings', () => {
 	});
 
 	beforeEach(() => {
-		// Login as the admin user
-		cy.loginAdmin();
+		// Login as a normal non-experiment user
+		cy.loginNormalUser();
 		// Visit the home page
 		cy.visit('/');
 	});

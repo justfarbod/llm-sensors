@@ -90,6 +90,7 @@ from open_webui.routers import (
     notes,
     essays,
     experiments,
+    experiment_analytics,
     folders,
     configs,
     groups,
@@ -126,6 +127,7 @@ from open_webui.models.models import Models
 from open_webui.models.users import UserModel, Users
 from open_webui.models.chats import Chats, ChatForm
 from open_webui.utils.experiments import require_experiment_access_dependency
+from open_webui.models.experiments import ExperimentState
 
 from open_webui.config import (
     # Ollama
@@ -1441,6 +1443,11 @@ app.include_router(chats.router, prefix='/api/v1/chats', tags=['chats'])
 app.include_router(notes.router, prefix='/api/v1/notes', tags=['notes'])
 app.include_router(essays.router, prefix='/api/v1/essays', tags=['essays'])
 app.include_router(experiments.router, prefix='/api/v1/experiments', tags=['experiments'])
+app.include_router(
+    experiment_analytics.router,
+    prefix='/api/v1/analytics/experiments',
+    tags=['experiment-analytics'],
+)
 
 
 app.include_router(models.router, prefix='/api/v1/models', tags=['models'])
@@ -1688,6 +1695,8 @@ async def chat_completion(
     model_id = form_data.get('model', None)
     model_item = form_data.pop('model_item', {})
     tasks = form_data.pop('background_tasks', None)
+    if _experiment_access == ExperimentState.IN_PROGRESS and tasks:
+        tasks.pop(TASKS.FOLLOW_UP_GENERATION, None)
 
     metadata = {}
     try:

@@ -18,9 +18,11 @@
 		temporaryChatEnabled,
 		selectedFolder,
 		chats,
-		currentChatPage
+		currentChatPage,
+		experimentCurrent
 	} from '$lib/stores';
 	import { sanitizeResponseContent, extractCurlyBraceWords } from '$lib/utils';
+	import { allowsPromptSuggestions } from '$lib/utils/experiments';
 	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
 
 	import Suggestions from './Suggestions.svelte';
@@ -246,7 +248,7 @@
 		>
 			<FolderPlaceholder folder={$selectedFolder} />
 		</div>
-	{:else}
+	{:else if allowsPromptSuggestions($user, $experimentCurrent)}
 		<div class="mx-auto max-w-2xl font-primary mt-2" in:fade={{ duration: 200, delay: 200 }}>
 			<div class="mx-5">
 				<Suggestions

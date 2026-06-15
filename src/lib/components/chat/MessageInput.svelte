@@ -34,7 +34,8 @@
 		showSettings,
 		selectedTerminalId,
 		TTSWorker,
-		temporaryChatEnabled
+		temporaryChatEnabled,
+		experimentCurrent
 	} from '$lib/stores';
 
 	import {
@@ -52,6 +53,7 @@
 		getUserTimezone,
 		getWeekday
 	} from '$lib/utils';
+	import { allowsPromptSuggestions } from '$lib/utils/experiments';
 	import { uploadFile } from '$lib/apis/files';
 	import { generateAutoCompletion } from '$lib/apis';
 	import { deleteFileById } from '$lib/apis/files';
@@ -963,44 +965,48 @@
 					}
 				})
 			},
-			{
-				char: '/',
-				render: getSuggestionRenderer(CommandSuggestionList, {
-					i18n,
-					onSelect: (e) => {
-						const { type, data } = e;
+			...(allowsPromptSuggestions($_user, $experimentCurrent)
+				? [
+						{
+							char: '/',
+							render: getSuggestionRenderer(CommandSuggestionList, {
+								i18n,
+								onSelect: (e) => {
+									const { type, data } = e;
 
-						if (type === 'model') {
-							atSelectedModel = data;
-						}
+									if (type === 'model') {
+										atSelectedModel = data;
+									}
 
-						document.getElementById('chat-input')?.focus();
-					},
+									document.getElementById('chat-input')?.focus();
+								},
 
-					insertTextHandler: insertTextAtCursor,
-					onUpload: (e) => {
-						const { type, data } = e;
+								insertTextHandler: insertTextAtCursor,
+								onUpload: (e) => {
+									const { type, data } = e;
 
-						if (type === 'file') {
-							if (files.find((f) => f.id === data.id)) {
-								return;
-							}
-							files = [
-								...files,
-								{
-									...data,
-									status: 'processed'
+									if (type === 'file') {
+										if (files.find((f) => f.id === data.id)) {
+											return;
+										}
+										files = [
+											...files,
+											{
+												...data,
+												status: 'processed'
+											}
+										];
+									} else {
+										if (files.find((f) => f.url === data || f.name === data)) {
+											return;
+										}
+										onUpload(e);
+									}
 								}
-							];
-						} else {
-							if (files.find((f) => f.url === data || f.name === data)) {
-								return;
-							}
-							onUpload(e);
+							})
 						}
-					}
-				})
-			},
+					]
+				: []),
 			{
 				char: '#',
 				render: getSuggestionRenderer(CommandSuggestionList, {
@@ -1464,7 +1470,8 @@
 														)}
 													placeholder={placeholder ? placeholder : $i18n.t('Send a Message')}
 													largeTextAsFile={($settings?.largeTextAsFile ?? false) && !shiftKey}
-													autocomplete={$config?.features?.enable_autocomplete_generation &&
+													autocomplete={allowsPromptSuggestions($_user, $experimentCurrent) &&
+														$config?.features?.enable_autocomplete_generation &&
 														($settings?.promptAutocomplete ?? false)}
 													generateAutoCompletion={async (text) => {
 														if (selectedModelIds.length === 0 || !selectedModelIds.at(0)) {

@@ -3,6 +3,30 @@ import type { ExperimentCurrent } from '$lib/apis/experiments';
 export const experimentAllowsApp = (experiment: ExperimentCurrent | undefined) =>
 	experiment !== undefined && ['NOT_APPLICABLE', 'IN_PROGRESS'].includes(experiment.state);
 
+export const isExperimentParticipant = (
+	user: { role?: string } | null | undefined,
+	experiment: ExperimentCurrent | undefined
+) => user?.role !== 'admin' && experiment !== undefined && experiment.state !== 'NOT_APPLICABLE';
+
+export const appAccessRedirect = (
+	pathname: string,
+	user: { role?: string } | null | undefined,
+	experiment: ExperimentCurrent | undefined
+) => {
+	if (user?.role === 'admin') {
+		return pathname.startsWith('/admin') ? null : '/admin/analytics/overview';
+	}
+	if (isExperimentParticipant(user, experiment)) {
+		return pathname === '/' || pathname.startsWith('/c/') ? null : '/';
+	}
+	return null;
+};
+
+export const allowsPromptSuggestions = (
+	user: { role?: string } | null | undefined,
+	experiment: ExperimentCurrent | undefined
+) => user?.role !== 'admin' && !isExperimentParticipant(user, experiment);
+
 export const experimentNeedsGate = (experiment: ExperimentCurrent | undefined) =>
 	experiment !== undefined && !experimentAllowsApp(experiment);
 

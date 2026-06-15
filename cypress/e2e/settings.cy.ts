@@ -1,6 +1,5 @@
 // eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference path="../support/index.d.ts" />
-import { adminUser } from '../support/e2e';
 
 // These tests run through the various settings pages, ensuring that the user can interact with them as expected
 describe('Settings', () => {
@@ -11,8 +10,8 @@ describe('Settings', () => {
 	});
 
 	beforeEach(() => {
-		// Login as the admin user
-		cy.loginAdmin();
+		// Login as a normal non-experiment user
+		cy.loginNormalUser();
 		// Visit the home page
 		cy.visit('/');
 		// Click on the user menu

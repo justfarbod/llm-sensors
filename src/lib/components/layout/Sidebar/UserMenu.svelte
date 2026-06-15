@@ -52,6 +52,7 @@
 	export let align = 'end';
 
 	export let showActiveUsers = true;
+	export let restricted = false;
 
 	let showUserStatusModal = false;
 	let shiftKey = false;
@@ -94,7 +95,7 @@
 		dispatch('change', state);
 
 		// Fetch usage info when dropdown opens, if user has permission
-		if (state && ($config?.features?.enable_public_active_users_count || role === 'admin')) {
+		if (!restricted && state && ($config?.features?.enable_public_active_users_count || role === 'admin')) {
 			getUsageInfo();
 		}
 	};
@@ -109,13 +110,13 @@
 	}}
 />
 
-<ShortcutsModal bind:show={$showShortcuts} />
-<UserStatusModal
+{#if !restricted}<ShortcutsModal bind:show={$showShortcuts} />{/if}
+{#if !restricted}<UserStatusModal
 	bind:show={showUserStatusModal}
 	onSave={async () => {
 		user.set(await getSessionUser(localStorage.token));
 	}}
-/>
+/>{/if}
 
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <Dropdown bind:show onOpenChange={handleDropdownChange} {align}>
@@ -125,7 +126,7 @@
 		<div
 			class="{className} rounded-2xl px-1 py-1 border border-gray-100 dark:border-gray-800 z-50 bg-white dark:bg-gray-850 dark:text-white shadow-lg text-sm"
 		>
-			{#if profile}
+			{#if profile && !restricted}
 				<div class=" flex gap-3.5 w-full p-2.5 items-center">
 					<div class=" items-center flex shrink-0">
 						<img
@@ -234,6 +235,7 @@
 				<hr class=" border-gray-50/30 dark:border-gray-800/30 my-1.5 p-0" />
 			{/if}
 
+			{#if !restricted}
 			<button
 				class="flex rounded-xl py-1.5 px-3 w-full hover:bg-gray-50 dark:hover:bg-gray-800 transition cursor-pointer select-none"
 				type="button"
@@ -619,6 +621,7 @@
 			{/if}
 
 			<hr class=" border-gray-50/30 dark:border-gray-800/30 my-1 p-0" />
+			{/if}
 
 			<button
 				class="flex rounded-xl py-1.5 px-3 w-full hover:bg-gray-50 dark:hover:bg-gray-800 transition cursor-pointer select-none"
@@ -638,7 +641,7 @@
 				<div class=" self-center truncate">{$i18n.t('Sign Out')}</div>
 			</button>
 
-			{#if showActiveUsers && ($config?.features?.enable_public_active_users_count || role === 'admin') && usage}
+			{#if !restricted && showActiveUsers && ($config?.features?.enable_public_active_users_count || role === 'admin') && usage}
 				{#if usage?.user_count}
 					<hr class=" border-gray-50/30 dark:border-gray-800/30 my-1 p-0" />
 

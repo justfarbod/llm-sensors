@@ -5,7 +5,7 @@ from typing import Optional
 from types import SimpleNamespace
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import BigInteger, Column, Index, Text, UniqueConstraint, delete, select, update
+from sqlalchemy import BigInteger, Column, Index, Integer, Text, UniqueConstraint, delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from open_webui.internal.db import Base, get_async_db_context
@@ -21,6 +21,8 @@ class Essay(Base):
     topic_id = Column(Text, nullable=True)
     topic_title = Column(Text, nullable=True)
     topic_question = Column(Text, nullable=True)
+    word_count = Column(Integer, nullable=True)
+    character_count = Column(Integer, nullable=True)
     created_at = Column(BigInteger, nullable=False)
     updated_at = Column(BigInteger, nullable=False)
 
@@ -36,6 +38,8 @@ class EssayModel(BaseModel):
     topic_id: Optional[str] = None
     topic_title: Optional[str] = None
     topic_question: Optional[str] = None
+    word_count: Optional[int] = None
+    character_count: Optional[int] = None
     created_at: int
     updated_at: int
 
@@ -113,6 +117,8 @@ class EssayTable:
                 topic_id=topic.id if topic else None,
                 topic_title=topic.title if topic else None,
                 topic_question=topic.question if topic else None,
+                word_count=len(content.split()),
+                character_count=len(content),
                 created_at=now,
                 updated_at=now,
             )

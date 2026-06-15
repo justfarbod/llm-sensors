@@ -1,13 +1,43 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+	allowsPromptSuggestions,
+	appAccessRedirect,
 	createExperimentStateLoader,
 	experimentAllowsApp,
 	experimentNeedsGate,
+	isExperimentParticipant,
 	sameExperimentState,
 	shouldScheduleEssayReminder,
 	shouldRefreshExperiment
 } from './experiments';
+
+describe('experiment and admin access policies', () => {
+	const activeExperiment = { state: 'IN_PROGRESS' } as const;
+	const normal = { role: 'user' };
+	const admin = { role: 'admin' };
+
+	it('keeps normal users on existing routes with prompt suggestions', () => {
+		expect(appAccessRedirect('/workspace', normal, { state: 'NOT_APPLICABLE' })).toBeNull();
+		expect(allowsPromptSuggestions(normal, { state: 'NOT_APPLICABLE' })).toBe(true);
+	});
+
+	it('limits experiment participants to chat routes and disables prompt suggestions', () => {
+		expect(isExperimentParticipant(normal, activeExperiment)).toBe(true);
+		expect(appAccessRedirect('/settings', normal, activeExperiment)).toBe('/');
+		expect(appAccessRedirect('/c/chat-id', normal, activeExperiment)).toBeNull();
+		expect(allowsPromptSuggestions(normal, activeExperiment)).toBe(false);
+	});
+
+	it('always treats admins as admin-only, even with an experiment state', () => {
+		expect(isExperimentParticipant(admin, activeExperiment)).toBe(false);
+		expect(appAccessRedirect('/c/chat-id', admin, activeExperiment)).toBe(
+			'/admin/analytics/overview'
+		);
+		expect(appAccessRedirect('/admin/settings', admin, activeExperiment)).toBeNull();
+		expect(allowsPromptSuggestions(admin, activeExperiment)).toBe(false);
+	});
+});
 
 describe('experimentAllowsApp', () => {
 	it('allows normal and active writing sessions', () => {
@@ -45,14 +75,24 @@ describe('experiment state loader', () => {
 			return { state: 'NOT_APPLICABLE' } as const;
 		};
 
-		const [first, second] = await Promise.all([loadState(undefined, load), loadState(undefined, load)]);
+		const [first, second] = await Promise.all([
+			loadState(undefined, load),
+			loadState(undefined, load)
+		]);
 		expect(first).toEqual(second);
 		expect(calls).toBe(1);
 	});
 
 	it('recognizes unchanged minimal state DTOs', () => {
-		expect(sameExperimentState({ state: 'NOT_APPLICABLE' }, { state: 'NOT_APPLICABLE' })).toBe(true);
-		expect(sameExperimentState({ state: 'IN_PROGRESS', session_id: 'a' }, { state: 'IN_PROGRESS', session_id: 'b' })).toBe(false);
+		expect(sameExperimentState({ state: 'NOT_APPLICABLE' }, { state: 'NOT_APPLICABLE' })).toBe(
+			true
+		);
+		expect(
+			sameExperimentState(
+				{ state: 'IN_PROGRESS', session_id: 'a' },
+				{ state: 'IN_PROGRESS', session_id: 'b' }
+			)
+		).toBe(false);
 	});
 });
 

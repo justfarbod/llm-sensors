@@ -39,6 +39,7 @@ from open_webui.utils.auth import (
     get_verified_user,
     validate_password,
 )
+from open_webui.utils.experiments import require_non_experiment_user_dependency
 from open_webui.utils.access_control import get_permissions, has_permission
 from open_webui.socket.main import disconnect_user_sessions
 
@@ -278,7 +279,7 @@ async def update_default_user_permissions(request: Request, form_data: UserPermi
 
 @router.get('/user/settings', response_model=Optional[UserSettings])
 async def get_user_settings_by_session_user(
-    user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+    user=Depends(require_non_experiment_user_dependency), db: AsyncSession = Depends(get_async_session)
 ):
     # user already fetched by get_verified_user — no need to refetch
     return user.settings
@@ -293,7 +294,7 @@ async def get_user_settings_by_session_user(
 async def update_user_settings_by_session_user(
     request: Request,
     form_data: UserSettings,
-    user=Depends(get_verified_user),
+    user=Depends(require_non_experiment_user_dependency),
     db: AsyncSession = Depends(get_async_session),
 ):
     updated_user_settings = form_data.model_dump()
