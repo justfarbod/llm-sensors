@@ -89,6 +89,7 @@ from open_webui.routers import (
     chats,
     notes,
     essays,
+    experiments,
     folders,
     configs,
     groups,
@@ -124,6 +125,7 @@ from open_webui.models.functions import Functions
 from open_webui.models.models import Models
 from open_webui.models.users import UserModel, Users
 from open_webui.models.chats import Chats, ChatForm
+from open_webui.utils.experiments import require_experiment_access_dependency
 
 from open_webui.config import (
     # Ollama
@@ -1438,6 +1440,7 @@ app.include_router(channels.router, prefix='/api/v1/channels', tags=['channels']
 app.include_router(chats.router, prefix='/api/v1/chats', tags=['chats'])
 app.include_router(notes.router, prefix='/api/v1/notes', tags=['notes'])
 app.include_router(essays.router, prefix='/api/v1/essays', tags=['essays'])
+app.include_router(experiments.router, prefix='/api/v1/experiments', tags=['experiments'])
 
 
 app.include_router(models.router, prefix='/api/v1/models', tags=['models'])
@@ -1677,6 +1680,7 @@ async def chat_completion(
     request: Request,
     form_data: dict,
     user=Depends(get_verified_user),
+    _experiment_access=Depends(require_experiment_access_dependency),
 ):
     if not request.app.state.MODELS:
         await get_all_models(request, user=user)
@@ -2187,6 +2191,7 @@ async def generate_messages(
     request: Request,
     form_data: dict,
     user=Depends(get_verified_user),
+    _experiment_access=Depends(require_experiment_access_dependency),
 ):
     """
     Anthropic Messages API compatible endpoint.
@@ -2228,7 +2233,12 @@ async def generate_messages(
 
 
 @app.post('/api/chat/completed')
-async def chat_completed(request: Request, form_data: dict, user=Depends(get_verified_user)):
+async def chat_completed(
+    request: Request,
+    form_data: dict,
+    user=Depends(get_verified_user),
+    _experiment_access=Depends(require_experiment_access_dependency),
+):
     """Deprecated: outlet filters now run inline during chat completion.
     Kept for backward compatibility with external integrations."""
     try:
@@ -2247,7 +2257,13 @@ async def chat_completed(request: Request, form_data: dict, user=Depends(get_ver
 
 
 @app.post('/api/chat/actions/{action_id}')
-async def chat_action(request: Request, action_id: str, form_data: dict, user=Depends(get_verified_user)):
+async def chat_action(
+    request: Request,
+    action_id: str,
+    form_data: dict,
+    user=Depends(get_verified_user),
+    _experiment_access=Depends(require_experiment_access_dependency),
+):
     try:
         model_item = form_data.pop('model_item', {})
 

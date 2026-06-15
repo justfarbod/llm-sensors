@@ -4,6 +4,7 @@ import type { ModelConfig } from '$lib/apis';
 import type { Banner } from '$lib/types';
 import type { Socket } from 'socket.io-client';
 import type { AudioQueue } from '$lib/utils/audio';
+import type { ExperimentCurrent } from '$lib/apis/experiments';
 
 import emojiShortCodes from '$lib/emoji-shortcodes.json';
 
@@ -99,6 +100,8 @@ export const showChangelog = writable(false);
 
 export const showControls = writable(false);
 export const showEssaySidebar = writable(false);
+export const experimentCurrent: Writable<ExperimentCurrent | undefined> = writable(undefined);
+export const experimentRefresh = writable(0);
 export const showEmbeds = writable(false);
 export const showOverview = writable(false);
 export const showArtifacts = writable(false);

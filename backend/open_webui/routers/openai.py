@@ -62,6 +62,7 @@ from open_webui.utils.session_pool import (
 )
 
 from open_webui.utils.auth import get_admin_user, get_verified_user
+from open_webui.utils.experiments import require_experiment_access_dependency
 from open_webui.utils.headers import include_user_info_headers, get_custom_headers
 from open_webui.utils.anthropic import is_anthropic_url, get_anthropic_models
 
@@ -1081,6 +1082,7 @@ async def generate_chat_completion(
     request: Request,
     form_data: dict,
     user=Depends(get_verified_user),
+    _experiment_access=Depends(require_experiment_access_dependency),
     bypass_system_prompt: bool = False,
 ):
     # NOTE: We intentionally do NOT use Depends(get_async_session) here.

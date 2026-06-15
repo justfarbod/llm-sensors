@@ -52,6 +52,8 @@
 		};
 	};
 
+	const setExperimentMode = (enabled: boolean) => setEssayTopicConfig({ experiment_mode_enabled: enabled });
+
 	onMount(async () => {
 		permissions = fillMissingProperties(permissions, DEFAULT_PERMISSIONS);
 		if (custom) {
@@ -863,6 +865,13 @@
 
 			{#if custom && permissions.features.essay_sidebar}
 				<div class="ml-2 flex flex-col gap-2 pb-1 pt-0.5">
+					<div class="flex w-full items-center justify-between gap-3">
+						<div class="text-xs">{$i18n.t('Enable Experiment Mode for this group')}</div>
+						<Switch
+							state={data?.config?.experiment_mode_enabled ?? false}
+							on:change={(event) => setExperimentMode(event.detail)}
+						/>
+					</div>
 					<div class="flex w-full items-center justify-between gap-3">
 						<div class="text-xs">{$i18n.t('Topic assignment')}</div>
 						<select

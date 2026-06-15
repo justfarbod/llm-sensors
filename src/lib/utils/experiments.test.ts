@@ -1,0 +1,79 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+	createExperimentStateLoader,
+	experimentAllowsApp,
+	experimentNeedsGate,
+	sameExperimentState,
+	shouldScheduleEssayReminder,
+	shouldRefreshExperiment
+} from './experiments';
+
+describe('experimentAllowsApp', () => {
+	it('allows normal and active writing sessions', () => {
+		expect(experimentAllowsApp({ state: 'NOT_APPLICABLE' })).toBe(true);
+		expect(experimentAllowsApp({ state: 'IN_PROGRESS' })).toBe(true);
+	});
+
+	it('blocks every required experiment step', () => {
+		expect(experimentAllowsApp({ state: 'CONSENT_REQUIRED' })).toBe(false);
+		expect(experimentAllowsApp({ state: 'POST_SURVEY_REQUIRED' })).toBe(false);
+		expect(experimentAllowsApp({ state: 'COMPLETED' })).toBe(false);
+		expect(experimentAllowsApp(undefined)).toBe(false);
+	});
+});
+
+describe('experiment state loader', () => {
+	it('does not load again after NOT_APPLICABLE', async () => {
+		const loadState = createExperimentStateLoader();
+		let calls = 0;
+		const result = await loadState({ state: 'NOT_APPLICABLE' }, async () => {
+			calls += 1;
+			return { state: 'CONSENT_REQUIRED' };
+		});
+
+		expect(result).toEqual({ state: 'NOT_APPLICABLE' });
+		expect(calls).toBe(0);
+	});
+
+	it('deduplicates concurrent initial requests', async () => {
+		const loadState = createExperimentStateLoader();
+		let calls = 0;
+		const load = async () => {
+			calls += 1;
+			await Promise.resolve();
+			return { state: 'NOT_APPLICABLE' } as const;
+		};
+
+		const [first, second] = await Promise.all([loadState(undefined, load), loadState(undefined, load)]);
+		expect(first).toEqual(second);
+		expect(calls).toBe(1);
+	});
+
+	it('recognizes unchanged minimal state DTOs', () => {
+		expect(sameExperimentState({ state: 'NOT_APPLICABLE' }, { state: 'NOT_APPLICABLE' })).toBe(true);
+		expect(sameExperimentState({ state: 'IN_PROGRESS', session_id: 'a' }, { state: 'IN_PROGRESS', session_id: 'b' })).toBe(false);
+	});
+});
+
+describe('experiment refresh behavior', () => {
+	it('treats NOT_APPLICABLE as a terminal no-op', () => {
+		expect(shouldRefreshExperiment({ state: 'NOT_APPLICABLE' })).toBe(false);
+		expect(experimentNeedsGate({ state: 'NOT_APPLICABLE' })).toBe(false);
+	});
+
+	it('allows initial and active-session refreshes', () => {
+		expect(shouldRefreshExperiment(undefined)).toBe(true);
+		expect(shouldRefreshExperiment({ state: 'CONSENT_REQUIRED' })).toBe(true);
+		expect(experimentNeedsGate({ state: 'CONSENT_REQUIRED' })).toBe(true);
+	});
+});
+
+describe('essay reminder behavior', () => {
+	it('schedules only while an experiment writer has closed the essay sidebar', () => {
+		expect(shouldScheduleEssayReminder({ state: 'IN_PROGRESS' }, false)).toBe(true);
+		expect(shouldScheduleEssayReminder({ state: 'IN_PROGRESS' }, true)).toBe(false);
+		expect(shouldScheduleEssayReminder({ state: 'NOT_APPLICABLE' }, false)).toBe(false);
+		expect(shouldScheduleEssayReminder({ state: 'POST_SURVEY_REQUIRED' }, false)).toBe(false);
+	});
+});

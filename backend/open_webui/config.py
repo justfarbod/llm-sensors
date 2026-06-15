@@ -1653,6 +1653,19 @@ USER_PERMISSIONS = PersistentConfig(
     DEFAULT_USER_PERMISSIONS,
 )
 
+EXPERIMENT_AGREEMENT_TEXT = os.environ.get(
+    'EXPERIMENT_AGREEMENT_TEXT',
+    '''Research Participation Agreement
+
+You are being invited to participate in a research activity involving the use of an AI-assisted writing system. During this session, the system may collect and store your interactions with the application, including chat messages, essay drafts, final essay submissions, survey responses, and timestamps.
+
+The collected data will be used for research and evaluation purposes. Your essay responses and interactions with the AI system will not affect your school grades. Participation is required to continue using this experimental session, but your data will be handled according to the applicable privacy and data protection policies of the institution conducting the study.
+
+Please do not enter sensitive personal information into the chat or essay fields unless specifically instructed by your teacher or researcher.
+
+By continuing, you confirm that you understand that your data may be collected for research purposes, that your essay will not affect your grades, and that you agree to participate in this experimental session.''',
+)
+
 ENABLE_FOLDERS = PersistentConfig(
     'ENABLE_FOLDERS',
     'folders.enable',

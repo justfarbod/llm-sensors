@@ -21,10 +21,25 @@ from open_webui.internal.db import get_async_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from open_webui.utils.auth import get_admin_user, get_verified_user
+from open_webui.models.essays import EssayTopics
 
 log = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def validate_experiment_group(form_data: GroupForm, db: AsyncSession):
+    config = (form_data.data or {}).get('config', {})
+    if not config.get('experiment_mode_enabled', False):
+        return
+    if not (form_data.permissions or {}).get('features', {}).get('essay_sidebar', False):
+        raise HTTPException(status_code=422, detail='Experiment Mode requires Essay Sidebar permission.')
+    topics = await EssayTopics.get_topics(db=db)
+    if not topics:
+        raise HTTPException(status_code=422, detail='Experiment Mode requires at least one essay topic.')
+    if config.get('essay_topic_mode', 'random') == 'specific':
+        if config.get('essay_topic_id') not in {topic.id for topic in topics}:
+            raise HTTPException(status_code=422, detail='Experiment Mode requires a valid specific essay topic.')
 
 ############################
 # GetFunctions
@@ -62,6 +77,7 @@ async def create_new_group(
     db: AsyncSession = Depends(get_async_session),
 ):
     try:
+        await validate_experiment_group(form_data, db)
         group = await Groups.insert_new_group(user.id, form_data, db=db)
         if group:
             return GroupResponse(
@@ -73,6 +89,8 @@ async def create_new_group(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=ERROR_MESSAGES.DEFAULT('Error creating group'),
             )
+    except HTTPException:
+        raise
     except Exception as e:
         log.exception(f'Error creating a new group: {e}')
         raise HTTPException(
@@ -173,6 +191,7 @@ async def update_group_by_id(
     db: AsyncSession = Depends(get_async_session),
 ):
     try:
+        await validate_experiment_group(form_data, db)
         group = await Groups.update_group_by_id(id, form_data, db=db)
         if group:
             return GroupResponse(
@@ -184,6 +203,8 @@ async def update_group_by_id(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=ERROR_MESSAGES.DEFAULT('Error updating group'),
             )
+    except HTTPException:
+        raise
     except Exception as e:
         log.exception(f'Error updating group {id}: {e}')
         raise HTTPException(

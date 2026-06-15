@@ -1,12 +1,15 @@
 import time
 import uuid
+import random
 from typing import Optional
+from types import SimpleNamespace
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import BigInteger, Column, Index, Text, UniqueConstraint, delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from open_webui.internal.db import Base, get_async_db_context
+from open_webui.models.groups import Groups
 
 
 class Essay(Base):
@@ -215,3 +218,43 @@ class EssayTopicAssignmentTable:
 
 EssayTopics = EssayTopicTable()
 EssayTopicAssignments = EssayTopicAssignmentTable()
+
+
+async def resolve_topic_for_group(
+    user_id: str, group, db: Optional[AsyncSession] = None
+) -> Optional[EssayTopicModel]:
+    topics = await EssayTopics.get_topics(db=db)
+    if not topics:
+        return None
+    topic_by_id = {topic.id: topic for topic in topics}
+    config = (group.data or {}).get('config', {})
+    topic_id = config.get('essay_topic_id')
+    if config.get('essay_topic_mode', 'random') == 'specific' and topic_id in topic_by_id:
+        return topic_by_id[topic_id]
+    assignment = await EssayTopicAssignments.get_assignment(user_id, group.id, db=db)
+    if assignment and assignment.topic_id in topic_by_id:
+        return topic_by_id[assignment.topic_id]
+    topic = random.choice(topics)
+    await EssayTopicAssignments.set_assignment(user_id, group.id, topic.id, db=db)
+    return topic
+
+
+async def resolve_user_topic(user, db: Optional[AsyncSession] = None) -> Optional[EssayTopicModel]:
+    if user.role == 'admin':
+        return await resolve_topic_for_group(
+            user.id, SimpleNamespace(id='__admin__', data={'config': {'essay_topic_mode': 'random'}}), db=db
+        )
+    groups = await Groups.get_groups_by_member_id(user.id, db=db)
+    eligible = [
+        group for group in groups if (group.permissions or {}).get('features', {}).get('essay_sidebar', False)
+    ]
+    eligible.sort(key=lambda group: group.id)
+    configured = [
+        group for group in eligible
+        if (group.data or {}).get('config', {}).get('essay_topic_mode') in ('random', 'specific')
+    ]
+    if eligible:
+        return await resolve_topic_for_group(user.id, (configured or eligible)[0], db=db)
+    return await resolve_topic_for_group(
+        user.id, SimpleNamespace(id='__default__', data={'config': {'essay_topic_mode': 'random'}}), db=db
+    )

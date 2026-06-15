@@ -62,6 +62,7 @@ from open_webui.utils.payload import (
     apply_system_prompt_to_body,
 )
 from open_webui.utils.auth import get_admin_user, get_verified_user
+from open_webui.utils.experiments import require_experiment_access_dependency
 from open_webui.config import (
     UPLOAD_DIR,
 )
@@ -1250,6 +1251,7 @@ async def generate_openai_chat_completion(
     form_data: dict,
     url_idx: Optional[int] = None,
     user=Depends(get_verified_user),
+    _experiment_access=Depends(require_experiment_access_dependency),
 ):
     # NOTE: We intentionally do NOT use Depends(get_async_session) here.
     # Database operations (get_model_by_id, AccessGrants.has_access) manage their own short-lived sessions.

@@ -38,10 +38,11 @@ from pydantic import BaseModel
 
 from open_webui.utils.auth import get_admin_user, get_verified_user
 from open_webui.utils.access_control import has_permission, filter_allowed_access_grants
+from open_webui.utils.experiments import require_experiment_access_dependency
 
 log = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_experiment_access_dependency)])
 
 ############################
 # GetChatList

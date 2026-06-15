@@ -5,7 +5,7 @@
 	import type { Writable } from 'svelte/store';
 
 	import { getEssayWorkspace, submitEssay } from '$lib/apis/essays';
-	import { showEssaySidebar } from '$lib/stores';
+	import { experimentRefresh, showEssaySidebar } from '$lib/stores';
 	import Drawer from '../common/Drawer.svelte';
 	import ChevronDown from '../icons/ChevronDown.svelte';
 	import FloppyDisk from '../icons/FloppyDisk.svelte';
@@ -82,6 +82,7 @@
 			content = normalizedContent;
 			lastSubmittedContent = normalizedContent;
 			toast.success($i18n.t('Essay submitted successfully'));
+			experimentRefresh.update((value) => value + 1);
 		} catch (error) {
 			toast.error(`${error}`);
 		} finally {

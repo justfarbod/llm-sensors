@@ -17,6 +17,7 @@
 
 	import { WEBUI_VERSION, WEBUI_API_BASE_URL } from '$lib/constants';
 	import { compareVersion } from '$lib/utils';
+	import { experimentAllowsApp } from '$lib/utils/experiments';
 
 	import {
 		config,
@@ -38,7 +39,8 @@
 		showSearch,
 		showSidebar,
 		showControls,
-		mobile
+		mobile,
+		experimentCurrent
 	} from '$lib/stores';
 
 	import Sidebar from '$lib/components/layout/Sidebar.svelte';
@@ -48,6 +50,7 @@
 	import UpdateInfoToast from '$lib/components/layout/UpdateInfoToast.svelte';
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import { Shortcut, shortcuts } from '$lib/shortcuts';
+	import ExperimentGate from '$lib/components/experiment/ExperimentGate.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -378,6 +381,7 @@
 
 <SettingsModal bind:show={$showSettings} />
 <ChangelogModal bind:show={$showChangelog} />
+<ExperimentGate />
 
 {#if version && compareVersion(version.latest, version.current) && ($settings?.showUpdateToast ?? true)}
 	<div class=" absolute bottom-8 right-8 z-50" in:fade={{ duration: 100 }}>
@@ -454,11 +458,13 @@
 					</div>
 				{/if}
 
-				<Sidebar />
-
-				{#if loaded}
+				{#if $experimentCurrent === undefined}
+					<div class="w-full flex-1 h-full flex items-center justify-center"><Spinner className="size-5" /></div>
+				{:else if experimentAllowsApp($experimentCurrent)}
+					<Sidebar />
+					{#if loaded}
 					<slot />
-				{:else}
+					{:else}
 					<div
 						class="w-full flex-1 h-full flex items-center justify-center {$showSidebar
 							? '  md:max-w-[calc(100%-var(--sidebar-width))]'
@@ -466,6 +472,7 @@
 					>
 						<Spinner className="size-5" />
 					</div>
+					{/if}
 				{/if}
 			{/if}
 		</div>

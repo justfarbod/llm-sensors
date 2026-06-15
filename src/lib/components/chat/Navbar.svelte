@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getContext } from 'svelte';
+	import { getContext, onDestroy } from 'svelte';
 	import { toast } from 'svelte-sonner';
 
 	import {
@@ -7,6 +7,7 @@
 		banners,
 		chatId,
 		config,
+		experimentCurrent,
 		mobile,
 		settings,
 		showArchivedChats,
@@ -41,6 +42,7 @@
 	import ChatCheck from '../icons/ChatCheck.svelte';
 	import Knobs from '../icons/Knobs.svelte';
 	import { WEBUI_API_BASE_URL } from '$lib/constants';
+	import { shouldScheduleEssayReminder } from '$lib/utils/experiments';
 
 	const i18n = getContext('i18n');
 
@@ -63,6 +65,31 @@
 
 	let showShareChatModal = false;
 	let showDownloadChatModal = false;
+	let showContinueWritingHint = false;
+	let essayReminderTimer: ReturnType<typeof setTimeout> | null = null;
+
+	const syncEssayReminder = (shouldSchedule: boolean) => {
+		if (essayReminderTimer) {
+			clearTimeout(essayReminderTimer);
+			essayReminderTimer = null;
+		}
+
+		if (!shouldSchedule) {
+			showContinueWritingHint = false;
+			return;
+		}
+
+		essayReminderTimer = setTimeout(() => {
+			showContinueWritingHint = true;
+			essayReminderTimer = null;
+		}, 2 * 60 * 1000);
+	};
+
+	$: syncEssayReminder(shouldScheduleEssayReminder($experimentCurrent, $showEssaySidebar));
+
+	onDestroy(() => {
+		if (essayReminderTimer) clearTimeout(essayReminderTimer);
+	});
 </script>
 
 <ShareChatModal bind:show={showShareChatModal} chatId={$chatId} />
@@ -237,17 +264,36 @@
 					{/if}
 
 					{#if $user?.role === 'admin' || ($user?.permissions?.features?.essay_sidebar ?? false)}
-						<Tooltip content={$i18n.t('Essay')}>
-							<button
-								class="flex cursor-pointer rounded-xl px-2 py-2 transition hover:bg-gray-50 dark:hover:bg-gray-850 {$showEssaySidebar
-									? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white'
-									: ''}"
-								on:click={() => showEssaySidebar.set(!$showEssaySidebar)}
-								aria-label={$i18n.t('Essay')}
-							>
-								<Document className="size-5" strokeWidth="1.5" />
-							</button>
-						</Tooltip>
+						<div class="relative">
+							<Tooltip content={$i18n.t('Essay')}>
+								<button
+									class="flex cursor-pointer rounded-xl px-2 py-2 transition hover:bg-gray-50 dark:hover:bg-gray-850 {$showEssaySidebar
+										? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white'
+										: ''} {showContinueWritingHint ? 'ring-2 ring-emerald-500' : ''}"
+									on:click={() => {
+										showContinueWritingHint = false;
+										showEssaySidebar.set(!$showEssaySidebar);
+									}}
+									aria-label={$i18n.t('Essay')}
+								>
+									<Document className="size-5" strokeWidth="1.5" />
+								</button>
+							</Tooltip>
+
+							{#if showContinueWritingHint}
+								<button
+									type="button"
+									class="absolute right-0 top-full z-50 mt-2 flex min-w-max items-center gap-2 rounded-xl bg-gray-900 px-3 py-2 text-xs font-medium text-white shadow-xl dark:bg-white dark:text-gray-900"
+									on:click={() => {
+										showContinueWritingHint = false;
+										showEssaySidebar.set(true);
+									}}
+								>
+									<Document className="size-4" strokeWidth="1.5" />
+									{$i18n.t('Continue writing')}
+								</button>
+							{/if}
+						</div>
 					{/if}
 
 					{#if $user !== undefined && $user !== null}
