@@ -61,6 +61,14 @@
 					>
 						<a
 							draggable="false"
+							class="min-w-fit p-1.5 {$page.url.pathname.includes('/admin/essays')
+								? ''
+								: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition select-none"
+							href="/admin/essays">{$i18n.t('Essays')}</a
+						>
+
+						<a
+							draggable="false"
 							class="min-w-fit p-1.5 {$page.url.pathname.includes('/admin/users')
 								? ''
 								: 'text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'} transition select-none"

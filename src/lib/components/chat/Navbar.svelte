@@ -11,6 +11,7 @@
 		settings,
 		showArchivedChats,
 		showControls,
+		showEssaySidebar,
 		showSidebar,
 		temporaryChatEnabled,
 		user
@@ -28,6 +29,7 @@
 	import AdjustmentsHorizontal from '../icons/AdjustmentsHorizontal.svelte';
 
 	import PencilSquare from '../icons/PencilSquare.svelte';
+	import Document from '../icons/Document.svelte';
 	import Banner from '../common/Banner.svelte';
 	import Sidebar from '../icons/Sidebar.svelte';
 
@@ -230,6 +232,20 @@
 								<div class=" m-auto self-center">
 									<Knobs className=" size-5" strokeWidth="1" />
 								</div>
+							</button>
+						</Tooltip>
+					{/if}
+
+					{#if $user?.role === 'admin' || ($user?.permissions?.features?.essay_sidebar ?? false)}
+						<Tooltip content={$i18n.t('Essay')}>
+							<button
+								class="flex cursor-pointer rounded-xl px-2 py-2 transition hover:bg-gray-50 dark:hover:bg-gray-850 {$showEssaySidebar
+									? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white'
+									: ''}"
+								on:click={() => showEssaySidebar.set(!$showEssaySidebar)}
+								aria-label={$i18n.t('Essay')}
+							>
+								<Document className="size-5" strokeWidth="1.5" />
 							</button>
 						</Tooltip>
 					{/if}

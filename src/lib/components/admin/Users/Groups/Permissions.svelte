@@ -1,14 +1,28 @@
 <script lang="ts">
 	import { getContext, onMount } from 'svelte';
-	const i18n = getContext('i18n');
+	import type { i18n as i18nType } from 'i18next';
+	import type { Writable } from 'svelte/store';
 
 	import Switch from '$lib/components/common/Switch.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
+	import { getEssayTopics } from '$lib/apis/essays';
 
 	import { DEFAULT_PERMISSIONS } from '$lib/constants/permissions';
 
-	export let permissions = {};
-	export let defaultPermissions = {};
+	type EssayTopic = {
+		id: string;
+		title: string;
+		question: string;
+	};
+
+	const i18n: Writable<i18nType> = getContext('i18n');
+
+	export let permissions: any = {};
+	export let defaultPermissions: any = {};
+	export let data: any = {};
+	export let custom = true;
+
+	let essayTopics: EssayTopic[] = [];
 
 	// Reactive statement to ensure all fields are present in `permissions`
 	$: {
@@ -28,8 +42,21 @@
 		};
 	}
 
-	onMount(() => {
+	const setEssayTopicConfig = (values: Record<string, unknown>) => {
+		data = {
+			...data,
+			config: {
+				...(data?.config ?? {}),
+				...values
+			}
+		};
+	};
+
+	onMount(async () => {
 		permissions = fillMissingProperties(permissions, DEFAULT_PERMISSIONS);
+		if (custom) {
+			essayTopics = await getEssayTopics(localStorage.token).catch(() => []);
+		}
 	});
 </script>
 
@@ -815,6 +842,70 @@
 					<div class="text-xs text-gray-500">
 						{$i18n.t('This is a default user permission and will remain enabled.')}
 					</div>
+				</div>
+			{/if}
+		</div>
+
+		<div class="flex flex-col w-full">
+			<div class="flex w-full justify-between my-1">
+				<div class=" self-center text-xs font-medium">
+					{$i18n.t('Essay Sidebar')}
+				</div>
+				<Switch bind:state={permissions.features.essay_sidebar} />
+			</div>
+			{#if defaultPermissions?.features?.essay_sidebar && !permissions.features.essay_sidebar}
+				<div>
+					<div class="text-xs text-gray-500">
+						{$i18n.t('This is a default user permission and will remain enabled.')}
+					</div>
+				</div>
+			{/if}
+
+			{#if custom && permissions.features.essay_sidebar}
+				<div class="ml-2 flex flex-col gap-2 pb-1 pt-0.5">
+					<div class="flex w-full items-center justify-between gap-3">
+						<div class="text-xs">{$i18n.t('Topic assignment')}</div>
+						<select
+							class="max-w-56 rounded-lg bg-gray-50 px-2 py-1 text-xs outline-hidden dark:bg-gray-850"
+							value={data?.config?.essay_topic_mode ?? 'random'}
+							on:change={(event) => {
+								const mode = event.currentTarget.value;
+								setEssayTopicConfig({
+									essay_topic_mode: mode,
+									essay_topic_id:
+										mode === 'specific'
+											? (data?.config?.essay_topic_id ?? essayTopics[0]?.id ?? null)
+											: null
+								});
+							}}
+						>
+							<option value="random">{$i18n.t('Random topic per user')}</option>
+							<option value="specific">{$i18n.t('Specific topic')}</option>
+						</select>
+					</div>
+
+					{#if (data?.config?.essay_topic_mode ?? 'random') === 'specific'}
+						<div class="flex w-full items-center justify-between gap-3">
+							<div class="text-xs">{$i18n.t('Essay topic')}</div>
+							<select
+								class="max-w-56 rounded-lg bg-gray-50 px-2 py-1 text-xs outline-hidden dark:bg-gray-850"
+								value={data?.config?.essay_topic_id ?? ''}
+								on:change={(event) =>
+									setEssayTopicConfig({ essay_topic_id: event.currentTarget.value })}
+								required
+							>
+								<option value="" disabled>{$i18n.t('Select a topic')}</option>
+								{#each essayTopics as topic (topic.id)}
+									<option value={topic.id}>{topic.title}</option>
+								{/each}
+							</select>
+						</div>
+						{#if essayTopics.length === 0}
+							<div class="text-xs text-amber-600">
+								{$i18n.t('Add an essay topic in the Essays admin tab first.')}
+							</div>
+						{/if}
+					{/if}
 				</div>
 			{/if}
 		</div>

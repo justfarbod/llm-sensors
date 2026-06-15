@@ -210,7 +210,7 @@
 										}}
 									/>
 								{:else if selectedTab == 'permissions'}
-									<Permissions bind:permissions {defaultPermissions} />
+									<Permissions bind:permissions bind:data {defaultPermissions} {custom} />
 								{:else if selectedTab == 'users'}
 									<Users bind:userCount groupId={group?.id} />
 								{/if}
