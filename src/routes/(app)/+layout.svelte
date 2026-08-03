@@ -56,6 +56,7 @@
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import { Shortcut, shortcuts } from '$lib/shortcuts';
 	import ExperimentGate from '$lib/components/experiment/ExperimentGate.svelte';
+	import ExperimentWarningModal from '$lib/components/experiment/ExperimentWarningModal.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -443,6 +444,7 @@
 {/if}
 
 {#if $user}
+	<ExperimentWarningModal />
 	<div class="app relative">
 		<div
 			class=" text-gray-700 dark:text-gray-100 bg-white dark:bg-gray-900 h-screen max-h-[100dvh] overflow-auto flex flex-row justify-end"

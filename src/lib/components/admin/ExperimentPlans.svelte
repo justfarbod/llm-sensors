@@ -14,6 +14,8 @@
 		type ExperimentPlan,
 		type PlanItem
 	} from '$lib/apis/experiment-plans';
+	import ExperimentPerturbations from './ExperimentPerturbations.svelte';
+	import { conditionAllocationIsValid } from '$lib/utils/experimentPerturbations';
 
 	type Group = {
 		id: string;
@@ -33,7 +35,8 @@
 		progression_mode: 'STRICT_SEQUENTIAL',
 		chat_mode: 'SHARED_EXPERIMENT',
 		consent_enabled: true,
-		items: []
+		items: [],
+		conditions: []
 	};
 	let loading = true;
 	let saving = false;
@@ -62,6 +65,7 @@
 		plan.items = [
 			...plan.items,
 			{
+				id: crypto.randomUUID(),
 				task_type: 'ESSAY',
 				title: $i18n.t('Essay Task'),
 				essay_topic_mode: 'SPECIFIC',
@@ -76,6 +80,7 @@
 		plan.items = [
 			...plan.items,
 			{
+				id: crypto.randomUUID(),
 				task_type: 'QUESTION',
 				title: task?.title ?? $i18n.t('Question Task'),
 				question_task_id: task?.id ?? null
@@ -88,6 +93,7 @@
 		plan.items = [
 			...plan.items,
 			{
+				id: crypto.randomUUID(),
 				task_type: 'SURVEY',
 				title: task?.title ?? $i18n.t('Survey Task'),
 				survey_task_id: task?.id ?? null,
@@ -143,6 +149,12 @@
 		if (invalidSurveyPlacement()) {
 			toast.error(
 				$i18n.t('Surveys may appear between tasks only in strict sequential experiments.')
+			);
+			return;
+		}
+		if (!conditionAllocationIsValid(plan.conditions)) {
+			toast.error(
+				$i18n.t('Enabled condition allocations must total 100% and include one control.')
 			);
 			return;
 		}
@@ -232,6 +244,7 @@
 	{:else if loading}
 		<div class="py-16 text-center text-sm text-gray-500">{$i18n.t('Loading...')}</div>
 	{:else}
+		<ExperimentPerturbations bind:conditions={plan.conditions} items={plan.items} />
 		<div class="space-y-3">
 			{#each plan.items as item, index (item.id ?? index)}
 				<div class="rounded-2xl border border-gray-100 p-4 dark:border-gray-850">

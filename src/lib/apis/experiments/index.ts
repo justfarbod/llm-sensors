@@ -37,6 +37,14 @@ export type ExperimentTaskSummary = {
 	survey_required?: boolean | null;
 };
 
+export type ExperimentWarning = {
+	token: string;
+	title: string;
+	message: string;
+	confirmation_text: string;
+	must_acknowledge: boolean;
+};
+
 const request = async <T = ExperimentCurrent>(
 	token: string,
 	path = '',
@@ -99,3 +107,37 @@ export const submitExperimentSurvey = (token: string, taskId: string, answers: a
 	});
 export const skipExperimentSurvey = (token: string, taskId: string) =>
 	request<any>(token, `/tasks/${taskId}/skip-survey`, { method: 'POST' });
+
+export const getExperimentRuntime = (token: string) =>
+	request<{ warning: ExperimentWarning | null }>(token, '/runtime');
+export const reportExperimentActivity = (token: string, activeMs: number) =>
+	request<{ warning: ExperimentWarning | null }>(token, '/runtime/activity', {
+		method: 'POST',
+		body: JSON.stringify({ active_ms: activeMs })
+	});
+export const reportWarningDisplay = (token: string, warningToken: string) =>
+	request<{ status: boolean }>(token, '/runtime/warning/display', {
+		method: 'POST',
+		body: JSON.stringify({ token: warningToken })
+	});
+export const acknowledgeExperimentWarning = (token: string, warningToken: string) =>
+	request<{ status: boolean }>(token, '/runtime/warning/acknowledge', {
+		method: 'POST',
+		body: JSON.stringify({ token: warningToken })
+	});
+export const reportExperimentVisibleTiming = (
+	token: string,
+	requestId: string,
+	event: 'FIRST_VISIBLE' | 'COMPLETED_VISIBLE' | 'TAB_HIDDEN' | 'NAVIGATED_AWAY',
+	keepalive = false
+) =>
+	request<{ status: boolean }>(token, '/runtime/visible-timing', {
+		method: 'POST',
+		keepalive,
+		body: JSON.stringify({ request_id: requestId, event, timestamp: new Date().toISOString() })
+	});
+export const getExperimentResponseSnapshot = (token: string, requestId: string) =>
+	request<{ request_id: string; content: string; done: boolean; status: string }>(
+		token,
+		`/runtime/responses/${requestId}`
+	);

@@ -51,8 +51,13 @@
 		chatRequestQueues,
 		desktopEvent,
 		experimentCurrent,
-		experimentActiveTaskId
+		experimentActiveTaskId,
+		experimentResponseActive
 	} from '$lib/stores';
+	import {
+		getExperimentResponseSnapshot,
+		reportExperimentVisibleTiming
+	} from '$lib/apis/experiments';
 
 	import { WEBUI_API_BASE_URL } from '$lib/constants';
 
@@ -193,6 +198,42 @@
 	};
 
 	let taskIds = null;
+	$: experimentResponseActive.set(Boolean(taskIds?.length));
+	const reportActiveExperimentReveals = (
+		event: 'TAB_HIDDEN' | 'NAVIGATED_AWAY',
+		keepalive = false
+	) => {
+		for (const message of Object.values(history.messages) as {
+			role?: string;
+			done?: boolean;
+			experimentRequestId?: string;
+		}[]) {
+			if (message.role === 'assistant' && !message.done && message.experimentRequestId) {
+				void reportExperimentVisibleTiming(
+					localStorage.token,
+					message.experimentRequestId,
+					event,
+					keepalive
+				).catch(() => null);
+			}
+		}
+	};
+	onMount(() => {
+		const handleVisibility = () => {
+			if (document.visibilityState === 'hidden') reportActiveExperimentReveals('TAB_HIDDEN', true);
+		};
+		const handlePageHide = () => reportActiveExperimentReveals('NAVIGATED_AWAY', true);
+		document.addEventListener('visibilitychange', handleVisibility);
+		window.addEventListener('pagehide', handlePageHide);
+		return () => {
+			document.removeEventListener('visibilitychange', handleVisibility);
+			window.removeEventListener('pagehide', handlePageHide);
+		};
+	});
+	onDestroy(() => {
+		reportActiveExperimentReveals('NAVIGATED_AWAY', true);
+		experimentResponseActive.set(false);
+	});
 
 	// Chat Input
 	let prompt = '';
@@ -1413,6 +1454,19 @@
 
 				// Sanitize history: repair orphaned references from failed regenerations (#24424)
 				for (const message of Object.values(history.messages)) {
+					if (message.experiment_request_id && !message.experimentRequestId) {
+						message.experimentRequestId = message.experiment_request_id;
+					}
+					if (message.role === 'assistant' && !message.done && message.experimentRequestId) {
+						const snapshot = await getExperimentResponseSnapshot(
+							localStorage.token,
+							message.experimentRequestId
+						).catch(() => null);
+						if (snapshot?.content && snapshot.content.length > (message.content?.length ?? 0)) {
+							message.content = snapshot.content;
+						}
+						if (snapshot?.done) message.done = true;
+					}
 					if (message.childrenIds) {
 						message.childrenIds = message.childrenIds.filter(
 							(childId) => history.messages[childId]
@@ -1762,7 +1816,20 @@
 	};
 
 	const chatCompletionEventHandler = async (data, message, chatId) => {
-		const { id, done, choices, content, output, sources, selected_model_id, error, usage } = data;
+		const {
+			id,
+			done,
+			choices,
+			content,
+			output,
+			sources,
+			selected_model_id,
+			error,
+			usage,
+			experiment_request_id
+		} = data;
+		if (experiment_request_id) message.experimentRequestId = experiment_request_id;
+		const contentBefore = message.content;
 
 		// Store raw OR-aligned output items from backend
 		if (output) {
@@ -1865,9 +1932,36 @@
 		}
 
 		history.messages[message.id] = message;
+		if (
+			!contentBefore &&
+			message.content &&
+			message.experimentRequestId &&
+			!message.experimentFirstVisibleReported
+		) {
+			message.experimentFirstVisibleReported = true;
+			await tick();
+			requestAnimationFrame(() =>
+				reportExperimentVisibleTiming(
+					localStorage.token,
+					message.experimentRequestId,
+					'FIRST_VISIBLE'
+				).catch(() => null)
+			);
+		}
 
 		if (done) {
 			message.done = true;
+			if (message.experimentRequestId && !message.experimentCompletedVisibleReported) {
+				message.experimentCompletedVisibleReported = true;
+				await tick();
+				requestAnimationFrame(() =>
+					reportExperimentVisibleTiming(
+						localStorage.token,
+						message.experimentRequestId,
+						'COMPLETED_VISIBLE'
+					).catch(() => null)
+				);
+			}
 
 			if ($settings.responseAutoCopy) {
 				copyToClipboard(message.content);
@@ -3075,9 +3169,9 @@
 											models: selectedModels,
 											params: params,
 											history: history,
-							messages: messages,
-							timestamp: Date.now(),
-							experiment_session_task_id: $experimentActiveTaskId ?? undefined
+											messages: messages,
+											timestamp: Date.now(),
+											experiment_session_task_id: $experimentActiveTaskId ?? undefined
 										},
 										null
 									);

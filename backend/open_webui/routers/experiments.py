@@ -1,9 +1,12 @@
 import time
-from typing import Optional
+import uuid
+from datetime import datetime
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from open_webui.config import EXPERIMENT_AGREEMENT_TEXT
@@ -35,6 +38,14 @@ from open_webui.models.survey_tasks import SurveyTasks
 from open_webui.tasks import create_task
 from open_webui.utils.auth import get_verified_user
 from open_webui.utils.question_grading import grade_response
+from open_webui.models.experiment_perturbations import (
+    ExperimentLLMRequest,
+    ExperimentWarningModal,
+    ExperimentWarningState,
+    WarningCadence,
+    new_warning_state,
+)
+from open_webui.models.experiment_telemetry import ExperimentTelemetryEvent
 
 router = APIRouter()
 
@@ -72,6 +83,303 @@ class ExperimentCurrentResponse(BaseModel):
 
 class EssayDraftForm(BaseModel):
     content: str = Field(default='', max_length=500000)
+
+
+class ExperimentActivityForm(BaseModel):
+    active_ms: int = Field(ge=0, le=30000)
+
+
+class ExperimentVisibleTimingForm(BaseModel):
+    request_id: str = Field(min_length=1, max_length=100)
+    event: Literal['FIRST_VISIBLE', 'COMPLETED_VISIBLE', 'TAB_HIDDEN', 'NAVIGATED_AWAY']
+    timestamp: datetime
+
+
+class WarningTokenForm(BaseModel):
+    token: str = Field(min_length=1, max_length=100)
+
+
+async def _active_runtime(user, db):
+    state, session, _ = await Experiments.get_current(user, db=db)
+    if state != ExperimentState.IN_PROGRESS or session is None or not session.condition_id or not session.plan_id:
+        return None, None, None
+    warning = await db.get(ExperimentWarningModal, session.condition_id)
+    if not warning or not warning.enabled:
+        return session, None, None
+    warning_state = (
+        (
+            await db.execute(
+                select(ExperimentWarningState)
+                .where(
+                    ExperimentWarningState.experiment_session_id == session.id,
+                    ExperimentWarningState.condition_id == session.condition_id,
+                    ExperimentWarningState.plan_id == session.plan_id,
+                )
+                .with_for_update()
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if warning_state is None:
+        warning_state = new_warning_state(session.id, session.condition_id, session.plan_id)
+        db.add(warning_state)
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            warning_state = (
+                (
+                    await db.execute(
+                        select(ExperimentWarningState).where(
+                            ExperimentWarningState.experiment_session_id == session.id,
+                            ExperimentWarningState.condition_id == session.condition_id,
+                            ExperimentWarningState.plan_id == session.plan_id,
+                        )
+                    )
+                )
+                .scalars()
+                .first()
+            )
+    return session, warning, warning_state
+
+
+def _warning_trigger(warning, warning_state, prompt_count):
+    cadence = WarningCadence(warning.cadence)
+    elapsed_minutes = warning_state.active_elapsed_ms / 60000
+    trigger = None
+    reason = cadence.value.lower()
+    if cadence == WarningCadence.BEGINNING:
+        trigger = 'beginning'
+    elif cadence == WarningCadence.EVERY_N_PROMPTS and warning.cadence_value and prompt_count:
+        if prompt_count % warning.cadence_value == 0:
+            trigger = f'prompt:{prompt_count}'
+    elif cadence == WarningCadence.PROMPT_LIST and prompt_count in (warning.prompt_numbers or []):
+        trigger = f'prompt:{prompt_count}'
+    elif (
+        cadence == WarningCadence.ONCE_AFTER_PROMPT and warning.cadence_value and prompt_count >= warning.cadence_value
+    ):
+        trigger = f'once-prompt:{warning.cadence_value}'
+    elif cadence == WarningCadence.EVERY_N_ACTIVE_MINUTES and warning.cadence_value:
+        slot = int(elapsed_minutes // warning.cadence_value)
+        if slot > 0:
+            trigger = f'active-slot:{slot}'
+    elif cadence in {WarningCadence.AFTER_ACTIVE_MINUTES, WarningCadence.ONCE_AFTER_ACTIVE_DELAY}:
+        if warning.cadence_value and elapsed_minutes >= warning.cadence_value:
+            trigger = f'once-active:{warning.cadence_value}'
+    if trigger == warning_state.last_trigger_key:
+        return None, None
+    return trigger, reason
+
+
+async def _runtime_payload(user, db):
+    session, warning, warning_state = await _active_runtime(user, db)
+    if not session or not warning or not warning_state:
+        return {'warning': None}
+    prompt_count = (
+        await db.execute(
+            select(func.max(ExperimentLLMRequest.prompt_number)).where(
+                ExperimentLLMRequest.experiment_session_id == session.id
+            )
+        )
+    ).scalar() or 0
+    if not warning_state.pending_token:
+        trigger, reason = _warning_trigger(warning, warning_state, prompt_count)
+        if trigger:
+            warning_state.pending_token = str(uuid.uuid4())
+            warning_state.pending_reason = reason
+            warning_state.pending_trigger_key = trigger
+            warning_state.pending_prompt_count = prompt_count
+            warning_state.pending_active_elapsed_ms = warning_state.active_elapsed_ms
+            warning_state.displayed_at = None
+            warning_state.acknowledged_at = None
+            warning_state.updated_at = time.time_ns()
+            await db.commit()
+    if not warning_state.pending_token:
+        return {'warning': None}
+    return {
+        'warning': {
+            'token': warning_state.pending_token,
+            'title': warning.title,
+            'message': warning.message,
+            'confirmation_text': warning.confirmation_text,
+            'must_acknowledge': warning.must_acknowledge,
+        }
+    }
+
+
+def _runtime_event(session, event_type, payload, request_id=None, chat_id=None, message_id=None):
+    now = time.time_ns()
+    return ExperimentTelemetryEvent(
+        id=str(uuid.uuid4()),
+        user_id=session.user_id,
+        experiment_session_id=session.id,
+        event_type=event_type,
+        event_time=now,
+        field_context='chat',
+        payload_json=payload,
+        created_at=now,
+        condition_id=session.condition_id,
+        plan_id=session.plan_id,
+        request_id=request_id,
+        chat_id=chat_id,
+        message_id=message_id,
+    )
+
+
+@router.get('/current/runtime')
+async def experiment_runtime(user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)):
+    return await _runtime_payload(user, db)
+
+
+@router.post('/current/runtime/activity')
+async def experiment_activity(
+    form: ExperimentActivityForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    _, _, warning_state = await _active_runtime(user, db)
+    if warning_state:
+        warning_state.active_elapsed_ms += form.active_ms
+        warning_state.updated_at = time.time_ns()
+        await db.commit()
+    return await _runtime_payload(user, db)
+
+
+@router.post('/current/runtime/warning/display')
+async def warning_display(
+    form: WarningTokenForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    session, warning, warning_state = await _active_runtime(user, db)
+    if warning_state and warning_state.last_token == form.token:
+        return {'status': True}
+    if not session or not warning_state or warning_state.pending_token != form.token:
+        raise HTTPException(status_code=409, detail='Warning is no longer pending.')
+    if warning_state.displayed_at is not None:
+        return {'status': True}
+    warning_state.displayed_at = time.time_ns()
+    warning_state.updated_at = time.time_ns()
+    db.add(
+        _runtime_event(
+            session,
+            'warning_modal_displayed',
+            {
+                'display_reason': warning_state.pending_reason,
+                'prompt_count': warning_state.pending_prompt_count,
+                'active_elapsed_ms': warning_state.pending_active_elapsed_ms,
+            },
+        )
+    )
+    if warning and not warning.must_acknowledge:
+        warning_state.last_trigger_key = warning_state.pending_trigger_key
+        warning_state.last_token = warning_state.pending_token
+        warning_state.pending_token = None
+        warning_state.pending_reason = None
+        warning_state.pending_trigger_key = None
+        warning_state.pending_prompt_count = None
+        warning_state.pending_active_elapsed_ms = None
+    await db.commit()
+    return {'status': True}
+
+
+@router.post('/current/runtime/warning/acknowledge')
+async def warning_acknowledge(
+    form: WarningTokenForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    session, _, warning_state = await _active_runtime(user, db)
+    if warning_state and warning_state.last_token == form.token:
+        return {'status': True}
+    if not session or not warning_state or warning_state.pending_token != form.token:
+        raise HTTPException(status_code=409, detail='Warning is no longer pending.')
+    acknowledged_at = time.time_ns()
+    db.add(
+        _runtime_event(
+            session,
+            'warning_modal_acknowledged',
+            {
+                'display_reason': warning_state.pending_reason,
+                'prompt_count': warning_state.pending_prompt_count,
+                'active_elapsed_ms': warning_state.pending_active_elapsed_ms,
+                'displayed_at': warning_state.displayed_at,
+                'acknowledged_at': acknowledged_at,
+            },
+        )
+    )
+    warning_state.acknowledged_at = acknowledged_at
+    warning_state.last_trigger_key = warning_state.pending_trigger_key
+    warning_state.last_token = warning_state.pending_token
+    warning_state.pending_token = None
+    warning_state.pending_reason = None
+    warning_state.pending_trigger_key = None
+    warning_state.pending_prompt_count = None
+    warning_state.pending_active_elapsed_ms = None
+    warning_state.updated_at = acknowledged_at
+    await db.commit()
+    return {'status': True}
+
+
+async def required_warning_pending(user, db: AsyncSession) -> bool:
+    payload = await _runtime_payload(user, db)
+    return bool((payload.get('warning') or {}).get('must_acknowledge'))
+
+
+@router.post('/current/runtime/visible-timing')
+async def visible_timing(
+    form: ExperimentVisibleTimingForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    state, session, _ = await Experiments.get_current(user, db=db)
+    if state != ExperimentState.IN_PROGRESS or not session:
+        raise HTTPException(status_code=409, detail='Experiment is not active.')
+    request_row = await db.get(ExperimentLLMRequest, form.request_id)
+    if not request_row or request_row.experiment_session_id != session.id:
+        raise HTTPException(status_code=403, detail='Response timing request is not assigned to this participant.')
+    client_ns = int(form.timestamp.timestamp() * 1_000_000_000)
+    if form.event == 'FIRST_VISIBLE' and request_row.client_first_visible_at is None:
+        request_row.client_first_visible_at = client_ns
+    elif form.event == 'COMPLETED_VISIBLE' and request_row.client_completed_visible_at is None:
+        request_row.client_completed_visible_at = client_ns
+    elif form.event == 'NAVIGATED_AWAY':
+        request_row.navigated_away = True
+    db.add(
+        _runtime_event(
+            session,
+            f'response_{form.event.lower()}',
+            {'client_timestamp': form.timestamp.isoformat(), 'received_at': time.time_ns(), 'source': 'client'},
+            request_id=request_row.id,
+            chat_id=request_row.chat_id,
+            message_id=request_row.assistant_message_id,
+        )
+    )
+    request_row.updated_at = time.time_ns()
+    await db.commit()
+    return {'status': True}
+
+
+@router.get('/current/runtime/responses/{request_id}')
+async def response_reveal_snapshot(
+    request_id: str,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    state, session, _ = await Experiments.get_current(user, db=db)
+    if state != ExperimentState.IN_PROGRESS or not session:
+        raise HTTPException(status_code=409, detail='Experiment is not active.')
+    request_row = await db.get(ExperimentLLMRequest, request_id)
+    if not request_row or request_row.experiment_session_id != session.id:
+        raise HTTPException(status_code=403, detail='Response is not assigned to this participant.')
+    buffered_content = (request_row.buffered_output or {}).get('content', '')
+    return {
+        'request_id': request_row.id,
+        'content': buffered_content[: request_row.reveal_cursor],
+        'done': request_row.status == 'COMPLETED',
+        'status': request_row.status,
+    }
 
 
 async def response_for(user, db: AsyncSession):

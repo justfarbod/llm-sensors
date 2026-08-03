@@ -1711,6 +1711,9 @@ async def chat_completion(
         tasks.pop(TASKS.FOLLOW_UP_GENERATION, None)
 
     experiment_context = {}
+    experiment_session = None
+    experiment_plan = None
+    session_task = None
     if _experiment_access == ExperimentState.IN_PROGRESS:
         from open_webui.models.experiment_plans import (
             ExperimentChatMode,
@@ -1729,13 +1732,17 @@ async def chat_completion(
                 experiment_plan = await ExperimentPlans.get_plan(experiment_session.plan_id, db=experiment_db)
                 if supplied_task_id:
                     session_task = (
-                        await experiment_db.execute(
-                            select(ExperimentSessionTask).where(
-                                ExperimentSessionTask.id == supplied_task_id,
-                                ExperimentSessionTask.experiment_session_id == experiment_session.id,
+                        (
+                            await experiment_db.execute(
+                                select(ExperimentSessionTask).where(
+                                    ExperimentSessionTask.id == supplied_task_id,
+                                    ExperimentSessionTask.experiment_session_id == experiment_session.id,
+                                )
                             )
                         )
-                    ).scalars().first()
+                        .scalars()
+                        .first()
+                    )
                     if session_task is None:
                         raise HTTPException(
                             status_code=403,
@@ -1743,20 +1750,26 @@ async def chat_completion(
                         )
                 else:
                     session_task = (
-                        await experiment_db.execute(
-                            select(ExperimentSessionTask)
-                            .where(
-                                ExperimentSessionTask.experiment_session_id == experiment_session.id,
-                                ExperimentSessionTask.status.in_([
-                                    SessionTaskStatus.ACTIVE.value,
-                                    SessionTaskStatus.AVAILABLE.value,
-                                    SessionTaskStatus.COMPLETED.value,
-                                ]),
+                        (
+                            await experiment_db.execute(
+                                select(ExperimentSessionTask)
+                                .where(
+                                    ExperimentSessionTask.experiment_session_id == experiment_session.id,
+                                    ExperimentSessionTask.status.in_(
+                                        [
+                                            SessionTaskStatus.ACTIVE.value,
+                                            SessionTaskStatus.AVAILABLE.value,
+                                            SessionTaskStatus.COMPLETED.value,
+                                        ]
+                                    ),
+                                )
+                                .order_by(ExperimentSessionTask.position)
+                                .limit(1)
                             )
-                            .order_by(ExperimentSessionTask.position)
-                            .limit(1)
                         )
-                    ).scalars().first()
+                        .scalars()
+                        .first()
+                    )
                 if not session_task or session_task.status not in {
                     SessionTaskStatus.ACTIVE.value,
                     SessionTaskStatus.AVAILABLE.value,
@@ -1783,11 +1796,24 @@ async def chat_completion(
                             status_code=409,
                             detail='This experiment task uses a fresh chat. Start a new chat for the selected task.',
                         )
-            form_data['metadata'] = {**(form_data.get('metadata') or {}), 'experiment_session_id': experiment_session.id, 'experiment_session_task_id': session_task.id}
+                from open_webui.routers.experiments import required_warning_pending
+
+                if await required_warning_pending(user, experiment_db):
+                    raise HTTPException(
+                        status_code=409,
+                        detail='A required experiment notice must be acknowledged before continuing.',
+                    )
+            form_data['metadata'] = {
+                **(form_data.get('metadata') or {}),
+                'experiment_session_id': experiment_session.id,
+                'experiment_session_task_id': session_task.id,
+            }
             experiment_context = {
                 'experiment_session_id': experiment_session.id,
                 'experiment_session_task_id': session_task.id,
-                'experiment_chat_task_id': session_task.id if experiment_plan.chat_mode == ExperimentChatMode.FRESH_PER_TASK else None,
+                'experiment_chat_task_id': (
+                    session_task.id if experiment_plan.chat_mode == ExperimentChatMode.FRESH_PER_TASK else None
+                ),
             }
             for message in form_data.get('messages', []):
                 if isinstance(message, dict):
@@ -1949,11 +1975,13 @@ async def chat_completion(
                                     'currentId': all_assistant_ids[0] if all_assistant_ids else user_message_id,
                                     'messages': history_messages,
                                 },
-                                'messages': [
-                                    {'role': 'user', 'content': user_message.get('content', '')},
-                                ]
-                                if user_message_id
-                                else [],
+                                'messages': (
+                                    [
+                                        {'role': 'user', 'content': user_message.get('content', '')},
+                                    ]
+                                    if user_message_id
+                                    else []
+                                ),
                                 'files': metadata.get('files') or [],
                                 'tags': [],
                                 'timestamp': int(time.time() * 1000),
@@ -1961,9 +1989,7 @@ async def chat_completion(
                             folder_id=metadata.get('folder_id'),
                             experiment_session_id=metadata.get('experiment_session_id'),
                             experiment_session_task_id=metadata.get('experiment_chat_task_id'),
-                            initial_message_experiment_session_task_id=metadata.get(
-                                'experiment_session_task_id'
-                            ),
+                            initial_message_experiment_session_task_id=metadata.get('experiment_session_task_id'),
                         ),
                     )
 
@@ -2090,9 +2116,29 @@ async def chat_completion(
         )
 
     async def process_chat(request, form_data, user, metadata, model, tasks=None):
+        perturbation_context = None
         try:
-            form_data, metadata, events = await process_chat_payload(request, form_data, user, metadata, model)
+            if experiment_session and experiment_plan and session_task:
+                from open_webui.utils.experiment_perturbations import prepare_request
 
+                perturbation_context = await prepare_request(
+                    experiment_session, experiment_plan, session_task, metadata
+                )
+            form_data, metadata, events = await process_chat_payload(
+                request,
+                form_data,
+                user,
+                metadata,
+                model,
+                experiment_perturbation=perturbation_context,
+            )
+            if perturbation_context:
+                events.append({'experiment_request_id': perturbation_context.request_id})
+
+            if perturbation_context:
+                from open_webui.utils.experiment_perturbations import update_request
+
+                await update_request(perturbation_context.request_id, provider_started_at=time.time_ns())
             response = await chat_completion_handler(request, form_data, user)
 
             # When the upstream provider returns an error (e.g. HTTP 400
@@ -2110,11 +2156,30 @@ async def chat_completion(
                     detail = f'Provider returned HTTP {response.status_code}'
                 raise Exception(detail)
 
+            if perturbation_context:
+                from open_webui.utils.experiment_perturbations import apply_nonstream_timing, wrap_streaming_response
+
+                response = await wrap_streaming_response(response, perturbation_context)
+                response = await apply_nonstream_timing(response, perturbation_context)
+
             ctx = await build_chat_response_context(request, form_data, user, model, metadata, tasks, events)
 
             return await process_chat_response(response, ctx)
         except asyncio.CancelledError:
             log.info('Chat processing was cancelled')
+            if perturbation_context:
+                try:
+                    from open_webui.utils.experiment_perturbations import update_request
+
+                    await asyncio.shield(
+                        update_request(
+                            perturbation_context.request_id,
+                            status='CANCELLED',
+                            streaming_completed_normally=False,
+                        )
+                    )
+                except Exception:
+                    pass
             try:
 
                 async def emit_cancel_event():
@@ -2127,6 +2192,18 @@ async def chat_completion(
                 pass
             raise  # re-raise to ensure proper task cancellation handling
         except Exception as e:
+            if perturbation_context:
+                try:
+                    from open_webui.utils.experiment_perturbations import update_request
+
+                    await update_request(
+                        perturbation_context.request_id,
+                        status='FAILED',
+                        error_type=type(e).__name__,
+                        provider_completed_at=time.time_ns(),
+                    )
+                except Exception:
+                    pass
             error_detail = e.detail if isinstance(e, HTTPException) else str(e)
             log.error('Error processing chat payload: %s', error_detail)
             if metadata.get('chat_id') and metadata.get('message_id'):
@@ -2240,14 +2317,16 @@ async def chat_completion(
                     user,
                     per_model_metadata,
                     resolved_model,
-                    tasks
-                    if idx == 0
-                    else {
-                        k: v
-                        for k, v in (tasks or {}).items()
-                        if k not in (TASKS.TITLE_GENERATION, TASKS.TAGS_GENERATION)
-                    }
-                    or None,
+                    (
+                        tasks
+                        if idx == 0
+                        else {
+                            k: v
+                            for k, v in (tasks or {}).items()
+                            if k not in (TASKS.TITLE_GENERATION, TASKS.TAGS_GENERATION)
+                        }
+                        or None
+                    ),
                 ),
                 id=chat_id,
             )

@@ -21,7 +21,19 @@ from open_webui.env import WEBUI_SECRET_KEY
 from open_webui.internal.db import get_async_session
 from open_webui.models.chat_messages import ChatMessage, _token_columns
 from open_webui.models.essays import Essay, EssayTopics
-from open_webui.models.experiment_telemetry import ExperimentTelemetrySummary, ExperimentTelemetrySummaryModel
+from open_webui.models.experiment_telemetry import (
+    ExperimentTelemetryEvent,
+    ExperimentTelemetrySummary,
+    ExperimentTelemetrySummaryModel,
+)
+from open_webui.models.experiment_perturbations import (
+    ExperimentCondition,
+    ExperimentLLMRequest,
+    ExperimentMemoryInjection,
+    ExperimentPromptInjection,
+    ExperimentResponseTiming,
+    ExperimentWarningModal,
+)
 from open_webui.models.experiments import ACTIVE_STATES, ExperimentSession, ExperimentState
 from open_webui.models.experiment_plans import ExperimentSessionTask
 from open_webui.models.question_submissions import (
@@ -215,6 +227,8 @@ def _session_row(session, group, user, essay, usage, telemetry=None):
         'email': user.email if user else None,
         'group_id': session.group_id,
         'group_name': group.name if group else None,
+        'condition_id': getattr(session, 'condition_id', None),
+        'configuration_revision': getattr(session, 'plan_id', None),
         'topic_id': session.topic_id,
         'topic_title': session.topic_title,
         'state': session.state,
@@ -484,6 +498,45 @@ async def session_detail(
     usage = (await _usage_by_session(db, [session.id])).get(session.id, {})
     telemetry = (await _telemetry_by_session(db, [session.id])).get(session.id)
     row = _session_row(session, group, participant, essay, usage, telemetry)
+    condition = await db.get(ExperimentCondition, session.condition_id) if session.condition_id else None
+    prompt_settings = await db.get(ExperimentPromptInjection, session.condition_id) if session.condition_id else None
+    memory_settings = await db.get(ExperimentMemoryInjection, session.condition_id) if session.condition_id else None
+    warning_settings = await db.get(ExperimentWarningModal, session.condition_id) if session.condition_id else None
+    timing_settings = await db.get(ExperimentResponseTiming, session.condition_id) if session.condition_id else None
+    perturbation_requests = list(
+        (
+            await db.execute(
+                select(ExperimentLLMRequest)
+                .where(ExperimentLLMRequest.experiment_session_id == session.id)
+                .order_by(ExperimentLLMRequest.request_sequence)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    perturbation_events = list(
+        (
+            await db.execute(
+                select(ExperimentTelemetryEvent)
+                .where(
+                    ExperimentTelemetryEvent.experiment_session_id == session.id,
+                    ExperimentTelemetryEvent.event_type.in_(
+                        [
+                            'warning_modal_displayed',
+                            'warning_modal_acknowledged',
+                            'response_first_visible',
+                            'response_completed_visible',
+                            'response_tab_hidden',
+                            'response_navigated_away',
+                        ]
+                    ),
+                )
+                .order_by(ExperimentTelemetryEvent.event_time)
+            )
+        )
+        .scalars()
+        .all()
+    )
     row.update(
         {
             'topic_question': session.topic_question,
@@ -510,6 +563,75 @@ async def session_detail(
                 if essay
                 else None
             ),
+            'condition': (
+                {
+                    'id': condition.id,
+                    'name': condition.name,
+                    'is_control': condition.is_control,
+                    'plan_id': condition.plan_id,
+                }
+                if condition
+                else {'name': 'Implicit control', 'is_control': True, 'plan_id': session.plan_id}
+            ),
+            'configuration_summary': {
+                'prompt_injection_enabled': bool(prompt_settings and prompt_settings.enabled),
+                'memory_injection_enabled': bool(memory_settings and memory_settings.enabled),
+                'warning_modal_enabled': bool(warning_settings and warning_settings.enabled),
+                'response_timing_mode': timing_settings.mode if timing_settings else 'NORMAL',
+            },
+            'perturbation_requests': [
+                {
+                    key: getattr(request_row, key)
+                    for key in (
+                        'id',
+                        'condition_id',
+                        'plan_id',
+                        'plan_version',
+                        'session_task_id',
+                        'request_sequence',
+                        'prompt_number',
+                        'chat_id',
+                        'user_message_id',
+                        'assistant_message_id',
+                        'prompt_active',
+                        'memory_active',
+                        'prompt_draw',
+                        'memory_draw',
+                        'prompt_randomization_id',
+                        'memory_randomization_id',
+                        'timing_mode',
+                        'timing_parameters',
+                        'request_at',
+                        'provider_started_at',
+                        'provider_first_token_at',
+                        'provider_completed_at',
+                        'artificial_delay_started_at',
+                        'artificial_delay_ended_at',
+                        'server_first_emit_at',
+                        'server_completed_emit_at',
+                        'client_first_visible_at',
+                        'client_completed_visible_at',
+                        'buffered',
+                        'streaming_completed_normally',
+                        'navigated_away',
+                        'status',
+                        'error_type',
+                    )
+                }
+                for request_row in perturbation_requests
+            ],
+            'perturbation_events': [
+                {
+                    'id': event.id,
+                    'type': event.event_type,
+                    'event_time': event.event_time,
+                    'request_id': event.request_id,
+                    'chat_id': event.chat_id,
+                    'message_id': event.message_id,
+                    'payload': event.payload_json,
+                }
+                for event in perturbation_events
+            ],
         }
     )
     return row
@@ -949,7 +1071,7 @@ def _export_response(rows, form: ExportRequest, filename: str):
     if form.format == 'csv':
         for row in rows:
             row.pop('telemetry_summary', None)
-        headers = list(rows[0].keys()) if rows else []
+        headers = list(dict.fromkeys(key for row in rows for key in row))
         return StreamingResponse(
             _csv_stream(headers, rows),
             media_type='text/csv',
@@ -988,6 +1110,173 @@ async def export_participants(
         for session in sessions
     ]
     return _export_response(rows, form, 'experiment-participants')
+
+
+@router.post('/export/perturbations')
+async def export_perturbations(
+    form: ExportRequest,
+    user=Depends(get_admin_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    requests = list(
+        (
+            await db.execute(
+                select(ExperimentLLMRequest)
+                .where(ExperimentLLMRequest.experiment_session_id.in_(form.ids))
+                .order_by(ExperimentLLMRequest.experiment_session_id, ExperimentLLMRequest.request_sequence)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    events = list(
+        (
+            await db.execute(
+                select(ExperimentTelemetryEvent)
+                .where(
+                    ExperimentTelemetryEvent.experiment_session_id.in_(form.ids),
+                    ExperimentTelemetryEvent.event_type.in_(
+                        [
+                            'warning_modal_displayed',
+                            'warning_modal_acknowledged',
+                            'response_first_visible',
+                            'response_completed_visible',
+                            'response_tab_hidden',
+                            'response_navigated_away',
+                        ]
+                    ),
+                )
+                .order_by(ExperimentTelemetryEvent.experiment_session_id, ExperimentTelemetryEvent.event_time)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    condition_ids = {request_row.condition_id for request_row in requests if request_row.condition_id}
+    prompt_by_condition = {
+        row.condition_id: row
+        for row in (
+            (
+                await db.execute(
+                    select(ExperimentPromptInjection).where(ExperimentPromptInjection.condition_id.in_(condition_ids))
+                )
+            )
+            .scalars()
+            .all()
+            if condition_ids
+            else []
+        )
+    }
+    memory_by_condition = {
+        row.condition_id: row
+        for row in (
+            (
+                await db.execute(
+                    select(ExperimentMemoryInjection).where(ExperimentMemoryInjection.condition_id.in_(condition_ids))
+                )
+            )
+            .scalars()
+            .all()
+            if condition_ids
+            else []
+        )
+    }
+    warning_by_condition = {
+        row.condition_id: row
+        for row in (
+            (
+                await db.execute(
+                    select(ExperimentWarningModal).where(ExperimentWarningModal.condition_id.in_(condition_ids))
+                )
+            )
+            .scalars()
+            .all()
+            if condition_ids
+            else []
+        )
+    }
+    rows = [
+        {
+            'record_type': 'request',
+            **{
+                key: getattr(request_row, key)
+                for key in (
+                    'id',
+                    'experiment_session_id',
+                    'condition_id',
+                    'plan_id',
+                    'plan_version',
+                    'session_task_id',
+                    'chat_id',
+                    'user_message_id',
+                    'assistant_message_id',
+                    'request_sequence',
+                    'prompt_number',
+                    'assignment_identifier',
+                    'prompt_active',
+                    'memory_active',
+                    'memory_latched',
+                    'prompt_draw',
+                    'memory_draw',
+                    'prompt_randomization_id',
+                    'memory_randomization_id',
+                    'timing_mode',
+                    'timing_parameters',
+                    'request_at',
+                    'provider_started_at',
+                    'provider_first_token_at',
+                    'provider_completed_at',
+                    'artificial_delay_started_at',
+                    'artificial_delay_ended_at',
+                    'server_first_emit_at',
+                    'server_completed_emit_at',
+                    'client_first_visible_at',
+                    'client_completed_visible_at',
+                    'buffered',
+                    'streaming_completed_normally',
+                    'navigated_away',
+                    'status',
+                    'error_type',
+                )
+            },
+            'event_type': None,
+            'event_time': None,
+            'event_payload': None,
+            'configuration_summary': {
+                'prompt_injection_enabled': bool(
+                    prompt_by_condition.get(request_row.condition_id)
+                    and prompt_by_condition[request_row.condition_id].enabled
+                ),
+                'memory_injection_enabled': bool(
+                    memory_by_condition.get(request_row.condition_id)
+                    and memory_by_condition[request_row.condition_id].enabled
+                ),
+                'warning_modal_enabled': bool(
+                    warning_by_condition.get(request_row.condition_id)
+                    and warning_by_condition[request_row.condition_id].enabled
+                ),
+                'response_timing_mode': request_row.timing_mode,
+            },
+        }
+        for request_row in requests
+    ]
+    rows.extend(
+        {
+            'record_type': 'event',
+            'id': event.id,
+            'experiment_session_id': event.experiment_session_id,
+            'condition_id': event.condition_id,
+            'plan_id': event.plan_id,
+            'request_id': event.request_id,
+            'chat_id': event.chat_id,
+            'message_id': event.message_id,
+            'event_type': event.event_type,
+            'event_time': event.event_time,
+            'event_payload': event.payload_json,
+        }
+        for event in events
+    )
+    return _export_response(rows, form, 'experiment-perturbations')
 
 
 @router.post('/export/essays')

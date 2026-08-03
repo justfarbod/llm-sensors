@@ -13,6 +13,17 @@ from open_webui.internal.db import Base, get_async_db_context
 from open_webui.models.essays import EssayTopic, EssayTopicModel
 from open_webui.models.question_tasks import QuestionTask, QuestionTaskStatus
 from open_webui.models.survey_tasks import SurveyTask, SurveyTaskStatus
+from open_webui.models.experiment_perturbations import (
+    ExperimentCondition,
+    ExperimentConditionForm,
+    ExperimentConditionModel,
+    ExperimentConditionTaskScope,
+    ExperimentMemoryInjection,
+    ExperimentPromptInjection,
+    ExperimentResponseTiming,
+    ExperimentWarningModal,
+    default_control_condition,
+)
 
 
 class ExperimentTaskType(StrEnum):
@@ -147,6 +158,7 @@ class ExperimentPlanForm(BaseModel):
     chat_mode: ExperimentChatMode = ExperimentChatMode.SHARED_EXPERIMENT
     consent_enabled: bool = True
     items: list[PlanItemForm] = Field(min_length=1, max_length=100)
+    conditions: list[ExperimentConditionForm] = Field(default_factory=lambda: [default_control_condition()])
 
     @model_validator(mode='after')
     def validate_survey_positions(self):
@@ -163,6 +175,21 @@ class ExperimentPlanForm(BaseModel):
                     )
         if not enabled:
             raise ValueError('An experiment plan must contain an enabled item.')
+        enabled_conditions = [condition for condition in self.conditions if condition.enabled]
+        controls = [condition for condition in enabled_conditions if condition.is_control]
+        if len(controls) != 1:
+            raise ValueError('An experiment plan must contain exactly one enabled control condition.')
+        if controls[0].allocation_percent < 1:
+            raise ValueError('The control condition must receive at least one percent allocation.')
+        if sum(condition.allocation_percent for condition in enabled_conditions) != 100:
+            raise ValueError('Enabled condition allocation percentages must total 100.')
+        item_ids = {item.id for item in self.items if item.id}
+        for condition in enabled_conditions:
+            for settings in (condition.prompt_injection, condition.memory_injection):
+                if settings.activation.scope.value == 'SELECTED_TASKS' and not set(
+                    settings.activation.plan_item_ids
+                ).issubset(item_ids):
+                    raise ValueError('Condition task scope references an unavailable plan item.')
         return self
 
 
@@ -195,6 +222,7 @@ class ExperimentPlanModel(BaseModel):
     created_at: int
     updated_at: int
     items: list[PlanItemModel] = []
+    conditions: list[ExperimentConditionModel] = []
 
 
 class SessionTaskModel(BaseModel):
@@ -253,6 +281,102 @@ class ExperimentPlanTable:
             pool_map: dict[str, list[str]] = {}
             for pool in pools:
                 pool_map.setdefault(pool.plan_item_id, []).append(pool.topic_id)
+            condition_rows = list(
+                (
+                    await db.execute(
+                        select(ExperimentCondition)
+                        .where(ExperimentCondition.plan_id == plan_id)
+                        .order_by(ExperimentCondition.position)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            conditions = []
+            for condition in condition_rows:
+                prompt = await db.get(ExperimentPromptInjection, condition.id)
+                memory = await db.get(ExperimentMemoryInjection, condition.id)
+                warning = await db.get(ExperimentWarningModal, condition.id)
+                timing = await db.get(ExperimentResponseTiming, condition.id)
+                scopes = list(
+                    (
+                        await db.execute(
+                            select(ExperimentConditionTaskScope).where(
+                                ExperimentConditionTaskScope.condition_id == condition.id
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                prompt_scope = [row.plan_item_id for row in scopes if row.perturbation_type == 'PROMPT']
+                memory_scope = [row.plan_item_id for row in scopes if row.perturbation_type == 'MEMORY']
+                conditions.append(
+                    ExperimentConditionModel.model_validate(
+                        {
+                            'id': condition.id,
+                            'name': condition.name,
+                            'allocation_percent': condition.allocation_percent,
+                            'enabled': condition.enabled,
+                            'is_control': condition.is_control,
+                            'prompt_injection': {
+                                'enabled': prompt.enabled if prompt else False,
+                                'instruction': prompt.instruction if prompt else '',
+                                'position': prompt.position if prompt else 'SYSTEM',
+                                'activation': {
+                                    'mode': prompt.activation_mode if prompt else 'EVERY_REQUEST',
+                                    'count': prompt.activation_count if prompt else None,
+                                    'range_start': prompt.range_start if prompt else None,
+                                    'range_end': prompt.range_end if prompt else None,
+                                    'probability': prompt.probability if prompt else 1,
+                                    'scope': prompt.scope if prompt else 'ALL_TASKS',
+                                    'plan_item_ids': prompt_scope,
+                                },
+                            },
+                            'memory_injection': {
+                                'enabled': memory.enabled if memory else False,
+                                'content': memory.content if memory else '',
+                                'persist_for_session': memory.persist_for_session if memory else False,
+                                'activation': {
+                                    'mode': memory.activation_mode if memory else 'EVERY_REQUEST',
+                                    'count': memory.activation_count if memory else None,
+                                    'range_start': memory.range_start if memory else None,
+                                    'range_end': memory.range_end if memory else None,
+                                    'probability': memory.probability if memory else 1,
+                                    'scope': memory.scope if memory else 'ALL_TASKS',
+                                    'plan_item_ids': memory_scope,
+                                },
+                            },
+                            'warning_modal': {
+                                'enabled': warning.enabled if warning else False,
+                                'title': warning.title if warning else 'Important reminder',
+                                'message': (
+                                    warning.message
+                                    if warning
+                                    else 'LLMs can make mistakes. Double-check important answers.'
+                                ),
+                                'confirmation_text': warning.confirmation_text if warning else 'Continue',
+                                'must_acknowledge': warning.must_acknowledge if warning else True,
+                                'cadence': warning.cadence if warning else 'BEGINNING',
+                                'cadence_value': warning.cadence_value if warning else None,
+                                'prompt_numbers': warning.prompt_numbers if warning else [],
+                            },
+                            'response_timing': {
+                                'mode': timing.mode if timing else 'NORMAL',
+                                'delay_seconds': timing.delay_seconds if timing else None,
+                                'show_loading': timing.show_loading if timing else True,
+                                'reveal_style': timing.reveal_style if timing else 'FULL',
+                                'target_duration_seconds': timing.target_duration_seconds if timing else None,
+                                'stream_unit': timing.stream_unit if timing else 'CHARACTER',
+                                'minimum_chunk_size': timing.minimum_chunk_size if timing else 1,
+                                'maximum_chunk_size': timing.maximum_chunk_size if timing else 20,
+                                'punctuation_pauses': timing.punctuation_pauses if timing else False,
+                                'rate_value': timing.rate_value if timing else None,
+                                'rate_unit': timing.rate_unit if timing else 'CHARACTERS_PER_SECOND',
+                            },
+                        }
+                    )
+                )
             return ExperimentPlanModel(
                 **{
                     column: getattr(plan, column)
@@ -286,6 +410,8 @@ class ExperimentPlanTable:
                     )
                     for item in items
                 ],
+                conditions=conditions
+                or [ExperimentConditionModel(id='implicit-control', **default_control_condition().model_dump())],
             )
 
     async def get_active_for_group(self, group_id: str, db: Optional[AsyncSession] = None):
@@ -385,10 +511,12 @@ class ExperimentPlanTable:
             )
             plan.status = 'PUBLISHED'
             plan.updated_at = int(time.time_ns())
+            saved_item_pairs = []
             for position, form_item in enumerate(form.items):
                 # A locked plan is immutable and its item IDs may already be referenced by
                 # participant sessions. New versions therefore receive new item identities.
                 item_id = str(uuid.uuid4()) if creating_new_version else (form_item.id or str(uuid.uuid4()))
+                saved_item_pairs.append((form_item, item_id))
                 db.add(
                     ExperimentPlanItem(
                         id=item_id,
@@ -423,8 +551,125 @@ class ExperimentPlanTable:
                 ):
                     for topic_id in dict.fromkeys(form_item.essay_topic_ids):
                         db.add(ExperimentPlanItemTopic(plan_item_id=item_id, topic_id=topic_id))
+            await db.flush()
+            await self._save_conditions(plan.id, form.conditions, saved_item_pairs, creating_new_version, db)
             await db.commit()
             return await self.get_plan(plan.id, db=db)
+
+    async def _save_conditions(self, plan_id, conditions, saved_item_pairs, creating_new_version, db):
+        if not creating_new_version:
+            old_ids = list(
+                (await db.execute(select(ExperimentCondition.id).where(ExperimentCondition.plan_id == plan_id)))
+                .scalars()
+                .all()
+            )
+            if old_ids:
+                await db.execute(
+                    delete(ExperimentConditionTaskScope).where(ExperimentConditionTaskScope.condition_id.in_(old_ids))
+                )
+                await db.execute(
+                    delete(ExperimentResponseTiming).where(ExperimentResponseTiming.condition_id.in_(old_ids))
+                )
+                await db.execute(delete(ExperimentWarningModal).where(ExperimentWarningModal.condition_id.in_(old_ids)))
+                await db.execute(
+                    delete(ExperimentMemoryInjection).where(ExperimentMemoryInjection.condition_id.in_(old_ids))
+                )
+                await db.execute(
+                    delete(ExperimentPromptInjection).where(ExperimentPromptInjection.condition_id.in_(old_ids))
+                )
+                await db.execute(delete(ExperimentCondition).where(ExperimentCondition.id.in_(old_ids)))
+        item_map = {form_item.id: saved_id for form_item, saved_id in saved_item_pairs if form_item.id}
+        saved_item_ids = {saved_id for _, saved_id in saved_item_pairs}
+        now = int(time.time_ns())
+        for position, form in enumerate(conditions):
+            condition_id = str(uuid.uuid4()) if creating_new_version or not form.id else form.id
+            db.add(
+                ExperimentCondition(
+                    id=condition_id,
+                    plan_id=plan_id,
+                    name=form.name,
+                    position=position,
+                    allocation_percent=form.allocation_percent,
+                    enabled=form.enabled,
+                    is_control=form.is_control,
+                    created_at=now,
+                )
+            )
+            prompt = form.prompt_injection
+            memory = form.memory_injection
+            db.add(
+                ExperimentPromptInjection(
+                    condition_id=condition_id,
+                    enabled=prompt.enabled,
+                    instruction=prompt.instruction,
+                    position=prompt.position.value,
+                    activation_mode=prompt.activation.mode.value,
+                    activation_count=prompt.activation.count,
+                    range_start=prompt.activation.range_start,
+                    range_end=prompt.activation.range_end,
+                    probability=prompt.activation.probability,
+                    scope=prompt.activation.scope.value,
+                )
+            )
+            db.add(
+                ExperimentMemoryInjection(
+                    condition_id=condition_id,
+                    enabled=memory.enabled,
+                    content=memory.content,
+                    persist_for_session=memory.persist_for_session,
+                    activation_mode=memory.activation.mode.value,
+                    activation_count=memory.activation.count,
+                    range_start=memory.activation.range_start,
+                    range_end=memory.activation.range_end,
+                    probability=memory.activation.probability,
+                    scope=memory.activation.scope.value,
+                )
+            )
+            warning = form.warning_modal
+            db.add(
+                ExperimentWarningModal(
+                    condition_id=condition_id,
+                    enabled=warning.enabled,
+                    title=warning.title,
+                    message=warning.message,
+                    confirmation_text=warning.confirmation_text,
+                    must_acknowledge=warning.must_acknowledge,
+                    cadence=warning.cadence.value,
+                    cadence_value=warning.cadence_value,
+                    prompt_numbers=warning.prompt_numbers,
+                )
+            )
+            timing = form.response_timing
+            db.add(
+                ExperimentResponseTiming(
+                    condition_id=condition_id,
+                    mode=timing.mode.value,
+                    delay_seconds=timing.delay_seconds,
+                    show_loading=timing.show_loading,
+                    reveal_style=timing.reveal_style.value,
+                    target_duration_seconds=timing.target_duration_seconds,
+                    stream_unit=timing.stream_unit.value,
+                    minimum_chunk_size=timing.minimum_chunk_size,
+                    maximum_chunk_size=timing.maximum_chunk_size,
+                    punctuation_pauses=timing.punctuation_pauses,
+                    rate_value=timing.rate_value,
+                    rate_unit=timing.rate_unit.value,
+                )
+            )
+            for perturbation_type, ids in (
+                ('PROMPT', prompt.activation.plan_item_ids),
+                ('MEMORY', memory.activation.plan_item_ids),
+            ):
+                for plan_item_id in ids:
+                    mapped_id = item_map.get(plan_item_id, plan_item_id)
+                    if mapped_id in saved_item_ids:
+                        db.add(
+                            ExperimentConditionTaskScope(
+                                condition_id=condition_id,
+                                perturbation_type=perturbation_type,
+                                plan_item_id=mapped_id,
+                            )
+                        )
 
     async def _delete_items(self, plan_id: str, db: AsyncSession):
         ids = list(
@@ -433,6 +678,9 @@ class ExperimentPlanTable:
             .all()
         )
         if ids:
+            await db.execute(
+                delete(ExperimentConditionTaskScope).where(ExperimentConditionTaskScope.plan_item_id.in_(ids))
+            )
             await db.execute(delete(ExperimentPlanItemTopic).where(ExperimentPlanItemTopic.plan_item_id.in_(ids)))
             await db.execute(delete(ExperimentPlanItem).where(ExperimentPlanItem.id.in_(ids)))
 

@@ -103,6 +103,7 @@ export const showEssaySidebar = writable(false);
 export const experimentCurrent: Writable<ExperimentCurrent | undefined> = writable(undefined);
 export const experimentRefresh = writable(0);
 export const experimentActiveTaskId: Writable<string | null> = writable(null);
+export const experimentResponseActive: Writable<boolean> = writable(false);
 export const showEmbeds = writable(false);
 export const showOverview = writable(false);
 export const showArtifacts = writable(false);

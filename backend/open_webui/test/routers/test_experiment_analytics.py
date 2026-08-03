@@ -30,6 +30,7 @@ def test_dashboard_routes_are_admin_only_and_match_contract():
         '/surveys',
         '/export/participants',
         '/export/essays',
+        '/export/perturbations',
         '/export/surveys',
         '/question-results',
         '/question-submissions/{submission_id}',
@@ -50,10 +51,11 @@ def test_restricted_chat_task_and_settings_policies_are_wired_to_routes():
             for dependency in task_routes[path].dependant.dependencies
         )
 
-    for route in [route for route in users.router.routes if isinstance(route, APIRoute) and route.path == '/user/settings']:
+    for route in [
+        route for route in users.router.routes if isinstance(route, APIRoute) and route.path == '/user/settings'
+    ]:
         assert any(
-            dependency.call is require_non_experiment_user_dependency
-            for dependency in route.dependant.dependencies
+            dependency.call is require_non_experiment_user_dependency for dependency in route.dependant.dependencies
         )
 
 

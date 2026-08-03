@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from open_webui.internal.db import get_async_session
 from open_webui.models.experiment_plans import ExperimentPlanForm, ExperimentPlans
 from open_webui.models.groups import Groups
+from open_webui.models.experiment_perturbations import default_control_condition
 from open_webui.utils.auth import get_admin_user
 
 router = APIRouter()
@@ -25,6 +26,7 @@ async def get_group_experiment_plan(
         'consent_enabled': True,
         'survey_variant': 'ESSAY',
         'items': [],
+        'conditions': [{'id': 'draft-control', **default_control_condition().model_dump(mode='json')}],
     }
 
 

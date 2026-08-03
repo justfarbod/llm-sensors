@@ -21,10 +21,17 @@ class ExperimentTelemetryEvent(Base):
     session_task_id = Column(Text, nullable=True)
     question_id = Column(Text, nullable=True)
     submission_id = Column(Text, nullable=True)
+    condition_id = Column(Text, nullable=True)
+    plan_id = Column(Text, nullable=True)
+    request_id = Column(Text, nullable=True)
+    chat_id = Column(Text, nullable=True)
+    message_id = Column(Text, nullable=True)
 
     __table_args__ = (
         Index('ix_experiment_telemetry_event_session_time', 'experiment_session_id', 'event_time'),
         Index('ix_experiment_telemetry_event_user_session', 'user_id', 'experiment_session_id'),
+        Index('ix_experiment_telemetry_event_request', 'request_id'),
+        Index('ix_experiment_telemetry_event_condition_plan', 'condition_id', 'plan_id'),
     )
 
 

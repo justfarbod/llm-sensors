@@ -83,7 +83,7 @@ export const retryQuestionGrading = (token: string, responseId: string) =>
 
 export const exportResearchData = async (
 	token: string,
-	section: 'participants' | 'essays' | 'surveys',
+	section: 'participants' | 'essays' | 'surveys' | 'perturbations',
 	ids: string[],
 	format: 'csv' | 'json',
 	anonymized: boolean

@@ -2251,7 +2251,14 @@ def strip_skill_mentions(messages: list[dict]) -> None:
                         part['text'] = strip_re.sub('', text).strip()
 
 
-async def process_chat_payload(request, form_data, user, metadata, model):
+async def process_chat_payload(
+    request,
+    form_data,
+    user,
+    metadata,
+    model,
+    experiment_perturbation=None,
+):
     # Pipeline Inlet -> Filter Inlet -> Chat Memory -> Chat Web Search -> Chat Image Generation
     # -> Chat Code Interpreter (Form Data Update) -> (Default) Chat Tools Function Calling
     # -> Chat Files
@@ -2631,7 +2638,9 @@ async def process_chat_payload(request, form_data, user, metadata, model):
         'terminal_id': terminal_id,
         'files': files,
     }
-    form_data['metadata'] = metadata
+    # Internal experiment treatment state must never be serialized to providers
+    # or participant-visible request metadata.
+    form_data['metadata'] = {key: value for key, value in metadata.items() if not key.startswith('_')}
 
     # When the caller provides an explicit OpenAI-style `tools` array in the
     # request body, skip all server-side tool resolution and pass the caller's
@@ -2921,6 +2930,11 @@ async def process_chat_payload(request, form_data, user, metadata, model):
                 },
             }
         )
+
+    if experiment_perturbation:
+        from open_webui.utils.experiment_perturbations import apply_request_injections
+
+        form_data['messages'] = apply_request_injections(form_data['messages'], experiment_perturbation)
 
     # Strip empty text content blocks from multimodal messages
     # to prevent errors from providers like Gemini and Claude
@@ -4129,9 +4143,9 @@ async def streaming_chat_response_handler(response, ctx):
                                                         current_response_tool_call['function']['name'] = delta_name
 
                                                     if delta_arguments:
-                                                        current_response_tool_call['function']['arguments'] += (
-                                                            delta_arguments
-                                                        )
+                                                        current_response_tool_call['function'][
+                                                            'arguments'
+                                                        ] += delta_arguments
 
                                         # Emit pending tool calls in real-time
                                         if response_tool_calls:

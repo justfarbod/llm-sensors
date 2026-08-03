@@ -307,7 +307,7 @@
 	};
 
 	const runExport = async (
-		section: 'participants' | 'essays' | 'surveys',
+		section: 'participants' | 'essays' | 'surveys' | 'perturbations',
 		ids: string[],
 		format: 'csv' | 'json'
 	) => {
@@ -840,7 +840,7 @@
 				<p class="mt-2 text-sm text-gray-500">
 					{detail.participant_id} · {detail.name ?? 'Not available'} · {detail.state}
 				</p>
-				<div class="mt-3 flex gap-2">
+				<div class="mt-3 flex flex-wrap gap-2">
 					<button
 						class="research-button"
 						on:click={() => runExport('participants', [detail.session_id], 'csv')}
@@ -849,6 +849,14 @@
 						class="research-button"
 						on:click={() => runExport('participants', [detail.session_id], 'json')}
 						>Export session JSON</button
+					><button
+						class="research-button"
+						on:click={() => runExport('perturbations', [detail.session_id], 'csv')}
+						>Export perturbations CSV</button
+					><button
+						class="research-button"
+						on:click={() => runExport('perturbations', [detail.session_id], 'json')}
+						>Export perturbations JSON</button
 					>
 				</div>
 				<h3 class="mb-2 mt-6 font-semibold">Timeline</h3>
@@ -888,6 +896,39 @@
 							<div class="mt-1 text-sm">{value ?? 'Not available'}</div>
 						</div>{/each}
 				</div>
+				<h3 class="mb-2 mt-6 font-semibold">Experiment condition and LLM perturbations</h3>
+				<p class="text-sm">
+					Condition: <strong>{detail.condition?.name ?? 'Implicit control'}</strong> · Revision:
+					{detail.configuration_revision ?? 'Legacy'}
+				</p>
+				<p class="mt-1 text-xs text-gray-500">
+					{detail.configuration_summary?.prompt_injection_enabled
+						? 'Prompt injection; '
+						: ''}{detail.configuration_summary?.memory_injection_enabled
+						? 'Memory injection; '
+						: ''}{detail.configuration_summary?.warning_modal_enabled
+						? 'Warning modal; '
+						: ''}Timing: {detail.configuration_summary?.response_timing_mode ?? 'NORMAL'}
+				</p>
+				<div class="mt-3 space-y-2">
+					{#each detail.perturbation_requests ?? [] as request}
+						<details class="rounded-xl bg-gray-50 p-3 text-xs dark:bg-gray-850">
+							<summary class="cursor-pointer font-medium"
+								>Request {request.request_sequence} · prompt {request.prompt_number} · {request.timing_mode}
+								· {request.status}</summary
+							>
+							<pre class="research-json mt-2">{JSON.stringify(request, null, 2)}</pre>
+						</details>
+					{/each}
+				</div>
+				{#if (detail.perturbation_events ?? []).length}<h4 class="mb-2 mt-4 text-sm font-semibold">
+						Modal and participant-visible timing events
+					</h4>
+					<pre class="research-json">{JSON.stringify(
+							detail.perturbation_events,
+							null,
+							2
+						)}</pre>{/if}
 				<h3 class="mb-2 mt-6 font-semibold">Pre-survey</h3>
 				<pre class="research-json">{JSON.stringify(
 						detail.pre_survey ?? 'Not available',

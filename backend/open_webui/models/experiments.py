@@ -5,7 +5,7 @@ from typing import Optional
 
 from fastapi import HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import BigInteger, Column, Index, Text, UniqueConstraint, select, update
+from sqlalchemy import BigInteger, Column, Float, Index, Text, UniqueConstraint, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from open_webui.internal.db import Base, JSONField, get_async_db_context
@@ -59,6 +59,9 @@ class ExperimentSession(Base):
     plan_id = Column(Text, nullable=True)
     task_type = Column(Text, nullable=False, default=ExperimentTaskType.ESSAY.value)
     task_submitted_at = Column(BigInteger, nullable=True)
+    condition_id = Column(Text, nullable=True)
+    condition_assignment_id = Column(Text, nullable=True)
+    condition_assignment_draw = Column(Float, nullable=True)
 
     __table_args__ = (
         UniqueConstraint('user_id', 'group_id', name='uq_experiment_session_user_group'),
@@ -66,6 +69,7 @@ class ExperimentSession(Base):
         Index('ix_experiment_session_group_created', 'group_id', 'created_at'),
         Index('ix_experiment_session_topic_created', 'topic_id', 'created_at'),
         Index('ix_experiment_session_state_created', 'state', 'created_at'),
+        Index('ix_experiment_session_condition', 'condition_id'),
     )
 
 
@@ -91,6 +95,9 @@ class ExperimentSessionModel(BaseModel):
     updated_at: int
     plan_id: Optional[str] = None
     task_type: ExperimentTaskType = ExperimentTaskType.ESSAY
+    condition_id: Optional[str] = None
+    condition_assignment_id: Optional[str] = None
+    condition_assignment_draw: Optional[float] = None
 
 
 class PreSurveyForm(BaseModel):
@@ -207,6 +214,11 @@ class ExperimentTable:
                     return ExperimentState.CONFIGURATION_ERROR, None, 'No essay topic is available for this experiment.'
 
             now = int(time.time_ns())
+            condition_id = assignment_id = assignment_draw = None
+            if plan:
+                from open_webui.utils.experiment_perturbations import assign_condition
+
+                condition_id, assignment_id, assignment_draw = assign_condition(plan, user.id)
             session = ExperimentSession(
                 id=str(uuid.uuid4()),
                 user_id=user.id,
@@ -216,6 +228,9 @@ class ExperimentTable:
                 topic_question=topic.question if topic else None,
                 plan_id=plan.id if plan else None,
                 task_type=(plan.items[0].task_type.value if plan else ExperimentTaskType.ESSAY.value),
+                condition_id=condition_id,
+                condition_assignment_id=assignment_id,
+                condition_assignment_draw=assignment_draw,
                 state=(
                     ExperimentState.CONSENT_REQUIRED.value
                     if not plan or plan.consent_enabled
