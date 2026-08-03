@@ -35,7 +35,8 @@
 		selectedTerminalId,
 		TTSWorker,
 		temporaryChatEnabled,
-		experimentCurrent
+		experimentCurrent,
+		experimentActiveTaskId
 	} from '$lib/stores';
 
 	import {
@@ -1459,6 +1460,7 @@
 													richText={$settings?.richTextInput ?? true}
 													messageInput={true}
 													experimentField="chat"
+													experimentSessionTaskId={$experimentActiveTaskId}
 													showFormattingToolbar={$settings?.showFormattingToolbar ?? false}
 													floatingMenuPlacement={'top-start'}
 													insertPromptAsRichText={$settings?.insertPromptAsRichText ?? false}

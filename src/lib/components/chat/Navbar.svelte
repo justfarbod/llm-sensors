@@ -87,6 +87,7 @@
 
 	$: syncEssayReminder(shouldScheduleEssayReminder($experimentCurrent, $showEssaySidebar));
 	$: restrictedParticipant = isExperimentParticipant($user, $experimentCurrent);
+	$: taskPaneLabel = $experimentCurrent?.plan_id ? $i18n.t('Experiment Tasks') : $i18n.t('Essay');
 
 	onDestroy(() => {
 		if (essayReminderTimer) clearTimeout(essayReminderTimer);
@@ -266,7 +267,7 @@
 
 					{#if $user?.role === 'admin' || ($user?.permissions?.features?.essay_sidebar ?? false)}
 						<div class="relative">
-							<Tooltip content={$i18n.t('Essay')}>
+						<Tooltip content={taskPaneLabel}>
 								<button
 									class="flex cursor-pointer rounded-xl px-2 py-2 transition hover:bg-gray-50 dark:hover:bg-gray-850 {$showEssaySidebar
 										? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white'
@@ -275,7 +276,7 @@
 										showContinueWritingHint = false;
 										showEssaySidebar.set(!$showEssaySidebar);
 									}}
-									aria-label={$i18n.t('Essay')}
+									aria-label={taskPaneLabel}
 								>
 									<Document className="size-5" strokeWidth="1.5" />
 								</button>
@@ -291,7 +292,7 @@
 									}}
 								>
 									<Document className="size-4" strokeWidth="1.5" />
-									{$i18n.t('Continue writing')}
+									{$experimentCurrent?.plan_id ? $i18n.t('Continue experiment task') : $i18n.t('Continue writing')}
 								</button>
 							{/if}
 						</div>

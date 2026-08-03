@@ -2,6 +2,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from open_webui.constants import ERROR_MESSAGES
@@ -18,6 +19,7 @@ from open_webui.models.essays import (
 )
 from open_webui.models.experiments import Experiments, require_experiment_chat_access
 from open_webui.models.experiments import ExperimentState
+from open_webui.models.experiment_plans import ExperimentPlan, ExperimentPlanItem, ExperimentPlanItemTopic
 from open_webui.utils.access_control import has_permission
 from open_webui.utils.auth import get_admin_user, get_verified_user
 
@@ -123,6 +125,29 @@ async def delete_topic(
     user=Depends(get_admin_user),
     db: AsyncSession = Depends(get_async_session),
 ):
+    active_reference = (
+        await db.execute(
+            select(ExperimentPlanItem.id)
+            .join(ExperimentPlan, ExperimentPlan.id == ExperimentPlanItem.plan_id)
+            .outerjoin(
+                ExperimentPlanItemTopic,
+                ExperimentPlanItemTopic.plan_item_id == ExperimentPlanItem.id,
+            )
+            .where(
+                ExperimentPlan.status == 'PUBLISHED',
+                or_(
+                    ExperimentPlanItem.essay_topic_id == topic_id,
+                    ExperimentPlanItemTopic.topic_id == topic_id,
+                ),
+            )
+            .limit(1)
+        )
+    ).first()
+    if active_reference:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail='Essay topic is used by a published experiment plan and cannot be deleted.',
+        )
     deleted = await EssayTopics.delete_topic_by_id(topic_id, db=db)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_MESSAGES.NOT_FOUND)

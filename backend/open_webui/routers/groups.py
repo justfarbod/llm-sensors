@@ -22,18 +22,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from open_webui.utils.auth import get_admin_user, get_verified_user
 from open_webui.models.essays import EssayTopics
+from open_webui.models.experiment_plans import ExperimentPlans
 
 log = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-async def validate_experiment_group(form_data: GroupForm, db: AsyncSession):
+async def validate_experiment_group(form_data: GroupForm, db: AsyncSession, group_id: Optional[str] = None):
     config = (form_data.data or {}).get('config', {})
     if not config.get('experiment_mode_enabled', False):
         return
     if not (form_data.permissions or {}).get('features', {}).get('essay_sidebar', False):
         raise HTTPException(status_code=422, detail='Experiment Mode requires Essay Sidebar permission.')
+    if group_id and await ExperimentPlans.get_active_for_group(group_id, db=db):
+        return
     topics = await EssayTopics.get_topics(db=db)
     if not topics:
         raise HTTPException(status_code=422, detail='Experiment Mode requires at least one essay topic.')
@@ -191,7 +194,7 @@ async def update_group_by_id(
     db: AsyncSession = Depends(get_async_session),
 ):
     try:
-        await validate_experiment_group(form_data, db)
+        await validate_experiment_group(form_data, db, group_id=id)
         group = await Groups.update_group_by_id(id, form_data, db=db)
         if group:
             return GroupResponse(

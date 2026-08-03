@@ -1,28 +1,36 @@
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
+	import { getContext, onDestroy, onMount } from 'svelte';
+	import type { Writable } from 'svelte/store';
+	import type { i18n as i18nType } from 'i18next';
 	import { goto } from '$app/navigation';
 	import { page as pageStore } from '$app/stores';
 	import { toast } from 'svelte-sonner';
 
 	import {
 		exportResearchData,
+		getQuestionSubmission,
 		getResearchFilters,
 		getResearchSection,
-		getResearchSession
+		getResearchSession,
+		overrideQuestionScore,
+		retryQuestionGrading
 	} from '$lib/apis/experiment-analytics';
 	import MetricCards from './ResearchDashboard/MetricCards.svelte';
 	import ResearchBars from './ResearchDashboard/ResearchBars.svelte';
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import Pagination from './ResearchDashboard/Pagination.svelte';
+	import { completedRetryScore } from '$lib/utils/questionGrading';
 
 	const tabs = [
 		{ id: 'overview', label: 'Overview' },
 		{ id: 'participants', label: 'Participants' },
 		{ id: 'essays', label: 'Essays' },
+		{ id: 'question-results', label: 'Question Results' },
 		{ id: 'usage', label: 'LLM Usage' },
 		{ id: 'essay-stats', label: 'Essay Statistics' },
 		{ id: 'surveys', label: 'Survey Results' }
 	];
+	const i18n: Writable<i18nType> = getContext('i18n');
 	const metricLabels = {
 		total_sessions: 'Total sessions',
 		active_sessions: 'Active sessions',
@@ -71,7 +79,14 @@
 	let anonymized = true;
 	let detail: any = null;
 	let detailLoading = false;
+	let questionDetail: any = null;
+	let questionDetailLoading = false;
+	let scoreDrafts: Record<string, number> = {};
+	let scoreNotes: Record<string, string> = {};
+	let gradingRetryAttempts: Record<string, string> = {};
 	let loadTimer: ReturnType<typeof setTimeout>;
+	let gradingPollTimer: ReturnType<typeof setTimeout>;
+	let gradingPollController: AbortController | null = null;
 	let controller: AbortController | null = null;
 
 	$: activeTab = tabs.some((tab) => tab.id === $pageStore.params.tab)
@@ -93,7 +108,9 @@
 		date_to: epoch(filters.date_to, true),
 		state: filters.state,
 		completed: filters.completed,
-		search: ['participants', 'essays'].includes(activeTab) ? filters.search : '',
+		search: ['participants', 'essays', 'question-results'].includes(activeTab)
+			? filters.search
+			: '',
 		page,
 		limit,
 		order_by: orderBy,
@@ -171,6 +188,124 @@
 		}
 	};
 
+	const openQuestionDetail = async (submissionId: string) => {
+		clearTimeout(gradingPollTimer);
+		gradingPollController?.abort();
+		questionDetail = null;
+		questionDetailLoading = true;
+		try {
+			questionDetail = await getQuestionSubmission(localStorage.token, submissionId);
+			scoreDrafts = Object.fromEntries(
+				(questionDetail.responses ?? []).map((response: any) => [
+					response.id,
+					response.effective_score ?? response.generated_score ?? 0
+				])
+			);
+			scoreNotes = {};
+			gradingRetryAttempts = {};
+			if (gradingInFlight(questionDetail)) pollQuestionDetail(submissionId);
+		} catch (message) {
+			toast.error(String(message));
+		} finally {
+			questionDetailLoading = false;
+		}
+	};
+
+	const gradingInFlight = (submission: any) =>
+		(submission?.responses ?? []).some(
+			(response: any) =>
+				['PENDING', 'RUNNING'].includes(response.grading_status) ||
+				(response.attempts ?? []).some((attempt: any) =>
+					['PENDING', 'RUNNING'].includes(attempt.status)
+				)
+		);
+
+	const applyCompletedRetryScores = (submission: any) => {
+		const nextDrafts = { ...scoreDrafts };
+		const nextAttempts = { ...gradingRetryAttempts };
+		for (const response of submission?.responses ?? []) {
+			const attemptId = nextAttempts[response.id];
+			if (!attemptId) {
+				if (nextDrafts[response.id] === undefined)
+					nextDrafts[response.id] = response.effective_score ?? response.generated_score ?? 0;
+				continue;
+			}
+			const update = completedRetryScore(response, attemptId);
+			if (!update.terminal) continue;
+			if (update.score !== undefined) nextDrafts[response.id] = update.score;
+			delete nextAttempts[response.id];
+		}
+		scoreDrafts = nextDrafts;
+		gradingRetryAttempts = nextAttempts;
+	};
+
+	const pollQuestionDetail = (submissionId: string, delay = 1000) => {
+		clearTimeout(gradingPollTimer);
+		gradingPollTimer = setTimeout(async () => {
+			gradingPollController?.abort();
+			gradingPollController = new AbortController();
+			try {
+				const next = await getQuestionSubmission(
+					localStorage.token,
+					submissionId,
+					gradingPollController.signal
+				);
+				if (questionDetail?.submission_id !== submissionId) return;
+				questionDetail = next;
+				applyCompletedRetryScores(next);
+				if (gradingInFlight(next)) pollQuestionDetail(submissionId, Math.min(5000, delay + 1000));
+				else await load();
+			} catch (message) {
+				if (!gradingPollController?.signal.aborted) toast.error(String(message));
+			}
+		}, delay);
+	};
+
+	const closeQuestionDetail = () => {
+		clearTimeout(gradingPollTimer);
+		gradingPollController?.abort();
+		questionDetail = null;
+		gradingRetryAttempts = {};
+	};
+
+	const saveQuestionScore = async (responseId: string) => {
+		try {
+			questionDetail = await overrideQuestionScore(
+				localStorage.token,
+				responseId,
+				scoreDrafts[responseId],
+				scoreNotes[responseId]
+			);
+			scoreDrafts = {
+				...scoreDrafts,
+				[responseId]:
+					questionDetail.responses?.find((response: any) => response.id === responseId)
+						?.effective_score ?? scoreDrafts[responseId]
+			};
+			toast.success($i18n.t('Score saved'));
+			await load();
+		} catch (message) {
+			toast.error(String(message));
+		}
+	};
+
+	const retryGrading = async (responseId: string) => {
+		try {
+			const result = await retryQuestionGrading(localStorage.token, responseId);
+			if (result.attempt_id)
+				gradingRetryAttempts = {
+					...gradingRetryAttempts,
+					[responseId]: result.attempt_id
+				};
+			if (result.submission) questionDetail = result.submission;
+			if (result.submission) applyCompletedRetryScores(result.submission);
+			toast.success($i18n.t('Grading retry queued'));
+			if (questionDetail?.submission_id) pollQuestionDetail(questionDetail.submission_id);
+		} catch (message) {
+			toast.error(String(message));
+		}
+	};
+
 	const runExport = async (
 		section: 'participants' | 'essays' | 'surveys',
 		ids: string[],
@@ -221,7 +356,9 @@
 
 	onDestroy(() => {
 		clearTimeout(loadTimer);
+		clearTimeout(gradingPollTimer);
 		controller?.abort();
+		gradingPollController?.abort();
 	});
 </script>
 
@@ -241,7 +378,7 @@
 					? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'
 					: 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-850'}"
 			>
-				{tab.label}
+				{$i18n.t(tab.label)}
 			</a>
 		{/each}
 	</nav>
@@ -304,7 +441,7 @@
 				class="research-input"
 			/>
 		</div>
-		{#if ['participants', 'essays'].includes(activeTab)}
+		{#if ['participants', 'essays', 'question-results'].includes(activeTab)}
 			<input
 				bind:value={filters.search}
 				on:input={filtersChanged}
@@ -474,6 +611,53 @@
 			{limit}
 			onPage={changePage}
 		/>
+	{:else if activeTab === 'question-results'}
+		<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+			<p class="text-sm text-gray-500">{data?.total ?? 0} {$i18n.t('question task submissions')}</p>
+			<p class="text-xs text-gray-400">
+				{$i18n.t('Open a submission to review answers, grading attempts, and score history.')}
+			</p>
+		</div>
+		<div class="research-table-wrap">
+			<table class="research-table">
+				<thead
+					><tr
+						><th>{$i18n.t('Participant')}</th><th>{$i18n.t('Group')}</th><th>{$i18n.t('Task')}</th
+						><th>{$i18n.t('Status')}</th><th>{$i18n.t('Grading')}</th><th>{$i18n.t('Score')}</th><th
+							>{$i18n.t('Submitted')}</th
+						></tr
+					></thead
+				>
+				<tbody>
+					{#each data?.items ?? [] as row}
+						<tr class="cursor-pointer" on:click={() => openQuestionDetail(row.submission_id)}>
+							<td
+								>{row.participant_id}<br /><span class="text-xs text-gray-400"
+									>{row.name ?? ''}</span
+								></td
+							>
+							<td>{row.group_name}</td><td>{row.task_title}</td><td>{row.status}</td><td
+								>{row.grading_status}</td
+							>
+							<td>{row.score} / {row.maximum_score}</td><td>{fmtDate(row.submitted_at)}</td>
+						</tr>
+					{:else}
+						<tr
+							><td colspan="7" class="py-12 text-center text-gray-400"
+								>{$i18n.t('No question submissions match these filters.')}</td
+							></tr
+						>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+		<svelte:component
+			this={Pagination}
+			total={data?.total ?? 0}
+			{page}
+			{limit}
+			onPage={changePage}
+		/>
 	{:else if activeTab === 'usage'}
 		<MetricCards metrics={data?.metrics ?? {}} labels={metricLabels} />
 		<div class="mt-4 grid gap-4 lg:grid-cols-2">
@@ -553,6 +737,27 @@
 			</table>
 		</div>
 	{:else if activeTab === 'surveys'}
+		{#if data?.dynamic?.length}<div class="mb-6 space-y-5">
+				{#each data.dynamic as survey}<section
+						class="rounded-2xl border border-gray-100 p-4 dark:border-gray-800"
+					>
+						<div class="flex flex-wrap items-center justify-between gap-2">
+							<h2 class="text-lg font-semibold">{survey.title} · v{survey.version}</h2>
+							<span class="text-xs text-gray-500"
+								>{survey.submission_count}
+								{$i18n.t('submitted')} · {survey.skipped_count}
+								{$i18n.t('skipped')}</span
+							>
+						</div>
+						<div class="mt-4 grid gap-4 lg:grid-cols-2">
+							{#each survey.questions as question}<ResearchBars
+									title={question.prompt}
+									items={question.distribution}
+									valueKey="count"
+								/>{/each}
+						</div>
+					</section>{/each}
+			</div>{/if}
 		<div class="grid gap-4 lg:grid-cols-2">
 			{#each distributions(data?.pre) as [name, items]}<ResearchBars
 					title={`Pre-survey: ${name.replaceAll('_', ' ')}`}
@@ -571,7 +776,7 @@
 				<thead
 					><tr
 						><th>Select</th><th>Participant</th><th>State</th><th>Pre-survey</th><th>Post-survey</th
-						><th>Optional comment</th></tr
+						><th>{$i18n.t('Pipeline surveys')}</th><th>Optional comment</th></tr
 					></thead
 				><tbody
 					>{#each data?.responses?.items ?? [] as row}<tr
@@ -584,10 +789,12 @@
 							><td>{row.participant_id}</td><td>{row.state}</td><td
 								>{yesNo(row.pre_survey_completed)}</td
 							><td>{yesNo(row.post_survey_completed)}</td><td class="max-w-3xl whitespace-normal"
-								>{row.comments ?? 'Not available'}</td
-							></tr
+								>{#each row.survey_submissions ?? [] as survey}<div>
+										{survey.title} · {$i18n.t(survey.status)}
+									</div>{:else}—{/each}</td
+							><td class="max-w-3xl whitespace-normal">{row.comments ?? 'Not available'}</td></tr
 						>{:else}<tr
-							><td colspan="6" class="py-12 text-center text-gray-400"
+							><td colspan="7" class="py-12 text-center text-gray-400"
 								>No survey responses match these filters.</td
 							></tr
 						>{/each}</tbody
@@ -693,6 +900,198 @@
 						null,
 						2
 					)}</pre>
+			{/if}
+		</aside>
+	</div>
+{/if}
+
+{#if questionDetailLoading || questionDetail}
+	<div class="fixed inset-0 z-50 flex justify-end">
+		<button
+			class="absolute inset-0 bg-black/30"
+			aria-label={$i18n.t('Close question submission detail')}
+			on:click={closeQuestionDetail}
+		></button>
+		<aside
+			class="relative h-full w-full max-w-3xl overflow-y-auto bg-white p-6 shadow-2xl dark:bg-gray-900"
+		>
+			<div class="flex items-center justify-between gap-3">
+				<div>
+					<h2 class="text-xl font-semibold">{$i18n.t('Question submission')}</h2>
+					{#if questionDetail}<p class="mt-1 text-sm text-gray-500">
+							{questionDetail.task.title} · {questionDetail.participant_id} · {questionDetail.group
+								.name}
+						</p>{/if}
+				</div>
+				<button class="research-button" on:click={closeQuestionDetail}>{$i18n.t('Close')}</button>
+			</div>
+			{#if questionDetailLoading}
+				<div class="flex h-64 items-center justify-center"><Spinner /></div>
+			{:else}
+				<div class="mt-4 rounded-xl bg-gray-50 p-3 text-sm dark:bg-gray-850">
+					{$i18n.t('Total score')}:
+					<strong
+						>{questionDetail.score ?? $i18n.t('Pending')} / {questionDetail.maximum_score}</strong
+					>
+					{#if questionDetail.score === null}<span class="ml-3 text-xs text-gray-500"
+							>{$i18n.t('Provisional')}: {questionDetail.provisional_score} / {questionDetail.maximum_score}</span
+						>{/if}
+					<span class="ml-3 text-xs text-gray-500">{questionDetail.grading_status}</span>
+				</div>
+				<div class="mt-4 space-y-4">
+					{#each questionDetail.responses ?? [] as response, responseIndex}
+						<section class="rounded-2xl border border-gray-100 p-4 dark:border-gray-800">
+							{#if response.grading_status === 'FAILED'}
+								{@const failedAttempt = [...(response.attempts ?? [])]
+									.reverse()
+									.find((attempt: any) => attempt.status === 'FAILED')}
+								<div
+									class="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950/20 dark:text-red-200"
+								>
+									<strong>{$i18n.t('Model scoring problem')}</strong>
+									<div class="mt-1 text-xs">
+										{$i18n.t(
+											'This response has no final score. Retry grading or enter an administrative score.'
+										)}
+									</div>
+									{#if failedAttempt}<div class="mt-1 text-xs">
+											{failedAttempt.model_id ?? $i18n.t('Model unavailable')} · {failedAttempt.error_code ??
+												$i18n.t('Provider error')}
+										</div>{/if}
+								</div>{/if}
+							<div class="flex flex-wrap items-start justify-between gap-2">
+								<div>
+									<h3 class="font-medium">{responseIndex + 1}. {response.question.title}</h3>
+									<p class="mt-1 whitespace-pre-wrap text-sm text-gray-500">
+										{response.question.description}
+									</p>
+								</div>
+								<span class="rounded-full bg-gray-100 px-2 py-1 text-xs dark:bg-gray-800"
+									>{response.grading_status}</span
+								>
+							</div>
+
+							<div class="mt-3 grid gap-3 sm:grid-cols-2">
+								<div class="rounded-xl bg-gray-50 p-3 text-sm dark:bg-gray-850">
+									<div class="mb-2 text-xs font-semibold uppercase text-gray-400">
+										{$i18n.t('Participant answer')}
+									</div>
+									{#if ['SINGLE_CHOICE', 'MULTIPLE_SELECT'].includes(response.question.question_type)}
+										<ul class="space-y-1">
+											{#each response.question.choices.filter( (choice: any) => response.selected_choice_ids.includes(choice.id) ) as choice}<li
+												>
+													{choice.text}
+												</li>{:else}<li class="text-gray-400">{$i18n.t('No answer')}</li>{/each}
+										</ul>
+									{:else if response.question.question_type === 'FILL_BLANK'}
+										<ul class="space-y-1">
+											{#each response.blank_answers as answer}<li>
+													<strong
+														>{response.question.blanks.find(
+															(blank: any) => blank.id === answer.blank_id
+														)?.key}:</strong
+													>
+													{answer.answer || $i18n.t('No answer')}
+												</li>{/each}
+										</ul>
+									{:else}
+										<p class="whitespace-pre-wrap">
+											{response.text_answer || $i18n.t('No answer')}
+										</p>
+									{/if}
+								</div>
+								<div class="rounded-xl bg-emerald-50 p-3 text-sm dark:bg-emerald-950/20">
+									<div
+										class="mb-2 text-xs font-semibold uppercase text-emerald-700 dark:text-emerald-300"
+									>
+										{$i18n.t('Answer key')}
+									</div>
+									{#if ['SINGLE_CHOICE', 'MULTIPLE_SELECT'].includes(response.question.question_type)}
+										<ul class="space-y-1">
+											{#each response.question.choices.filter((choice: any) => choice.is_correct) as choice}<li
+												>
+													{choice.text}
+												</li>{/each}
+										</ul>
+									{:else if response.question.question_type === 'FILL_BLANK'}
+										<ul class="space-y-1">
+											{#each response.question.blanks as blank}<li>
+													<strong>{blank.key}:</strong>
+													{blank.accepted_answers.join(', ')}
+												</li>{/each}
+										</ul>
+									{:else}
+										<p class="whitespace-pre-wrap">
+											{response.question.expected_answer || $i18n.t('Manual review')}
+										</p>
+									{/if}
+								</div>
+							</div>
+
+							{#if response.rationale}<p
+									class="mt-3 rounded-xl bg-blue-50 p-3 text-sm dark:bg-blue-950/20"
+								>
+									<strong>{$i18n.t('Grading rationale')}:</strong>
+									{response.rationale}
+								</p>{/if}
+							<div class="mt-3 flex flex-wrap items-end gap-2">
+								<label class="text-xs text-gray-500"
+									>{$i18n.t('Score')}<input
+										class="research-input ml-2 !w-24"
+										type="number"
+										min="0"
+										max={response.question.max_score}
+										step="0.01"
+										value={scoreDrafts[response.id] ?? 0}
+										on:input={(event) =>
+											(scoreDrafts = {
+												...scoreDrafts,
+												[response.id]: Number(event.currentTarget.value)
+											})}
+									/></label
+								>
+								<input
+									class="research-input min-w-52 flex-1"
+									value={scoreNotes[response.id] ?? ''}
+									on:input={(event) => (scoreNotes[response.id] = event.currentTarget.value)}
+									placeholder={$i18n.t('Optional override note')}
+								/>
+								<button class="research-button" on:click={() => saveQuestionScore(response.id)}
+									>{$i18n.t('Save score')}</button
+								>
+								{#if response.grading_method === 'LLM_ASSISTED' || response.attempts?.some((attempt: any) => attempt.method === 'LLM_ASSISTED')}<button
+										class="research-button"
+										disabled={['PENDING', 'RUNNING'].includes(response.grading_status)}
+										on:click={() => retryGrading(response.id)}
+										>{$i18n.t('Retry LLM grading')}</button
+									>{/if}
+							</div>
+
+							{#if response.attempts?.length || response.overrides?.length}
+								<details class="mt-3 text-xs">
+									<summary class="cursor-pointer font-medium">{$i18n.t('Grading history')}</summary>
+									<div class="mt-2 space-y-2">
+										{#each response.attempts ?? [] as attempt}<div
+												class="rounded-lg bg-gray-50 p-2 dark:bg-gray-850"
+											>
+												{$i18n.t('Attempt')} · {attempt.status} · {attempt.model_id ??
+													attempt.method} · {attempt.awarded_score ?? '—'}{attempt.error_code
+													? ` · ${attempt.error_code}`
+													: ''}
+											</div>{/each}
+										{#each response.overrides ?? [] as override}<div
+												class="rounded-lg bg-gray-50 p-2 dark:bg-gray-850"
+											>
+												{$i18n.t('Override')} · {override.previous_score ?? '—'} → {override.new_score}{override.note
+													? ` · ${override.note}`
+													: ''}
+											</div>{/each}
+									</div>
+								</details>
+							{/if}
+						</section>
+					{/each}
+				</div>
 			{/if}
 		</aside>
 	</div>

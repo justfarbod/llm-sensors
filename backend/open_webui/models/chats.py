@@ -59,6 +59,8 @@ class Chat(Base):
     summary = Column(Text, nullable=True)
 
     last_read_at = Column(BigInteger, nullable=True)
+    experiment_session_id = Column(Text, nullable=True)
+    experiment_session_task_id = Column(Text, nullable=True)
 
     __table_args__ = (
         # Performance indexes for common queries
@@ -92,6 +94,8 @@ class ChatModel(BaseModel):
     summary: Optional[str] = None
 
     last_read_at: Optional[int] = None
+    experiment_session_id: Optional[str] = None
+    experiment_session_task_id: Optional[str] = None
 
 
 class ChatFile(Base):
@@ -132,6 +136,9 @@ class ChatFileModel(BaseModel):
 class ChatForm(BaseModel):
     chat: dict
     folder_id: Optional[str] = None
+    experiment_session_id: Optional[str] = None
+    experiment_session_task_id: Optional[str] = None
+    initial_message_experiment_session_task_id: Optional[str] = None
 
 
 class ChatImportForm(ChatForm):
@@ -305,6 +312,8 @@ class ChatTable:
                     ),
                     'chat': self._clean_null_bytes(form_data.chat),
                     'folder_id': form_data.folder_id,
+                    'experiment_session_id': form_data.experiment_session_id,
+                    'experiment_session_task_id': form_data.experiment_session_task_id,
                     'created_at': int(time.time()),
                     'updated_at': int(time.time()),
                 }
@@ -325,7 +334,12 @@ class ChatTable:
                             message_id=message_id,
                             chat_id=id,
                             user_id=user_id,
-                            data=message,
+                            data={
+                                **message,
+                                'experiment_session_task_id': message.get('experiment_session_task_id')
+                                or form_data.initial_message_experiment_session_task_id
+                                or form_data.experiment_session_task_id,
+                            },
                         )
             except Exception as e:
                 log.warning(f'Failed to write initial messages to chat_message table: {e}')
@@ -861,6 +875,7 @@ class ChatTable:
         include_pinned: bool = False,
         skip: Optional[int] = None,
         limit: Optional[int] = None,
+        experiment_session_task_id: Optional[str] = None,
         db: Optional[AsyncSession] = None,
     ) -> list[ChatTitleIdResponse]:
         async with get_async_db_context(db) as db:
@@ -876,6 +891,9 @@ class ChatTable:
 
             if not include_archived:
                 stmt = stmt.filter_by(archived=False)
+
+            if experiment_session_task_id:
+                stmt = stmt.filter(Chat.experiment_session_task_id == experiment_session_task_id)
 
             stmt = stmt.order_by(Chat.updated_at.desc(), Chat.id)
 

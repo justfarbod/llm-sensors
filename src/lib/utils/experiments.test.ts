@@ -6,11 +6,34 @@ import {
 	createExperimentStateLoader,
 	experimentAllowsApp,
 	experimentNeedsGate,
+	firstUnlockedExperimentTask,
 	isExperimentParticipant,
 	sameExperimentState,
 	shouldScheduleEssayReminder,
 	shouldRefreshExperiment
 } from './experiments';
+
+describe('experiment task selection', () => {
+	it('selects the first task as soon as a prefix survey unlocks it', () => {
+		const tasks = [
+			{ id: 'survey', task_type: 'SURVEY', position: 0, title: 'Pre', status: 'FINALIZED' },
+			{ id: 'first', task_type: 'QUESTION', position: 1, title: 'First', status: 'ACTIVE' },
+			{ id: 'second', task_type: 'ESSAY', position: 2, title: 'Second', status: 'LOCKED' }
+		] as const;
+
+		expect(
+			firstUnlockedExperimentTask([...tasks].filter((task) => task.task_type !== 'SURVEY'))?.id
+		).toBe('first');
+	});
+
+	it('does not select a task while every non-survey stage is locked', () => {
+		expect(
+			firstUnlockedExperimentTask([
+				{ id: 'first', task_type: 'QUESTION', position: 1, title: 'First', status: 'LOCKED' }
+			])
+		).toBeUndefined();
+	});
+});
 
 describe('experiment and admin access policies', () => {
 	const activeExperiment = { state: 'IN_PROGRESS' } as const;

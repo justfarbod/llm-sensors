@@ -287,6 +287,7 @@
 	export let autocomplete = false;
 	export let messageInput = false;
 	export let experimentField: 'chat' | '' = '';
+	export let experimentSessionTaskId: string | null = null;
 	export let shiftEnter = false;
 	export let largeTextAsFile = false;
 	export let insertPromptAsRichText = false;
@@ -1335,6 +1336,7 @@
 <div
 	bind:this={element}
 	data-experiment-field={experimentField || undefined}
+	data-session-task-id={experimentSessionTaskId || undefined}
 	dir="auto"
 	class="relative w-full min-w-full {className} {!editable ? 'cursor-not-allowed' : ''}"
 />

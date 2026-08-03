@@ -23,6 +23,7 @@ class Essay(Base):
     topic_question = Column(Text, nullable=True)
     word_count = Column(Integer, nullable=True)
     character_count = Column(Integer, nullable=True)
+    experiment_session_task_id = Column(Text, nullable=True)
     created_at = Column(BigInteger, nullable=False)
     updated_at = Column(BigInteger, nullable=False)
 
@@ -40,6 +41,7 @@ class EssayModel(BaseModel):
     topic_question: Optional[str] = None
     word_count: Optional[int] = None
     character_count: Optional[int] = None
+    experiment_session_task_id: Optional[str] = None
     created_at: int
     updated_at: int
 

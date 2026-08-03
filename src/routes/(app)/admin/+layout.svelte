@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { getContext, onMount } from 'svelte';
+	import type { Writable } from 'svelte/store';
+	import type { i18n as i18nType } from 'i18next';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { DropdownMenu } from 'bits-ui';
@@ -8,6 +10,7 @@
 	import { WEBUI_NAME, user } from '$lib/stores';
 	import UserMenu from '$lib/components/layout/Sidebar/UserMenu.svelte';
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte';
+	const i18n: Writable<i18nType> = getContext('i18n');
 
 	let loaded = false;
 	let showAdvanced = false;
@@ -16,7 +19,7 @@
 	const primaryLinks = [
 		{ label: 'Research Dashboard', href: '/admin/analytics/overview', match: '/admin/analytics' },
 		{ label: 'Users', href: '/admin/users', match: '/admin/users' },
-		{ label: 'Essays', href: '/admin/essays', match: '/admin/essays' }
+		{ label: 'Experiment Tasks', href: '/admin/essays', match: '/admin/essays' }
 	];
 
 	const advancedLinks = [
@@ -75,7 +78,7 @@
 							? 'bg-gray-100 text-gray-900 dark:bg-gray-850 dark:text-white'
 							: 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-900 dark:hover:text-white'}"
 					>
-						{link.label}
+						{$i18n.t(link.label)}
 					</a>
 				{/each}
 
@@ -109,7 +112,7 @@
 													? 'bg-gray-100 font-medium text-gray-900 dark:bg-gray-800 dark:text-white'
 													: 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus:bg-gray-100 focus:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white dark:focus:bg-gray-800 dark:focus:text-white'}"
 											>
-												{link.label}
+												{$i18n.t(link.label)}
 											</a>
 										{/snippet}
 									</DropdownMenu.Item>

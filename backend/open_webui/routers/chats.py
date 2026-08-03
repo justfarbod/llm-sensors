@@ -58,6 +58,7 @@ async def get_session_user_chat_list(
     page: Optional[int] = None,
     include_pinned: Optional[bool] = False,
     include_folders: Optional[bool] = False,
+    experiment_session_task_id: Optional[str] = None,
     db: AsyncSession = Depends(get_async_session),
 ):
     try:
@@ -71,6 +72,7 @@ async def get_session_user_chat_list(
                 include_pinned=include_pinned,
                 skip=skip,
                 limit=limit,
+                experiment_session_task_id=experiment_session_task_id,
                 db=db,
             )
         else:
@@ -78,6 +80,7 @@ async def get_session_user_chat_list(
                 user.id,
                 include_folders=include_folders,
                 include_pinned=include_pinned,
+                experiment_session_task_id=experiment_session_task_id,
                 db=db,
             )
     except Exception as e:
@@ -561,8 +564,39 @@ async def create_new_chat(
     db: AsyncSession = Depends(get_async_session),
 ):
     try:
+        from open_webui.models.experiment_plans import (
+            ExperimentChatMode,
+            ExperimentPlans,
+            ExperimentSessionTask,
+            ExperimentTaskType,
+            SessionTaskStatus,
+        )
+        from open_webui.models.experiments import ExperimentState, Experiments
+
+        experiment_state, experiment_session, _ = await Experiments.get_current(user, db=db)
+        if experiment_state == ExperimentState.IN_PROGRESS and experiment_session and experiment_session.plan_id:
+            if not form_data.experiment_session_task_id:
+                raise HTTPException(status_code=422, detail='Experiment chats require the current task context.')
+            session_task = await db.get(ExperimentSessionTask, form_data.experiment_session_task_id)
+            if not session_task or session_task.experiment_session_id != experiment_session.id or session_task.status == SessionTaskStatus.LOCKED.value:
+                raise HTTPException(status_code=403, detail='Chat task context is not available to this participant.')
+            if session_task.task_type == ExperimentTaskType.SURVEY.value:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        'code': 'EXPERIMENT_SURVEY_ACTIVE',
+                        'message': 'Complete or skip the active survey before using chat.',
+                    },
+                )
+            plan = await ExperimentPlans.get_plan(experiment_session.plan_id, db=db)
+            form_data.experiment_session_id = experiment_session.id
+            form_data.initial_message_experiment_session_task_id = session_task.id
+            if plan.chat_mode == ExperimentChatMode.SHARED_EXPERIMENT:
+                form_data.experiment_session_task_id = None
         chat = await Chats.insert_new_chat(str(uuid4()), user.id, form_data, db=db)
         return ChatResponse(**chat.model_dump())
+    except HTTPException:
+        raise
     except Exception as e:
         log.exception(e)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.DEFAULT())

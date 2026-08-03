@@ -107,6 +107,7 @@ class ChatMessage(Base):
     # Timestamps
     created_at = Column(BigInteger, index=True)
     updated_at = Column(BigInteger)
+    experiment_session_task_id = Column(Text, nullable=True, index=True)
 
     __table_args__ = (
         Index('chat_message_chat_parent_idx', 'chat_id', 'parent_id'),
@@ -140,6 +141,7 @@ class ChatMessageModel(BaseModel):
     usage: Optional[dict] = None
     created_at: int
     updated_at: int
+    experiment_session_task_id: Optional[str] = None
 
 
 ####################
@@ -189,6 +191,8 @@ class ChatMessageTable:
                     existing.status_history = data.get('status_history') or data.get('statusHistory')
                 if 'error' in data:
                     existing.error = data.get('error')
+                if 'experiment_session_task_id' in data:
+                    existing.experiment_session_task_id = data.get('experiment_session_task_id')
                 # Extract and normalize usage
                 usage = get_usage(data)
                 if usage:
@@ -222,6 +226,7 @@ class ChatMessageTable:
                     usage=usage,
                     created_at=timestamp,
                     updated_at=now,
+                    experiment_session_task_id=data.get('experiment_session_task_id'),
                 )
                 db.add(message)
                 await db.commit()

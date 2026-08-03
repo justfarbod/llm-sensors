@@ -16,6 +16,9 @@ from open_webui.models.experiment_telemetry import (
     empty_summary,
 )
 from open_webui.models.experiments import ExperimentSession, ExperimentState, Experiments
+from open_webui.models.experiment_plans import ExperimentSessionTask
+from open_webui.models.question_tasks import QuestionTaskQuestion
+from open_webui.models.question_submissions import QuestionSubmission
 from open_webui.utils.auth import get_verified_user
 
 router = APIRouter()
@@ -33,6 +36,7 @@ EVENT_TYPES = {
     'window_focus',
     'focus_away',
     'focus_return',
+    'answer_change',
 }
 KEY_CLASSES = {
     'printable',
@@ -73,7 +77,10 @@ class TelemetryEventForm(BaseModel):
     event_id: UUID
     type: str
     timestamp: datetime
-    field: Literal['essay', 'chat', 'unknown']
+    field: Literal['essay', 'question', 'chat', 'unknown']
+    session_task_id: Optional[str] = None
+    question_id: Optional[str] = None
+    submission_id: Optional[str] = None
     key_class: Optional[str] = None
     inter_key_interval_ms: Optional[int] = Field(default=None, ge=0, le=3_600_000)
     hold_duration_ms: Optional[int] = Field(default=None, ge=0, le=600_000)
@@ -82,6 +89,8 @@ class TelemetryEventForm(BaseModel):
     line_count: Optional[int] = Field(default=None, ge=0, le=1_000_000)
     visibility: Optional[Literal['hidden', 'visible']] = None
     away_duration_ms: Optional[int] = Field(default=None, ge=0, le=86_400_000)
+    control_type: Optional[Literal['single_choice', 'multiple_select', 'fill_blank', 'free_text']] = None
+    answered: Optional[bool] = None
 
     @model_validator(mode='after')
     def validate_event_shape(self):
@@ -89,7 +98,7 @@ class TelemetryEventForm(BaseModel):
             raise ValueError('Telemetry timestamps must include a timezone.')
         if self.type not in EVENT_TYPES:
             raise ValueError('Unsupported telemetry event type.')
-        present = set(self.model_fields_set) - {'event_id', 'type', 'timestamp', 'field'}
+        present = set(self.model_fields_set) - {'event_id', 'type', 'timestamp', 'field', 'session_task_id', 'question_id', 'submission_id'}
         allowed = {
             'keystroke': {'key_class', 'inter_key_interval_ms', 'hold_duration_ms', 'modifiers'},
             'copy': {'text_length', 'line_count'},
@@ -100,6 +109,7 @@ class TelemetryEventForm(BaseModel):
             'window_focus': set(),
             'focus_away': set(),
             'focus_return': {'away_duration_ms'},
+            'answer_change': {'control_type', 'answered'},
         }[self.type]
         if present - allowed:
             raise ValueError('Event contains fields that are not valid for its type.')
@@ -109,6 +119,10 @@ class TelemetryEventForm(BaseModel):
             raise ValueError('Visibility events require a visibility state.')
         if self.type == 'focus_return' and self.away_duration_ms is None:
             raise ValueError('Focus return events require an away duration.')
+        if self.type == 'answer_change' and (self.field != 'question' or self.control_type is None or self.answered is None):
+            raise ValueError('Question answer changes require control type and answered state.')
+        if self.field == 'question' and (not self.session_task_id or not self.question_id):
+            raise ValueError('Question telemetry requires task and question context.')
         return self
 
 
@@ -132,12 +146,12 @@ class TelemetryStatusResponse(BaseModel):
     reason: Optional[str] = None
     experiment_session_id: Optional[str] = None
     state: Optional[ExperimentState] = None
-    allowed_contexts: Optional[list[Literal['essay', 'chat']]] = None
+    allowed_contexts: Optional[list[Literal['essay', 'question', 'chat']]] = None
 
 
 def _payload(event: TelemetryEventForm):
     return event.model_dump(
-        exclude={'event_id', 'type', 'timestamp', 'field'},
+        exclude={'event_id', 'type', 'timestamp', 'field', 'session_task_id', 'question_id', 'submission_id'},
         exclude_none=True,
         mode='json',
     )
@@ -186,7 +200,7 @@ async def telemetry_status(user=Depends(get_verified_user), db: AsyncSession = D
         enabled=True,
         experiment_session_id=session.id,
         state=state,
-        allowed_contexts=['essay', 'chat'],
+        allowed_contexts=['essay', 'question', 'chat'],
     )
 
 
@@ -214,6 +228,52 @@ async def telemetry_events(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Experiment session is not owned by user.')
     if session.state != ExperimentState.IN_PROGRESS.value:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='Experiment writing session is not active.')
+
+    for session_task_id in {
+        event.session_task_id for event in form.events if event.session_task_id
+    }:
+        valid_task = (
+            await db.execute(
+                select(ExperimentSessionTask.id).where(
+                    ExperimentSessionTask.id == session_task_id,
+                    ExperimentSessionTask.experiment_session_id == session.id,
+                )
+            )
+        ).first()
+        if not valid_task:
+            raise HTTPException(status_code=403, detail='Telemetry task context is not assigned to this session.')
+
+    question_contexts = [
+        (event.session_task_id, event.question_id, event.submission_id)
+        for event in form.events
+        if event.field == 'question'
+    ]
+    for session_task_id, question_id, submission_id in set(question_contexts):
+        valid = (
+            await db.execute(
+                select(QuestionTaskQuestion.id)
+                .join(ExperimentSessionTask, ExperimentSessionTask.question_task_id == QuestionTaskQuestion.task_id)
+                .where(
+                    ExperimentSessionTask.id == session_task_id,
+                    ExperimentSessionTask.experiment_session_id == session.id,
+                    QuestionTaskQuestion.id == question_id,
+                )
+            )
+        ).first()
+        if not valid:
+            raise HTTPException(status_code=403, detail='Question telemetry context is not assigned to this session.')
+        if submission_id:
+            valid_submission = (
+                await db.execute(
+                    select(QuestionSubmission.id).where(
+                        QuestionSubmission.id == submission_id,
+                        QuestionSubmission.session_task_id == session_task_id,
+                        QuestionSubmission.user_id == user.id,
+                    )
+                )
+            ).first()
+            if not valid_submission:
+                raise HTTPException(status_code=403, detail='Question telemetry submission is not owned by user.')
 
     summary = (
         (
@@ -250,6 +310,9 @@ async def telemetry_events(
             field_context=event.field,
             payload_json=_payload(event),
             created_at=int(time.time_ns()),
+            session_task_id=event.session_task_id,
+            question_id=event.question_id,
+            submission_id=event.submission_id,
         )
         db.add(telemetry_event)
         _apply_to_summary(summary, event)

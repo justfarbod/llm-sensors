@@ -12,21 +12,32 @@
 
 	const id = () => crypto.randomUUID();
 	const now = () => new Date().toISOString();
-	const eventBase = (type, field = 'unknown') => ({
+	const eventBase = (type, context = 'unknown') => ({
 		event_id: id(),
 		type,
 		timestamp: now(),
-		field
+		...(typeof context === 'string' ? { field: context } : context)
 	});
 
 	const fieldFor = (target) => {
 		const element = target instanceof Element ? target : target?.parentElement;
 		const tagged = element?.closest('[data-experiment-field]');
 		const field = tagged?.getAttribute('data-experiment-field');
-		if (!['essay', 'chat'].includes(field)) return null;
+		if (!['essay', 'question', 'chat'].includes(field)) return null;
 		const input = element?.closest('input');
 		if (input?.type === 'password') return null;
-		return field;
+		return {
+			field,
+			...(tagged?.getAttribute('data-session-task-id')
+				? { session_task_id: tagged.getAttribute('data-session-task-id') }
+				: {}),
+			...(field === 'question'
+				? {
+						question_id: tagged?.getAttribute('data-question-id'),
+						submission_id: tagged?.getAttribute('data-submission-id') || undefined
+					}
+				: {})
+		};
 	};
 
 	const keyClass = (event) => {
@@ -96,12 +107,13 @@
 			document,
 			'keydown',
 			(event) => {
-				const field = fieldFor(event.target);
-				if (!field || event.repeat || event.isComposing) return;
+				const context = fieldFor(event.target);
+				if (!context || event.repeat || event.isComposing) return;
+				const field = context.field;
 				const classification = keyClass(event);
 				const timestamp = Date.now();
 				const telemetryEvent = {
-					...eventBase('keystroke', field),
+					...eventBase('keystroke', context),
 					key_class: classification,
 					modifiers: modifiers(event)
 				};
@@ -121,8 +133,9 @@
 			document,
 			'keyup',
 			(event) => {
-				const field = fieldFor(event.target);
-				if (!field || event.isComposing) return;
+				const context = fieldFor(event.target);
+				if (!context || event.isComposing) return;
+				const field = context.field;
 				const signature = `${field}:${keyClass(event)}`;
 				const pending = pendingHolds.get(signature);
 				const hold = pending?.shift();
@@ -139,15 +152,41 @@
 				document,
 				type,
 				(event) => {
-					const field = fieldFor(event.target);
-					if (!field) return;
+					const context = fieldFor(event.target);
+					if (!context) return;
+					const field = context.field;
 					const metadata =
 						type === 'paste' ? clipboardMetadata(event) : selectedMetadata(event, field);
-					buffer.add({ ...eventBase(type, field), ...metadata });
+					buffer.add({ ...eventBase(type, context), ...metadata });
 				},
 				true
 			);
 		}
+		listen(
+			document,
+			'change',
+			(event) => {
+				const context = fieldFor(event.target);
+				if (!context || context.field !== 'question') return;
+				const target = event.target;
+				const controlType = target?.getAttribute?.('data-question-control');
+				if (!['single_choice', 'multiple_select', 'fill_blank', 'free_text'].includes(controlType))
+					return;
+				const questionRoot = target.closest('[data-experiment-field="question"]');
+				const controls = Array.from(
+					questionRoot?.querySelectorAll(`[data-question-control="${controlType}"]`) ?? []
+				);
+				const answered = controls.some((control) =>
+					control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement
+						? control.type === 'checkbox' || control.type === 'radio'
+							? control.checked
+							: Boolean(control.value.trim())
+						: false
+				);
+				buffer.add({ ...eventBase('answer_change', context), control_type: controlType, answered });
+			},
+			true
+		);
 		listen(document, 'visibilitychange', () => {
 			buffer.add({
 				...eventBase('visibility_change'),

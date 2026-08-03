@@ -1,4 +1,10 @@
-import type { ExperimentCurrent } from '$lib/apis/experiments';
+import type { ExperimentCurrent, ExperimentTaskSummary } from '$lib/apis/experiments';
+
+export const firstUnlockedExperimentTask = (tasks: ExperimentTaskSummary[]) =>
+	tasks.find((task) => task.status === 'ACTIVE') ??
+	tasks.find((task) => task.status === 'AVAILABLE') ??
+	tasks.find((task) => task.status === 'COMPLETED') ??
+	tasks.find((task) => task.status === 'FINALIZED');
 
 export const experimentAllowsApp = (experiment: ExperimentCurrent | undefined) =>
 	experiment !== undefined && ['NOT_APPLICABLE', 'IN_PROGRESS'].includes(experiment.state);
@@ -45,6 +51,11 @@ export const sameExperimentState = (
 	left?.state === right?.state &&
 	left?.session_id === right?.session_id &&
 	left?.group_id === right?.group_id &&
+	left?.plan_id === right?.plan_id &&
+	left?.progression_mode === right?.progression_mode &&
+	left?.chat_mode === right?.chat_mode &&
+	left?.survey_variant === right?.survey_variant &&
+	JSON.stringify(left?.tasks ?? []) === JSON.stringify(right?.tasks ?? []) &&
 	left?.agreement_text === right?.agreement_text &&
 	left?.error === right?.error &&
 	left?.topic?.id === right?.topic?.id &&

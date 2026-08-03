@@ -3,6 +3,8 @@ import { getTimeRange } from '$lib/utils';
 
 export const createNewChat = async (token: string, chat: object, folderId: string | null) => {
 	let error = null;
+	const experimentSessionTaskId = (chat as { experiment_session_task_id?: string })
+		.experiment_session_task_id;
 
 	const res = await fetch(`${WEBUI_API_BASE_URL}/chats/new`, {
 		method: 'POST',
@@ -13,7 +15,8 @@ export const createNewChat = async (token: string, chat: object, folderId: strin
 		},
 		body: JSON.stringify({
 			chat: chat,
-			folder_id: folderId ?? null
+			folder_id: folderId ?? null,
+			experiment_session_task_id: experimentSessionTaskId
 		})
 	})
 		.then(async (res) => {
@@ -100,7 +103,8 @@ export const getChatList = async (
 	token: string = '',
 	page: number | null = null,
 	include_pinned: boolean = false,
-	include_folders: boolean = false
+	include_folders: boolean = false,
+	experimentSessionTaskId?: string | null
 ) => {
 	let error = null;
 	const searchParams = new URLSearchParams();
@@ -115,6 +119,10 @@ export const getChatList = async (
 
 	if (include_pinned) {
 		searchParams.append('include_pinned', 'true');
+	}
+
+	if (experimentSessionTaskId) {
+		searchParams.append('experiment_session_task_id', experimentSessionTaskId);
 	}
 
 	const res = await fetch(`${WEBUI_API_BASE_URL}/chats/?${searchParams.toString()}`, {

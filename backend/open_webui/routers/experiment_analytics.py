@@ -5,11 +5,13 @@ import io
 import json
 import statistics
 import time
+import uuid
 from collections import Counter, defaultdict
 from datetime import datetime
 from typing import Literal, Optional
+from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import Integer, and_, case, cast, func, or_, select
@@ -21,9 +23,28 @@ from open_webui.models.chat_messages import ChatMessage, _token_columns
 from open_webui.models.essays import Essay, EssayTopics
 from open_webui.models.experiment_telemetry import ExperimentTelemetrySummary, ExperimentTelemetrySummaryModel
 from open_webui.models.experiments import ACTIVE_STATES, ExperimentSession, ExperimentState
+from open_webui.models.experiment_plans import ExperimentSessionTask
+from open_webui.models.question_submissions import (
+    QuestionGradingAttempt,
+    QuestionResponse,
+    QuestionResponseBlank,
+    QuestionResponseChoice,
+    QuestionScoreOverride,
+    QuestionSubmission,
+    QuestionSubmissions,
+)
+from open_webui.models.question_tasks import GradingStatus, QuestionTasks
+from open_webui.models.survey_submissions import (
+    SurveyResponse,
+    SurveyResponseChoice,
+    SurveySubmission,
+)
+from open_webui.models.survey_tasks import SurveyChoice, SurveyQuestion, SurveyTask
 from open_webui.models.groups import Group, GroupMember, Groups
 from open_webui.models.users import User
 from open_webui.utils.auth import get_admin_user
+from open_webui.tasks import create_task
+from open_webui.utils.question_grading import grade_response
 
 router = APIRouter()
 NS = 1_000_000_000
@@ -162,12 +183,16 @@ async def _telemetry_by_session(db: AsyncSession, session_ids: list[str]):
     if not session_ids:
         return {}
     rows = (
-        await db.execute(
-            select(ExperimentTelemetrySummary).where(
-                ExperimentTelemetrySummary.experiment_session_id.in_(session_ids)
+        (
+            await db.execute(
+                select(ExperimentTelemetrySummary).where(
+                    ExperimentTelemetrySummary.experiment_session_id.in_(session_ids)
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return {row.experiment_session_id: row for row in rows}
 
 
@@ -334,7 +359,8 @@ async def filters(user=Depends(get_admin_user), db: AsyncSession = Depends(get_a
     return {
         'groups': [{'id': group.id, 'name': group.name} for group in groups],
         'topics': [{'id': topic.id, 'title': topic.title} for topic in topics],
-        'states': ['NOT_STARTED'] + [state.value for state in ExperimentState if state != ExperimentState.NOT_APPLICABLE],
+        'states': ['NOT_STARTED']
+        + [state.value for state in ExperimentState if state != ExperimentState.NOT_APPLICABLE],
     }
 
 
@@ -376,7 +402,9 @@ async def overview(
             'essays_submitted': sum(session.essay_id is not None for session in sessions),
             'post_survey_completed': sum(session.post_survey is not None for session in sessions),
             'completion_rate': round((len(complete) / len(sessions)) * 100, 1) if sessions else 0,
-            'average_session_duration': average(_duration(session.created_at, session.completed_at) for session in complete),
+            'average_session_duration': average(
+                _duration(session.created_at, session.completed_at) for session in complete
+            ),
             'average_time_to_essay': average(
                 _duration(session.writing_started_at, session.essay_submitted_at) for session in sessions
             ),
@@ -431,7 +459,9 @@ async def participants(
         'total_tokens',
         'essay_word_count',
     }
-    items, total = _paginate_rows(rows, page, limit, search, order_by if order_by in allowed else 'session_start_time', direction)
+    items, total = _paginate_rows(
+        rows, page, limit, search, order_by if order_by in allowed else 'session_start_time', direction
+    )
     return {'items': items, 'total': total, 'page': page, 'limit': limit}
 
 
@@ -531,8 +561,19 @@ async def essays(
                 'submitted_at': _seconds(essay.created_at),
             }
         )
-    allowed = {'participant_id', 'name', 'group_name', 'topic_title', 'state', 'word_count', 'character_count', 'submitted_at'}
-    items, total = _paginate_rows(rows, page, limit, search, order_by if order_by in allowed else 'submitted_at', direction)
+    allowed = {
+        'participant_id',
+        'name',
+        'group_name',
+        'topic_title',
+        'state',
+        'word_count',
+        'character_count',
+        'submitted_at',
+    }
+    items, total = _paginate_rows(
+        rows, page, limit, search, order_by if order_by in allowed else 'submitted_at', direction
+    )
     return {'items': items, 'total': total, 'page': page, 'limit': limit}
 
 
@@ -671,9 +712,11 @@ async def essay_stats(
 
 def _distribution(sessions, field: str, survey_name: str):
     values = [
-        getattr(session, survey_name).get(field)
-        if getattr(session, survey_name).get(field) is not None
-        else 'Not available'
+        (
+            getattr(session, survey_name).get(field)
+            if getattr(session, survey_name).get(field) is not None
+            else 'Not available'
+        )
         for session in sessions
         if getattr(session, survey_name)
     ]
@@ -700,6 +743,142 @@ async def surveys(
 ):
     dashboard_filters = DashboardFilters(**locals())
     sessions = await _sessions(db, dashboard_filters)
+    session_ids = [session.id for session in sessions]
+    dynamic_records = (
+        (
+            await db.execute(
+                select(SurveySubmission, ExperimentSessionTask, ExperimentSession, SurveyTask)
+                .join(ExperimentSessionTask, ExperimentSessionTask.id == SurveySubmission.session_task_id)
+                .join(ExperimentSession, ExperimentSession.id == ExperimentSessionTask.experiment_session_id)
+                .join(SurveyTask, SurveyTask.id == ExperimentSessionTask.survey_task_id)
+                .where(ExperimentSession.id.in_(session_ids))
+                .order_by(SurveySubmission.created_at.desc())
+            )
+        ).all()
+        if session_ids
+        else []
+    )
+    submission_ids = [record[0].id for record in dynamic_records]
+    dynamic_responses = (
+        list(
+            (await db.execute(select(SurveyResponse).where(SurveyResponse.submission_id.in_(submission_ids))))
+            .scalars()
+            .all()
+        )
+        if submission_ids
+        else []
+    )
+    response_ids = [response.id for response in dynamic_responses]
+    selected_rows = (
+        list(
+            (await db.execute(select(SurveyResponseChoice).where(SurveyResponseChoice.response_id.in_(response_ids))))
+            .scalars()
+            .all()
+        )
+        if response_ids
+        else []
+    )
+    task_ids = list({record[3].id for record in dynamic_records})
+    questions = (
+        list(
+            (
+                await db.execute(
+                    select(SurveyQuestion).where(SurveyQuestion.task_id.in_(task_ids)).order_by(SurveyQuestion.position)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if task_ids
+        else []
+    )
+    question_ids = [question.id for question in questions]
+    choices = (
+        list(
+            (
+                await db.execute(
+                    select(SurveyChoice)
+                    .where(SurveyChoice.question_id.in_(question_ids))
+                    .order_by(SurveyChoice.position)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if question_ids
+        else []
+    )
+    response_map: dict[str, list[SurveyResponse]] = defaultdict(list)
+    for response in dynamic_responses:
+        response_map[response.submission_id].append(response)
+    selected_map: dict[str, list[str]] = defaultdict(list)
+    for selected in selected_rows:
+        selected_map[selected.response_id].append(selected.choice_id)
+    choice_map = {choice.id: choice for choice in choices}
+    question_map: dict[str, list[SurveyQuestion]] = defaultdict(list)
+    for question in questions:
+        question_map[question.task_id].append(question)
+    grouped: dict[str, dict] = {}
+    dynamic_by_session: dict[str, list[dict]] = defaultdict(list)
+    for submission, session_task, session, survey_task in dynamic_records:
+        group = grouped.setdefault(
+            survey_task.id,
+            {
+                'survey_task_id': survey_task.id,
+                'family_id': survey_task.family_id,
+                'version': survey_task.version,
+                'title': survey_task.title,
+                'submission_count': 0,
+                'skipped_count': 0,
+                'questions': {},
+            },
+        )
+        group['submission_count'] += submission.status == 'SUBMITTED'
+        group['skipped_count'] += submission.status == 'SKIPPED'
+        answer_payload = []
+        for response in response_map.get(submission.id, []):
+            question = next((item for item in question_map[survey_task.id] if item.id == response.question_id), None)
+            if not question:
+                continue
+            labels = [choice_map[choice_id].text for choice_id in selected_map[response.id] if choice_id in choice_map]
+            value = response.scale_answer if response.scale_answer is not None else response.text_answer
+            if labels:
+                value = labels
+            question_data = group['questions'].setdefault(
+                question.id,
+                {
+                    'id': question.id,
+                    'prompt': question.prompt,
+                    'question_type': question.question_type,
+                    'position': question.position,
+                    'values': [],
+                },
+            )
+            if response.is_answered:
+                question_data['values'].extend(value if isinstance(value, list) else [value])
+            answer_payload.append({'question_id': question.id, 'prompt': question.prompt, 'value': value})
+        dynamic_by_session[session.id].append(
+            {
+                'submission_id': submission.id,
+                'title': survey_task.title,
+                'version': survey_task.version,
+                'status': submission.status,
+                'answers': answer_payload,
+            }
+        )
+    dynamic_surveys = []
+    for group in grouped.values():
+        question_results = []
+        for question in sorted(group.pop('questions').values(), key=lambda item: item['position']):
+            counts = Counter(str(value) for value in question.pop('values') if value is not None)
+            total = sum(counts.values())
+            question['distribution'] = [
+                {'label': label, 'count': count, 'percentage': round(count / total * 100, 1) if total else 0}
+                for label, count in counts.items()
+            ]
+            question_results.append(question)
+        group['questions'] = question_results
+        dynamic_surveys.append(group)
     responses = [
         {
             'session_id': session.id,
@@ -708,20 +887,28 @@ async def surveys(
             'pre_survey_completed': session.pre_survey is not None,
             'post_survey_completed': session.post_survey is not None,
             'comments': session.post_survey.get('comments') if session.post_survey else None,
+            'survey_submissions': dynamic_by_session.get(session.id, []),
         }
         for session in sessions
-        if session.pre_survey or session.post_survey
+        if session.pre_survey or session.post_survey or dynamic_by_session.get(session.id)
     ]
     start = (page - 1) * limit
     return {
         'pre': {
             field: _distribution(sessions, field, 'pre_survey')
-            for field in ('school_class', 'ai_familiarity', 'ai_schoolwork_frequency', 'essay_writing_confidence', 'age_range')
+            for field in (
+                'school_class',
+                'ai_familiarity',
+                'ai_schoolwork_frequency',
+                'essay_writing_confidence',
+                'age_range',
+            )
         },
         'post': {
             field: _distribution(sessions, field, 'post_survey')
             for field in ('ai_helpfulness', 'essay_satisfaction', 'ai_improvement', 'chat_ease')
         },
+        'dynamic': dynamic_surveys,
         'responses': {
             'items': responses[start : start + limit],
             'total': len(responses),
@@ -851,6 +1038,75 @@ async def export_surveys(
         (await db.execute(select(ExperimentSession).where(ExperimentSession.id.in_(form.ids)))).scalars().all()
     )
     users = await _users_by_ids(db, [session.user_id for session in sessions])
+    session_ids = [session.id for session in sessions]
+    dynamic_records = (
+        (
+            await db.execute(
+                select(SurveySubmission, ExperimentSessionTask, SurveyTask)
+                .join(ExperimentSessionTask, ExperimentSessionTask.id == SurveySubmission.session_task_id)
+                .join(SurveyTask, SurveyTask.id == ExperimentSessionTask.survey_task_id)
+                .where(ExperimentSessionTask.experiment_session_id.in_(session_ids))
+            )
+        ).all()
+        if session_ids
+        else []
+    )
+    submission_ids = [record[0].id for record in dynamic_records]
+    dynamic_answers = (
+        list(
+            (
+                await db.execute(
+                    select(SurveyResponse, SurveyQuestion)
+                    .join(SurveyQuestion, SurveyQuestion.id == SurveyResponse.question_id)
+                    .where(SurveyResponse.submission_id.in_(submission_ids))
+                )
+            ).all()
+        )
+        if submission_ids
+        else []
+    )
+    dynamic_response_ids = [response.id for response, _ in dynamic_answers]
+    selected_answers = (
+        list(
+            (
+                await db.execute(
+                    select(SurveyResponseChoice, SurveyChoice)
+                    .join(SurveyChoice, SurveyChoice.id == SurveyResponseChoice.choice_id)
+                    .where(SurveyResponseChoice.response_id.in_(dynamic_response_ids))
+                )
+            ).all()
+        )
+        if dynamic_response_ids
+        else []
+    )
+    selected_answer_map: dict[str, list[str]] = defaultdict(list)
+    for selected, choice in selected_answers:
+        selected_answer_map[selected.response_id].append(choice.text)
+    answer_map: dict[str, list[dict]] = defaultdict(list)
+    for response, question in dynamic_answers:
+        answer_map[response.submission_id].append(
+            {
+                'question_id': question.id,
+                'prompt': question.prompt,
+                'question_type': question.question_type,
+                'text': response.text_answer,
+                'scale': response.scale_answer,
+                'choices': selected_answer_map.get(response.id, []),
+                'answered': response.is_answered,
+            }
+        )
+    dynamic_map: dict[str, list[dict]] = defaultdict(list)
+    for submission, task, survey_task in dynamic_records:
+        dynamic_map[task.experiment_session_id].append(
+            {
+                'submission_id': submission.id,
+                'survey_task_id': survey_task.id,
+                'title': survey_task.title,
+                'version': survey_task.version,
+                'status': submission.status,
+                'answers': answer_map.get(submission.id, []),
+            }
+        )
     rows = [
         {
             'session_id': session.id,
@@ -862,9 +1118,344 @@ async def export_surveys(
             'group_id': session.group_id,
             'topic_id': session.topic_id,
             'state': session.state,
-            'pre_survey': json.dumps(session.pre_survey, ensure_ascii=False) if form.format == 'csv' else session.pre_survey,
-            'post_survey': json.dumps(session.post_survey, ensure_ascii=False) if form.format == 'csv' else session.post_survey,
+            'pre_survey': (
+                json.dumps(session.pre_survey, ensure_ascii=False) if form.format == 'csv' else session.pre_survey
+            ),
+            'post_survey': (
+                json.dumps(session.post_survey, ensure_ascii=False) if form.format == 'csv' else session.post_survey
+            ),
+            'pipeline_surveys': (
+                json.dumps(dynamic_map.get(session.id, []), ensure_ascii=False)
+                if form.format == 'csv'
+                else dynamic_map.get(session.id, [])
+            ),
         }
         for session in sessions
     ]
     return _export_response(rows, form, 'experiment-surveys')
+
+
+class ScoreOverrideForm(BaseModel):
+    score: Decimal = Field(ge=0, decimal_places=2)
+    note: Optional[str] = Field(default=None, max_length=2000)
+
+
+@router.get('/question-results')
+async def question_results(
+    group_id: Optional[str] = None,
+    topic_id: Optional[str] = None,
+    date_from: Optional[int] = None,
+    date_to: Optional[int] = None,
+    state: Optional[str] = None,
+    completed: Optional[bool] = None,
+    page: int = Query(1, ge=1),
+    limit: int = Query(25, ge=1, le=100),
+    search: Optional[str] = None,
+    user=Depends(get_admin_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    stmt = (
+        select(QuestionSubmission, ExperimentSessionTask, ExperimentSession, User, Group)
+        .join(ExperimentSessionTask, ExperimentSessionTask.id == QuestionSubmission.session_task_id)
+        .join(ExperimentSession, ExperimentSession.id == ExperimentSessionTask.experiment_session_id)
+        .join(User, User.id == ExperimentSession.user_id)
+        .join(Group, Group.id == ExperimentSession.group_id)
+        .order_by(QuestionSubmission.created_at.desc())
+    )
+    stmt = _apply_session_filters(
+        stmt,
+        DashboardFilters(
+            group_id=group_id,
+            topic_id=topic_id,
+            date_from=date_from,
+            date_to=date_to,
+            state=state,
+            completed=completed,
+        ),
+    )
+    records = (await db.execute(stmt)).all()
+    rows = [
+        {
+            'submission_id': submission.id,
+            'session_id': session.id,
+            'session_task_id': task.id,
+            'participant_id': _anonymous_id(session.user_id),
+            'name': participant.name,
+            'email': participant.email,
+            'group_id': group.id,
+            'group_name': group.name,
+            'task_title': task.title,
+            'task_position': task.position,
+            'status': submission.status,
+            'grading_status': submission.grading_status,
+            'score': float(submission.current_score) if submission.current_score is not None else None,
+            'provisional_score': float(submission.provisional_score or 0),
+            'has_grading_error': submission.has_grading_error,
+            'maximum_score': float(submission.maximum_score or 0),
+            'submitted_at': _seconds(submission.submitted_at),
+        }
+        for submission, task, session, participant, group in records
+    ]
+    if search:
+        query = search.casefold()
+        rows = [
+            row
+            for row in rows
+            if query
+            in ' '.join(
+                str(row.get(key) or '').casefold()
+                for key in ('participant_id', 'name', 'email', 'group_name', 'task_title', 'grading_status')
+            )
+        ]
+    total = len(rows)
+    start = (page - 1) * limit
+    return {'items': rows[start : start + limit], 'total': total, 'page': page, 'limit': limit}
+
+
+@router.get('/question-submissions/{submission_id}')
+async def question_submission_detail(
+    submission_id: str, user=Depends(get_admin_user), db: AsyncSession = Depends(get_async_session)
+):
+    record = (
+        await db.execute(
+            select(QuestionSubmission, ExperimentSessionTask, ExperimentSession, User, Group)
+            .join(ExperimentSessionTask, ExperimentSessionTask.id == QuestionSubmission.session_task_id)
+            .join(ExperimentSession, ExperimentSession.id == ExperimentSessionTask.experiment_session_id)
+            .join(User, User.id == ExperimentSession.user_id)
+            .join(Group, Group.id == ExperimentSession.group_id)
+            .where(QuestionSubmission.id == submission_id)
+        )
+    ).first()
+    if not record:
+        raise HTTPException(status_code=404, detail='Question submission not found.')
+    submission, session_task, session, participant, group = record
+    task = await QuestionTasks.get_task(session_task.question_task_id, db=db)
+    responses = list(
+        (await db.execute(select(QuestionResponse).where(QuestionResponse.submission_id == submission.id)))
+        .scalars()
+        .all()
+    )
+    response_ids = [response.id for response in responses]
+    selected = (
+        list(
+            (
+                await db.execute(
+                    select(QuestionResponseChoice).where(QuestionResponseChoice.response_id.in_(response_ids))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if response_ids
+        else []
+    )
+    blanks = (
+        list(
+            (await db.execute(select(QuestionResponseBlank).where(QuestionResponseBlank.response_id.in_(response_ids))))
+            .scalars()
+            .all()
+        )
+        if response_ids
+        else []
+    )
+    attempts = (
+        list(
+            (
+                await db.execute(
+                    select(QuestionGradingAttempt)
+                    .where(QuestionGradingAttempt.response_id.in_(response_ids))
+                    .order_by(QuestionGradingAttempt.created_at)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if response_ids
+        else []
+    )
+    overrides = (
+        list(
+            (
+                await db.execute(
+                    select(QuestionScoreOverride)
+                    .where(QuestionScoreOverride.response_id.in_(response_ids))
+                    .order_by(QuestionScoreOverride.created_at)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if response_ids
+        else []
+    )
+    selected_map: dict[str, list[str]] = defaultdict(list)
+    blank_map: dict[str, list[dict]] = defaultdict(list)
+    attempt_map: dict[str, list[dict]] = defaultdict(list)
+    override_map: dict[str, list[dict]] = defaultdict(list)
+    for row in selected:
+        selected_map[row.response_id].append(row.choice_id)
+    for row in blanks:
+        blank_map[row.response_id].append({'blank_id': row.blank_id, 'answer': row.answer})
+    for row in attempts:
+        attempt_map[row.response_id].append(
+            {
+                'id': row.id,
+                'method': row.method,
+                'status': row.status,
+                'model_id': row.model_id,
+                'awarded_score': float(row.awarded_score) if row.awarded_score is not None else None,
+                'rationale': row.rationale,
+                'error_code': row.error_code,
+                'created_at': _seconds(row.created_at),
+                'completed_at': _seconds(row.completed_at),
+            }
+        )
+    for row in overrides:
+        override_map[row.response_id].append(
+            {
+                'id': row.id,
+                'admin_id': row.admin_id,
+                'previous_score': float(row.previous_score) if row.previous_score is not None else None,
+                'new_score': float(row.new_score),
+                'note': row.note,
+                'created_at': _seconds(row.created_at),
+            }
+        )
+    question_map = {question.id: question for question in task.questions}
+    question_position = {question.id: question.position for question in task.questions}
+    responses.sort(key=lambda response: question_position.get(response.question_id, 0))
+    return {
+        'submission_id': submission.id,
+        'session_id': session.id,
+        'participant_id': _anonymous_id(session.user_id),
+        'participant': {'name': participant.name, 'email': participant.email},
+        'group': {'id': group.id, 'name': group.name},
+        'task': {'id': task.id, 'title': task.title, 'description': task.description},
+        'status': submission.status,
+        'grading_status': submission.grading_status,
+        'score': float(submission.current_score) if submission.current_score is not None else None,
+        'provisional_score': float(submission.provisional_score or 0),
+        'has_grading_error': submission.has_grading_error,
+        'maximum_score': float(submission.maximum_score or 0),
+        'submitted_at': _seconds(submission.submitted_at),
+        'responses': [
+            {
+                'id': response.id,
+                'question': question_map[response.question_id].model_dump(mode='json'),
+                'selected_choice_ids': selected_map[response.id],
+                'blank_answers': blank_map[response.id],
+                'text_answer': response.free_text_answer,
+                'is_answered': response.is_answered,
+                'grading_status': response.grading_status,
+                'grading_method': response.grading_method,
+                'generated_score': float(response.generated_score) if response.generated_score is not None else None,
+                'effective_score': float(response.effective_score) if response.effective_score is not None else None,
+                'rationale': response.rationale,
+                'attempts': attempt_map[response.id],
+                'overrides': override_map[response.id],
+            }
+            for response in responses
+        ],
+    }
+
+
+@router.put('/question-responses/{response_id}/score')
+async def override_question_score(
+    response_id: str,
+    form: ScoreOverrideForm,
+    user=Depends(get_admin_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    response = await db.get(QuestionResponse, response_id)
+    if not response:
+        raise HTTPException(status_code=404, detail='Question response not found.')
+    submission = await db.get(QuestionSubmission, response.submission_id)
+    session_task = await db.get(ExperimentSessionTask, submission.session_task_id)
+    task = await QuestionTasks.get_task(session_task.question_task_id, db=db)
+    question = next(question for question in task.questions if question.id == response.question_id)
+    if form.score > question.max_score:
+        raise HTTPException(status_code=422, detail='Score cannot exceed the question maximum.')
+    now = int(time.time_ns())
+    previous = response.effective_score
+    db.add(
+        QuestionScoreOverride(
+            id=str(uuid.uuid4()),
+            response_id=response.id,
+            admin_id=user.id,
+            previous_score=previous,
+            new_score=form.score,
+            note=form.note.strip() if form.note else None,
+            created_at=now,
+        )
+    )
+    response.effective_score = form.score
+    response.grading_method = (
+        'MANUAL'
+        if response.grading_status == GradingStatus.AWAITING_REVIEW.value and previous is None
+        else 'ADMIN_OVERRIDE'
+    )
+    response.grading_status = GradingStatus.GRADED.value
+    response.updated_at = now
+    await QuestionSubmissions.recalculate(submission.id, db)
+    await db.commit()
+    return await question_submission_detail(submission.id, user=user, db=db)
+
+
+@router.post('/question-responses/{response_id}/retry')
+async def retry_question_grading(
+    response_id: str, request: Request, user=Depends(get_admin_user), db: AsyncSession = Depends(get_async_session)
+):
+    response = await db.get(QuestionResponse, response_id)
+    if not response:
+        raise HTTPException(status_code=404, detail='Question response not found.')
+    submission = await db.get(QuestionSubmission, response.submission_id)
+    session_task = await db.get(ExperimentSessionTask, submission.session_task_id)
+    task = await QuestionTasks.get_task(session_task.question_task_id, db=db)
+    question = next((item for item in task.questions if item.id == response.question_id), None)
+    if not question or question.grading_mode.value != 'LLM_ASSISTED':
+        raise HTTPException(status_code=422, detail='Only LLM-assisted responses can be retried.')
+    active_attempt = (
+        (
+            await db.execute(
+                select(QuestionGradingAttempt)
+                .where(
+                    QuestionGradingAttempt.response_id == response.id,
+                    QuestionGradingAttempt.status.in_(
+                        [
+                            GradingStatus.PENDING.value,
+                            GradingStatus.RUNNING.value,
+                        ]
+                    ),
+                )
+                .order_by(QuestionGradingAttempt.created_at.desc())
+                .limit(1)
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if active_attempt:
+        detail = await question_submission_detail(submission.id, user=user, db=db)
+        return {'status': active_attempt.status, 'attempt_id': active_attempt.id, 'submission': detail}
+    now = int(time.time_ns())
+    overridden = response.grading_method == 'ADMIN_OVERRIDE' and response.effective_score is not None
+    if not overridden:
+        response.generated_score = None
+        response.effective_score = None
+        response.rationale = None
+        response.grading_status = GradingStatus.PENDING.value
+    attempt_id = str(uuid.uuid4())
+    db.add(
+        QuestionGradingAttempt(
+            id=attempt_id,
+            response_id=response.id,
+            method='LLM_ASSISTED',
+            status=GradingStatus.PENDING.value,
+            created_at=now,
+        )
+    )
+    await QuestionSubmissions.recalculate(response.submission_id, db)
+    await db.commit()
+    await create_task(request.app.state.redis, grade_response(request, user, response.id), response.submission_id)
+    detail = await question_submission_detail(submission.id, user=user, db=db)
+    return {'status': 'PENDING', 'attempt_id': attempt_id, 'submission': detail}

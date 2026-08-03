@@ -49,7 +49,9 @@
 		showFileNavPath,
 		showFileNavDir,
 		chatRequestQueues,
-		desktopEvent
+		desktopEvent,
+		experimentCurrent,
+		experimentActiveTaskId
 	} from '$lib/stores';
 
 	import { WEBUI_API_BASE_URL } from '$lib/constants';
@@ -103,6 +105,7 @@
 	import Navbar from '$lib/components/chat/Navbar.svelte';
 	import ChatControls from './ChatControls.svelte';
 	import EssaySidebar from './EssaySidebar.svelte';
+	import ExperimentTaskSidebar from './ExperimentTaskSidebar.svelte';
 	import EventConfirmDialog from '../common/ConfirmDialog.svelte';
 	import DeleteConfirmDialog from '../common/ConfirmDialog.svelte';
 	import Placeholder from './Placeholder.svelte';
@@ -121,13 +124,21 @@
 	const eventTarget = new EventTarget();
 	let controlPane: Pane | undefined;
 	let controlPaneComponent: ChatControls | undefined;
-	let essayPaneComponent: EssaySidebar | undefined;
+	let essayPaneComponent: EssaySidebar | ExperimentTaskSidebar | undefined;
 
 	$: essaySidebarAvailable =
 		$user?.role === 'admin' || ($user?.permissions?.features?.essay_sidebar ?? false);
 	$: if (!essaySidebarAvailable && $showEssaySidebar) {
 		showEssaySidebar.set(false);
 	}
+	const getVisibleChatList = (pageValue: number) =>
+		getChatList(
+			localStorage.token,
+			pageValue,
+			false,
+			false,
+			$experimentCurrent?.chat_mode === 'FRESH_PER_TASK' ? $experimentActiveTaskId : undefined
+		);
 
 	let messageInput: MessageInput | undefined;
 	let messagesRef: Messages | undefined;
@@ -171,7 +182,7 @@
 	let dragged = false;
 	let generationController = null;
 
-	let chat = null;
+	let chat: any = null;
 	let tags = [];
 
 	let chatTasks = [];
@@ -552,7 +563,7 @@
 				} else if (type === 'chat:title') {
 					chatTitle.set(data);
 					currentChatPage.set(1);
-					await chats.set(await getChatList(localStorage.token, $currentChatPage));
+					await chats.set(await getVisibleChatList($currentChatPage));
 				} else if (type === 'chat:tags') {
 					chat = await getChatById(localStorage.token, $chatId);
 					allTags.set(await getAllTags(localStorage.token));
@@ -1554,7 +1565,7 @@
 		// Just refresh the sidebar chat list.
 		if ($chatId == _chatId && !$temporaryChatEnabled) {
 			currentChatPage.set(1);
-			await chats.set(await getChatList(localStorage.token, $currentChatPage));
+			await chats.set(await getVisibleChatList($currentChatPage));
 		}
 		taskIds = null;
 	};
@@ -1607,7 +1618,7 @@
 				});
 
 				currentChatPage.set(1);
-				await chats.set(await getChatList(localStorage.token, $currentChatPage));
+				await chats.set(await getVisibleChatList($currentChatPage));
 			}
 		}
 	};
@@ -2112,6 +2123,7 @@
 					model: model.id,
 					modelName: model.name ?? model.id,
 					modelIdx: modelIdx ? modelIdx : _modelIdx,
+					experiment_session_task_id: $experimentActiveTaskId ?? undefined,
 					timestamp: Math.floor(Date.now() / 1000) // Unix epoch
 				};
 
@@ -2459,6 +2471,9 @@
 				session_id: $socket?.id,
 				chat_id: _chatId || undefined,
 				folder_id: $selectedFolder?.id ?? undefined,
+				metadata: $experimentActiveTaskId
+					? { experiment_session_task_id: $experimentActiveTaskId }
+					: undefined,
 
 				id: responseMessageId,
 				...(messageIdsMap ? { message_ids: messageIdsMap } : {}),
@@ -2534,7 +2549,7 @@
 					if (!$temporaryChatEnabled) {
 						window.history.replaceState(history.state, '', `/c/${res.chat_id}`);
 						currentChatPage.set(1);
-						await chats.set(await getChatList(localStorage.token, $currentChatPage));
+						await chats.set(await getVisibleChatList($currentChatPage));
 
 						// Persist chat-level params (system prompt, advanced
 						// params) that the backend doesn't receive in the
@@ -2651,6 +2666,7 @@
 			role: 'user',
 			content: userPrompt,
 			models: selectedModels,
+			experiment_session_task_id: $experimentActiveTaskId ?? undefined,
 			timestamp: Math.floor(Date.now() / 1000) // Unix epoch
 		};
 
@@ -2801,7 +2817,8 @@
 					history: history,
 					messages: createMessagesList(history, history.currentId),
 					tags: [],
-					timestamp: Date.now()
+					timestamp: Date.now(),
+					experiment_session_task_id: $experimentActiveTaskId ?? undefined
 				},
 				$selectedFolder?.id
 			);
@@ -2813,7 +2830,7 @@
 
 			await tick();
 
-			await chats.set(await getChatList(localStorage.token, $currentChatPage));
+			await chats.set(await getVisibleChatList($currentChatPage));
 			currentChatPage.set(1);
 
 			selectedFolder.set(null);
@@ -2885,7 +2902,7 @@
 
 			if (res) {
 				currentChatPage.set(1);
-				await chats.set(await getChatList(localStorage.token, $currentChatPage));
+				await chats.set(await getVisibleChatList($currentChatPage));
 				await pinnedChats.set(await getPinnedChatList(localStorage.token));
 
 				toast.success($i18n.t('Chat moved successfully'));
@@ -2901,7 +2918,7 @@
 			currentChatPage.set(1);
 			initNewChat();
 			await goto('/');
-			chats.set(await getChatList(localStorage.token, $currentChatPage));
+			chats.set(await getVisibleChatList($currentChatPage));
 			pinnedChats.set(await getPinnedChatList(localStorage.token));
 			toast.success($i18n.t('Chat archived.'));
 		} catch (error) {
@@ -2926,7 +2943,7 @@
 				currentChatPage.set(1);
 				initNewChat();
 				await goto('/');
-				chats.set(await getChatList(localStorage.token, $currentChatPage));
+				chats.set(await getVisibleChatList($currentChatPage));
 				pinnedChats.set(await getPinnedChatList(localStorage.token));
 				allTags.set(await getAllTags(localStorage.token));
 				toast.success($i18n.t('Chat deleted.'));
@@ -3058,8 +3075,9 @@
 											models: selectedModels,
 											params: params,
 											history: history,
-											messages: messages,
-											timestamp: Date.now()
+							messages: messages,
+							timestamp: Date.now(),
+							experiment_session_task_id: $experimentActiveTaskId ?? undefined
 										},
 										null
 									);
@@ -3067,7 +3085,7 @@
 									if (savedChat) {
 										temporaryChatEnabled.set(false);
 										chatId.set(savedChat.id);
-										chats.set(await getChatList(localStorage.token, $currentChatPage));
+										chats.set(await getVisibleChatList($currentChatPage));
 
 										await goto(`/c/${savedChat.id}`);
 										toast.success($i18n.t('Conversation saved successfully'));
@@ -3270,7 +3288,37 @@
 			</div>
 
 			{#if essaySidebarAvailable}
-				<EssaySidebar bind:this={essayPaneComponent} />
+				{#if $experimentCurrent?.plan_id}
+					<ExperimentTaskSidebar
+						bind:this={essayPaneComponent}
+						onTaskChange={async (taskId, previousTaskId) => {
+							const scopedChats =
+								$experimentCurrent?.chat_mode === 'FRESH_PER_TASK'
+									? await getVisibleChatList(1)
+									: null;
+							if (
+								$experimentCurrent?.chat_mode === 'FRESH_PER_TASK' &&
+								$chatId &&
+								(previousTaskId || chat?.experiment_session_task_id !== taskId)
+							) {
+								const existingTaskChat = scopedChats?.find((item: any) => item.id !== $chatId);
+								if (existingTaskChat) {
+									currentChatPage.set(1);
+									await chats.set(scopedChats);
+									await goto(`/c/${existingTaskChat.id}`);
+									return;
+								}
+								await initNewChat();
+							}
+							if ($experimentCurrent?.chat_mode === 'FRESH_PER_TASK') {
+								currentChatPage.set(1);
+								await chats.set(scopedChats ?? []);
+							}
+						}}
+					/>
+				{:else}
+					<EssaySidebar bind:this={essayPaneComponent} />
+				{/if}
 			{/if}
 		</div>
 	{:else if loading}

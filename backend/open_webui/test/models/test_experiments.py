@@ -20,6 +20,7 @@ from open_webui.models.experiments import (
 from open_webui.routers.experiments import response_for
 from open_webui.utils.experiments import require_chat_access_dependency, require_non_experiment_user_dependency
 
+
 @asynccontextmanager
 async def fake_db_context(db=None):
     yield db or AsyncMock()
@@ -82,6 +83,36 @@ def test_chat_access_rejects_admin_even_when_experiment_is_not_applicable():
     assert 'Admin Panel' in exc.value.detail
 
 
+def test_chat_access_returns_structured_error_while_a_survey_is_active(monkeypatch):
+    user = SimpleNamespace(id='user', role='user')
+    session = ExperimentSessionModel(
+        id='session',
+        user_id='user',
+        group_id='group',
+        plan_id='plan',
+        task_type='SURVEY',
+        state=ExperimentState.IN_PROGRESS,
+        created_at=1,
+        updated_at=1,
+    )
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = 'survey-task'
+    db = AsyncMock()
+    db.execute.return_value = result
+    monkeypatch.setattr('open_webui.models.experiments.get_async_db_context', fake_db_context)
+    monkeypatch.setattr(
+        Experiments,
+        'get_current',
+        AsyncMock(return_value=(ExperimentState.IN_PROGRESS, session, None)),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        run(require_experiment_chat_access(user, db=db))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail['code'] == 'EXPERIMENT_SURVEY_ACTIVE'
+
+
 def test_admin_chat_router_policy_preserves_only_admin_database_export():
     admin = SimpleNamespace(id='admin', role='admin')
     blocked = Request({'type': 'http', 'method': 'GET', 'path': '/api/v1/chats', 'headers': []})
@@ -125,6 +156,17 @@ def test_pre_survey_records_submission_timestamp(monkeypatch):
     user = SimpleNamespace(id='user', role='user')
     transition = AsyncMock(return_value=SimpleNamespace(id='session'))
     monkeypatch.setattr(Experiments, '_transition', transition)
+    monkeypatch.setattr(
+        Experiments,
+        'get_current',
+        AsyncMock(
+            return_value=(
+                ExperimentState.PRE_SURVEY_REQUIRED,
+                SimpleNamespace(id='session', plan_id=None),
+                None,
+            )
+        ),
+    )
     form = PreSurveyForm(
         school_class=' Grade 10 ',
         ai_familiarity=3,
@@ -192,6 +234,7 @@ def test_repeated_active_state_checks_do_not_create_duplicate_sessions(monkeypat
         topic_id='topic',
         topic_title='Title',
         topic_question='Question',
+        task_type='ESSAY',
         state=ExperimentState.CONSENT_REQUIRED.value,
         created_at=1,
         updated_at=1,
@@ -217,8 +260,20 @@ def test_not_applicable_response_is_small_and_has_no_nested_collections(monkeypa
 
     response = run(response_for(user, AsyncMock()))
     payload = response.model_dump()
-    assert len(response.model_dump_json()) < 500
-    assert set(payload) == {'state', 'session_id', 'group_id', 'topic', 'agreement_text', 'error'}
+    assert len(response.model_dump_json()) < 1000
+    assert set(payload) == {
+        'state',
+        'session_id',
+        'group_id',
+        'plan_id',
+        'progression_mode',
+        'chat_mode',
+        'survey_variant',
+        'tasks',
+        'topic',
+        'agreement_text',
+        'error',
+    }
     assert not {'user', 'group', 'chats', 'essays', 'surveys'} & set(payload)
 
 

@@ -40,6 +40,21 @@ const request = async (
 	return body;
 };
 
+const mutate = async (token: string, path: string, method: 'POST' | 'PUT', body?: object) => {
+	const response = await fetch(`${baseUrl}${path}`, {
+		method,
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			authorization: `Bearer ${token}`
+		},
+		body: body ? JSON.stringify(body) : undefined
+	});
+	const payload = await response.json().catch(() => null);
+	if (!response.ok) throw payload?.detail ?? `Request failed with status ${response.status}`;
+	return payload;
+};
+
 export const getResearchFilters = (token: string, signal?: AbortSignal) =>
 	request(token, '/filters', {}, signal);
 
@@ -52,6 +67,19 @@ export const getResearchSection = (
 
 export const getResearchSession = (token: string, sessionId: string, signal?: AbortSignal) =>
 	request(token, `/sessions/${sessionId}`, {}, signal);
+
+export const getQuestionSubmission = (token: string, submissionId: string, signal?: AbortSignal) =>
+	request(token, `/question-submissions/${submissionId}`, {}, signal);
+
+export const overrideQuestionScore = (
+	token: string,
+	responseId: string,
+	score: number,
+	note?: string
+) => mutate(token, `/question-responses/${responseId}/score`, 'PUT', { score, note });
+
+export const retryQuestionGrading = (token: string, responseId: string) =>
+	mutate(token, `/question-responses/${responseId}/retry`, 'POST');
 
 export const exportResearchData = async (
 	token: string,

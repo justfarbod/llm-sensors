@@ -18,6 +18,9 @@ class ExperimentTelemetryEvent(Base):
     field_context = Column(Text, nullable=False)
     payload_json = Column(JSONField, nullable=False)
     created_at = Column(BigInteger, nullable=False)
+    session_task_id = Column(Text, nullable=True)
+    question_id = Column(Text, nullable=True)
+    submission_id = Column(Text, nullable=True)
 
     __table_args__ = (
         Index('ix_experiment_telemetry_event_session_time', 'experiment_session_id', 'event_time'),

@@ -88,7 +88,30 @@ def test_status_is_enabled_only_for_in_progress_owner(monkeypatch):
     response = run(telemetry_status(SimpleNamespace(id='user', role='user'), AsyncMock()))
     assert response.enabled is True
     assert response.experiment_session_id == 'session'
-    assert response.allowed_contexts == ['essay', 'chat']
+    assert response.allowed_contexts == ['essay', 'question', 'chat']
+
+
+def test_question_answer_change_requires_scoped_non_content_context():
+    valid = event(
+        'answer_change',
+        field='question',
+        session_task_id='session-task',
+        question_id='question',
+        submission_id='submission',
+        control_type='multiple_select',
+        answered=True,
+    )
+    assert TelemetryBatchForm.model_validate(
+        {'experiment_session_id': 'session', 'events': [valid]}
+    ).events[0].answered is True
+
+    with pytest.raises(ValidationError):
+        TelemetryBatchForm.model_validate(
+            {
+                'experiment_session_id': 'session',
+                'events': [event('answer_change', field='question', control_type='free_text', answered=True)],
+            }
+        )
 
 
 def test_schema_rejects_raw_text_unknown_fields_and_batch_limits():

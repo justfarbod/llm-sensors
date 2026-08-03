@@ -31,6 +31,10 @@ def test_dashboard_routes_are_admin_only_and_match_contract():
         '/export/participants',
         '/export/essays',
         '/export/surveys',
+        '/question-results',
+        '/question-submissions/{submission_id}',
+        '/question-responses/{response_id}/score',
+        '/question-responses/{response_id}/retry',
     }
     for route in routes:
         assert any(dependency.call is get_admin_user for dependency in route.dependant.dependencies)

@@ -15,7 +15,7 @@ from uuid import uuid4
 from contextlib import asynccontextmanager
 from urllib.parse import urlencode, parse_qs, urlparse
 from pydantic import BaseModel
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from typing import Optional
 from aiocache import cached
@@ -92,6 +92,9 @@ from open_webui.routers import (
     experiments,
     experiment_telemetry,
     experiment_analytics,
+    experiment_plans,
+    question_tasks,
+    survey_tasks,
     folders,
     configs,
     groups,
@@ -121,7 +124,7 @@ from open_webui.routers.retrieval import (
 
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from open_webui.internal.db import ScopedSession, engine, get_async_session
+from open_webui.internal.db import ScopedSession, engine, get_async_db_context, get_async_session
 
 from open_webui.models.functions import Functions
 from open_webui.models.models import Models
@@ -1444,6 +1447,9 @@ app.include_router(chats.router, prefix='/api/v1/chats', tags=['chats'])
 app.include_router(notes.router, prefix='/api/v1/notes', tags=['notes'])
 app.include_router(essays.router, prefix='/api/v1/essays', tags=['essays'])
 app.include_router(experiments.router, prefix='/api/v1/experiments', tags=['experiments'])
+app.include_router(question_tasks.router, prefix='/api/v1/question-tasks', tags=['question-tasks'])
+app.include_router(survey_tasks.router, prefix='/api/v1/survey-tasks', tags=['survey-tasks'])
+app.include_router(experiment_plans.router, prefix='/api/v1/experiment-plans', tags=['experiment-plans'])
 app.include_router(
     experiment_telemetry.router,
     prefix='/api/v1/experiments/telemetry',
@@ -1704,6 +1710,89 @@ async def chat_completion(
     if _experiment_access == ExperimentState.IN_PROGRESS and tasks:
         tasks.pop(TASKS.FOLLOW_UP_GENERATION, None)
 
+    experiment_context = {}
+    if _experiment_access == ExperimentState.IN_PROGRESS:
+        from open_webui.models.experiment_plans import (
+            ExperimentChatMode,
+            ExperimentPlans,
+            ExperimentSessionTask,
+            ExperimentTaskType,
+            SessionTaskStatus,
+        )
+        from open_webui.models.experiments import Experiments
+
+        _, experiment_session, _ = await Experiments.get_current(user)
+        if experiment_session and experiment_session.plan_id:
+            supplied_task_id = (form_data.get('metadata') or {}).get('experiment_session_task_id')
+            session_task = None
+            async with get_async_db_context() as experiment_db:
+                experiment_plan = await ExperimentPlans.get_plan(experiment_session.plan_id, db=experiment_db)
+                if supplied_task_id:
+                    session_task = (
+                        await experiment_db.execute(
+                            select(ExperimentSessionTask).where(
+                                ExperimentSessionTask.id == supplied_task_id,
+                                ExperimentSessionTask.experiment_session_id == experiment_session.id,
+                            )
+                        )
+                    ).scalars().first()
+                    if session_task is None:
+                        raise HTTPException(
+                            status_code=403,
+                            detail='The supplied experiment task context is not available to this participant.',
+                        )
+                else:
+                    session_task = (
+                        await experiment_db.execute(
+                            select(ExperimentSessionTask)
+                            .where(
+                                ExperimentSessionTask.experiment_session_id == experiment_session.id,
+                                ExperimentSessionTask.status.in_([
+                                    SessionTaskStatus.ACTIVE.value,
+                                    SessionTaskStatus.AVAILABLE.value,
+                                    SessionTaskStatus.COMPLETED.value,
+                                ]),
+                            )
+                            .order_by(ExperimentSessionTask.position)
+                            .limit(1)
+                        )
+                    ).scalars().first()
+                if not session_task or session_task.status not in {
+                    SessionTaskStatus.ACTIVE.value,
+                    SessionTaskStatus.AVAILABLE.value,
+                    SessionTaskStatus.COMPLETED.value,
+                }:
+                    raise HTTPException(status_code=403, detail='No experiment task is available for chat.')
+                if session_task.task_type == ExperimentTaskType.SURVEY.value:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            'code': 'EXPERIMENT_SURVEY_ACTIVE',
+                            'message': 'Complete or skip the active survey before using chat.',
+                        },
+                    )
+                chat_id = form_data.get('chat_id')
+                if (
+                    experiment_plan.chat_mode == ExperimentChatMode.FRESH_PER_TASK
+                    and chat_id
+                    and not chat_id.startswith(('local:', 'channel:'))
+                ):
+                    existing_chat = await Chats.get_chat_by_id_and_user_id(chat_id, user.id, db=experiment_db)
+                    if existing_chat and existing_chat.experiment_session_task_id != session_task.id:
+                        raise HTTPException(
+                            status_code=409,
+                            detail='This experiment task uses a fresh chat. Start a new chat for the selected task.',
+                        )
+            form_data['metadata'] = {**(form_data.get('metadata') or {}), 'experiment_session_id': experiment_session.id, 'experiment_session_task_id': session_task.id}
+            experiment_context = {
+                'experiment_session_id': experiment_session.id,
+                'experiment_session_task_id': session_task.id,
+                'experiment_chat_task_id': session_task.id if experiment_plan.chat_mode == ExperimentChatMode.FRESH_PER_TASK else None,
+            }
+            for message in form_data.get('messages', []):
+                if isinstance(message, dict):
+                    message['experiment_session_task_id'] = session_task.id
+
     metadata = {}
     try:
         model_info = None
@@ -1811,6 +1900,9 @@ async def chat_completion(
                 ),
             },
         }
+        metadata.update(experiment_context)
+        if user_message and experiment_context:
+            user_message['experiment_session_task_id'] = experiment_context['experiment_session_task_id']
 
         if is_new_chat:
             metadata['chat_id'] = str(uuid4())
@@ -1867,6 +1959,11 @@ async def chat_completion(
                                 'timestamp': int(time.time() * 1000),
                             },
                             folder_id=metadata.get('folder_id'),
+                            experiment_session_id=metadata.get('experiment_session_id'),
+                            experiment_session_task_id=metadata.get('experiment_chat_task_id'),
+                            initial_message_experiment_session_task_id=metadata.get(
+                                'experiment_session_task_id'
+                            ),
                         ),
                     )
 
