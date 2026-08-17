@@ -29,7 +29,6 @@ from open_webui.models.experiment_telemetry import (
 from open_webui.models.experiment_perturbations import (
     ExperimentCondition,
     ExperimentLLMRequest,
-    ExperimentMemoryInjection,
     ExperimentPromptInjection,
     ExperimentResponseTiming,
     ExperimentWarningModal,
@@ -500,7 +499,6 @@ async def session_detail(
     row = _session_row(session, group, participant, essay, usage, telemetry)
     condition = await db.get(ExperimentCondition, session.condition_id) if session.condition_id else None
     prompt_settings = await db.get(ExperimentPromptInjection, session.condition_id) if session.condition_id else None
-    memory_settings = await db.get(ExperimentMemoryInjection, session.condition_id) if session.condition_id else None
     warning_settings = await db.get(ExperimentWarningModal, session.condition_id) if session.condition_id else None
     timing_settings = await db.get(ExperimentResponseTiming, session.condition_id) if session.condition_id else None
     perturbation_requests = list(
@@ -575,7 +573,6 @@ async def session_detail(
             ),
             'configuration_summary': {
                 'prompt_injection_enabled': bool(prompt_settings and prompt_settings.enabled),
-                'memory_injection_enabled': bool(memory_settings and memory_settings.enabled),
                 'warning_modal_enabled': bool(warning_settings and warning_settings.enabled),
                 'response_timing_mode': timing_settings.mode if timing_settings else 'NORMAL',
             },
@@ -594,11 +591,8 @@ async def session_detail(
                         'user_message_id',
                         'assistant_message_id',
                         'prompt_active',
-                        'memory_active',
                         'prompt_draw',
-                        'memory_draw',
                         'prompt_randomization_id',
-                        'memory_randomization_id',
                         'timing_mode',
                         'timing_parameters',
                         'request_at',
@@ -1167,20 +1161,6 @@ async def export_perturbations(
             else []
         )
     }
-    memory_by_condition = {
-        row.condition_id: row
-        for row in (
-            (
-                await db.execute(
-                    select(ExperimentMemoryInjection).where(ExperimentMemoryInjection.condition_id.in_(condition_ids))
-                )
-            )
-            .scalars()
-            .all()
-            if condition_ids
-            else []
-        )
-    }
     warning_by_condition = {
         row.condition_id: row
         for row in (
@@ -1214,12 +1194,8 @@ async def export_perturbations(
                     'prompt_number',
                     'assignment_identifier',
                     'prompt_active',
-                    'memory_active',
-                    'memory_latched',
                     'prompt_draw',
-                    'memory_draw',
                     'prompt_randomization_id',
-                    'memory_randomization_id',
                     'timing_mode',
                     'timing_parameters',
                     'request_at',
@@ -1246,10 +1222,6 @@ async def export_perturbations(
                 'prompt_injection_enabled': bool(
                     prompt_by_condition.get(request_row.condition_id)
                     and prompt_by_condition[request_row.condition_id].enabled
-                ),
-                'memory_injection_enabled': bool(
-                    memory_by_condition.get(request_row.condition_id)
-                    and memory_by_condition[request_row.condition_id].enabled
                 ),
                 'warning_modal_enabled': bool(
                     warning_by_condition.get(request_row.condition_id)

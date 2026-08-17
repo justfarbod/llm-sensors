@@ -22,20 +22,13 @@ from open_webui.models.question_tasks import (
 )
 from open_webui.storage.provider import Storage
 from open_webui.utils.auth import get_admin_user, get_verified_user
+from open_webui.utils.task import task_model_available
 
 router = APIRouter()
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 MAX_IMAGE_PIXELS = 20_000_000
 IMAGE_FORMATS = {'PNG': 'image/png', 'JPEG': 'image/jpeg', 'WEBP': 'image/webp', 'GIF': 'image/gif'}
 EXTENSIONS = {'PNG': '.png', 'JPEG': '.jpg', 'WEBP': '.webp', 'GIF': '.gif'}
-
-
-def _task_model_available(request: Request):
-    models = request.app.state.MODELS or {}
-    return any(
-        model_id and model_id in models
-        for model_id in (request.app.state.config.TASK_MODEL, request.app.state.config.TASK_MODEL_EXTERNAL)
-    )
 
 
 async def _active_plan_reference(task_id: str, db: AsyncSession):
@@ -110,7 +103,7 @@ async def clone_question_task(
 async def publish_question_task(
     task_id: str, request: Request, user=Depends(get_admin_user), db: AsyncSession = Depends(get_async_session)
 ):
-    task = await QuestionTasks.publish(task_id, _task_model_available(request), db=db)
+    task = await QuestionTasks.publish(task_id, await task_model_available(request, user), db=db)
     if not task:
         raise HTTPException(status_code=404, detail='Question Task not found.')
     return task

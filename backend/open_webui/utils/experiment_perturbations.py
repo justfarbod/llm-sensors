@@ -66,7 +66,6 @@ class PerturbationRequestContext:
     request_id: str
     condition: Any
     prompt_active: bool
-    memory_active: bool
     timing: Any
 
 
@@ -115,43 +114,14 @@ async def prepare_request(experiment_session, plan, session_task, metadata) -> O
 
             plan_item_id = getattr(session_task, 'plan_item_id', None)
             prompt_rule = condition.prompt_injection.activation
-            memory_rule = condition.memory_injection.activation
             prompt_draw, prompt_randomization_id = _hmac_value(
                 'activation', plan.id, experiment_session.id, str(request_sequence), 'prompt'
-            )
-            memory_draw, memory_randomization_id = _hmac_value(
-                'activation', plan.id, experiment_session.id, str(request_sequence), 'memory'
             )
             prompt_active = bool(
                 condition.prompt_injection.enabled
                 and _scope_matches(prompt_rule, plan_item_id)
                 and _cadence_matches(prompt_rule, request_sequence, prompt_number)
                 and prompt_draw < prompt_rule.probability
-            )
-            prior_memory_active = False
-            if condition.memory_injection.persist_for_session:
-                prior_memory_active = bool(
-                    (
-                        await db.execute(
-                            select(ExperimentLLMRequest.id)
-                            .where(
-                                ExperimentLLMRequest.experiment_session_id == experiment_session.id,
-                                ExperimentLLMRequest.memory_active.is_(True),
-                            )
-                            .limit(1)
-                        )
-                    ).first()
-                )
-            memory_active = bool(
-                condition.memory_injection.enabled
-                and _scope_matches(memory_rule, plan_item_id)
-                and (
-                    prior_memory_active
-                    or (
-                        _cadence_matches(memory_rule, request_sequence, prompt_number)
-                        and memory_draw < memory_rule.probability
-                    )
-                )
             )
             timing = condition.response_timing
             now = time.time_ns()
@@ -169,12 +139,8 @@ async def prepare_request(experiment_session, plan, session_task, metadata) -> O
                 prompt_number=prompt_number,
                 assignment_identifier=experiment_session.condition_assignment_id,
                 prompt_active=prompt_active,
-                memory_active=memory_active,
-                memory_latched=prior_memory_active,
                 prompt_draw=prompt_draw,
-                memory_draw=memory_draw,
                 prompt_randomization_id=prompt_randomization_id,
-                memory_randomization_id=memory_randomization_id,
                 timing_mode=timing.mode.value,
                 timing_parameters=timing.model_dump(mode='json'),
                 request_at=now,
@@ -188,7 +154,6 @@ async def prepare_request(experiment_session, plan, session_task, metadata) -> O
                     request_id=request_row.id,
                     condition=condition,
                     prompt_active=prompt_active,
-                    memory_active=memory_active,
                     timing=timing,
                 )
             except IntegrityError:
@@ -197,27 +162,20 @@ async def prepare_request(experiment_session, plan, session_task, metadata) -> O
 
 
 def apply_request_injections(messages: list[dict], context: Optional[PerturbationRequestContext]) -> list[dict]:
-    if context is None or not (context.prompt_active or context.memory_active):
+    if context is None or not context.prompt_active:
         return messages
     result = [dict(message) for message in messages]
-    if context.memory_active:
-        result = add_or_update_system_message(
-            f'<experiment_context>\n{context.condition.memory_injection.content}\n</experiment_context>',
-            result,
-            append=True,
+    prompt = context.condition.prompt_injection
+    wrapped = f'<experiment_instruction>\n{prompt.instruction}\n</experiment_instruction>'
+    if prompt.position.value == 'SYSTEM':
+        result = add_or_update_system_message(wrapped, result, append=True)
+    else:
+        last_user = next(
+            (index for index in range(len(result) - 1, -1, -1) if result[index].get('role') == 'user'), None
         )
-    if context.prompt_active:
-        prompt = context.condition.prompt_injection
-        wrapped = f'<experiment_instruction>\n{prompt.instruction}\n</experiment_instruction>'
-        if prompt.position.value == 'SYSTEM':
-            result = add_or_update_system_message(wrapped, result, append=True)
-        else:
-            last_user = next(
-                (index for index in range(len(result) - 1, -1, -1) if result[index].get('role') == 'user'), None
-            )
-            if last_user is not None:
-                insertion_index = last_user if prompt.position.value == 'BEFORE_PARTICIPANT' else last_user + 1
-                result.insert(insertion_index, {'role': 'user', 'content': wrapped})
+        if last_user is not None:
+            insertion_index = last_user if prompt.position.value == 'BEFORE_PARTICIPANT' else last_user + 1
+            result.insert(insertion_index, {'role': 'user', 'content': wrapped})
     return result
 
 
@@ -316,6 +274,113 @@ def _split_sse_content(line: str, chunk_size: int, unit: str = 'CHARACTER'):
         return [line]
 
 
+def _replace_sse_content(line: str, content: str) -> str:
+    raw = line[5:].strip()
+    data = json.loads(raw)
+    choices = data.get('choices') or []
+    if choices:
+        data['choices'][0]['delta']['content'] = content
+    else:
+        data['delta'] = content
+    return f'data: {json.dumps(data)}\n\n'
+
+
+def _deterministic_chunk_size(seed: str, index: int, minimum: int, maximum: int) -> int:
+    minimum = max(1, minimum)
+    maximum = max(minimum, maximum)
+    if minimum == maximum:
+        return minimum
+    digest = hashlib.sha256(f'{seed}:{index}'.encode()).digest()
+    return minimum + int.from_bytes(digest[:4], 'big') % (maximum - minimum + 1)
+
+
+def _bounded_text_chunks(text: str, seed: str, unit: str, minimum: int, maximum: int) -> list[str]:
+    if not text:
+        return []
+    values = re.findall(r'\S+\s*', text) if unit == 'WORD' else list(text)
+    chunks = []
+    cursor = 0
+    index = 0
+    while cursor < len(values):
+        size = _deterministic_chunk_size(seed, index, minimum, maximum)
+        chunks.append(''.join(values[cursor : cursor + size]))
+        cursor += size
+        index += 1
+    if len(chunks) == 1 and len(chunks[0]) > 1:
+        midpoint = max(1, len(chunks[0]) // 2)
+        chunks = [chunks[0][:midpoint], chunks[0][midpoint:]]
+    return chunks
+
+
+class _BoundedSSEChunker:
+    def __init__(self, seed: str, unit: str, minimum: int, maximum: int):
+        self.seed = seed
+        self.unit = unit
+        self.minimum = minimum
+        self.maximum = maximum
+        self.index = 0
+        self.template = None
+        self.pending_text = ''
+        self.pending_events: list[str] = []
+
+    def _target(self) -> int:
+        return _deterministic_chunk_size(
+            self.seed,
+            self.index,
+            self.minimum,
+            self.maximum,
+        )
+
+    def feed(self, line: str) -> list[str]:
+        text = _extract_text(line)
+        if not text:
+            return []
+        if self.template is None:
+            self.template = line
+        if self.unit == 'CHUNK':
+            self.pending_events.append(text)
+        else:
+            self.pending_text += text
+        return self._drain(final=False)
+
+    def flush(self) -> list[str]:
+        return self._drain(final=True)
+
+    def _drain(self, final: bool) -> list[str]:
+        chunks = []
+        while self.template is not None:
+            target = self._target()
+            if self.unit == 'CHUNK':
+                if len(self.pending_events) < target and not final:
+                    break
+                if not self.pending_events:
+                    break
+                take = min(target, len(self.pending_events))
+                content = ''.join(self.pending_events[:take])
+                del self.pending_events[:take]
+            elif self.unit == 'WORD':
+                words = re.findall(r'\S+\s*', self.pending_text)
+                complete = len(words) if final or self.pending_text[-1:].isspace() else max(0, len(words) - 1)
+                if complete < target and not final:
+                    break
+                if not words:
+                    break
+                take = min(target, len(words))
+                content = ''.join(words[:take])
+                self.pending_text = self.pending_text[len(content) :]
+            else:
+                if len(self.pending_text) < target and not final:
+                    break
+                if not self.pending_text:
+                    break
+                take = min(target, len(self.pending_text))
+                content = self.pending_text[:take]
+                self.pending_text = self.pending_text[take:]
+            chunks.append(_replace_sse_content(self.template, content))
+            self.index += 1
+        return chunks
+
+
 async def wrap_streaming_response(response, context: Optional[PerturbationRequestContext]):
     if context is None or not isinstance(response, StreamingResponse):
         return response
@@ -337,6 +402,12 @@ async def wrap_streaming_response(response, context: Optional[PerturbationReques
         received_checkpoint = 0
         reveal_checkpoint = 0
         completed_normally = False
+        target_chunker = _BoundedSSEChunker(
+            request_id,
+            timing.stream_unit.value if timing.mode == ResponseTimingMode.SLOW else 'CHARACTER',
+            timing.minimum_chunk_size if timing.mode == ResponseTimingMode.SLOW else timing.maximum_chunk_size,
+            timing.maximum_chunk_size,
+        )
         try:
             async for raw_line in original:
                 line = raw_line.decode('utf-8', 'replace') if isinstance(raw_line, bytes) else raw_line
@@ -372,29 +443,10 @@ async def wrap_streaming_response(response, context: Optional[PerturbationReques
                     timing.mode == ResponseTimingMode.FAST and timing.rate_unit.value == 'TARGET_DURATION'
                 )
                 if target_duration_mode and text:
-                    pieces = _split_sse_content(
-                        line,
-                        timing.maximum_chunk_size,
-                        timing.stream_unit.value if timing.mode == ResponseTimingMode.SLOW else 'CHARACTER',
-                    )
+                    pieces = target_chunker.feed(line)
                     target_received_text.append(text)
                     received_length += len(text)
-                    if not first_emit:
-                        first_emit = True
-                        first_emit_monotonic = time.monotonic()
-                        await update_request(request_id, server_first_emit_at=time.time_ns())
-                        yield pieces[0]
-                        reveal_cursor += len(_extract_text(pieces[0]))
-                        slow_buffer.extend(pieces[1:])
-                        await update_request(
-                            request_id,
-                            buffered=True,
-                            buffered_output={'content': ''.join(target_received_text)},
-                            reveal_cursor=reveal_cursor,
-                        )
-                        received_checkpoint = received_length
-                    else:
-                        slow_buffer.extend(pieces)
+                    slow_buffer.extend(pieces)
                     if received_length - received_checkpoint >= 200:
                         received_checkpoint = received_length
                         await update_request(
@@ -441,6 +493,23 @@ async def wrap_streaming_response(response, context: Optional[PerturbationReques
                 timing.mode == ResponseTimingMode.FAST and timing.rate_unit.value == 'TARGET_DURATION'
             )
             if target_duration_mode:
+                slow_buffer.extend(target_chunker.flush())
+                if len(slow_buffer) == 1:
+                    only_text = _extract_text(slow_buffer[0])
+                    if len(only_text) > 1:
+                        midpoint = max(1, len(only_text) // 2)
+                        slow_buffer = [
+                            _replace_sse_content(slow_buffer[0], only_text[:midpoint]),
+                            _replace_sse_content(slow_buffer[0], only_text[midpoint:]),
+                        ]
+                if slow_buffer:
+                    first_emit = True
+                    first_emit_monotonic = time.monotonic()
+                    await update_request(request_id, server_first_emit_at=time.time_ns())
+                    first_piece, *remaining_pieces = slow_buffer
+                    yield first_piece
+                    reveal_cursor += len(_extract_text(first_piece))
+                    slow_buffer = remaining_pieces
                 full_text = ''.join(target_received_text)
                 if full_text:
                     await update_request(
@@ -449,24 +518,30 @@ async def wrap_streaming_response(response, context: Optional[PerturbationReques
                         buffered_output={'content': full_text},
                         reveal_cursor=reveal_cursor,
                     )
-                remaining_text = sum(len(_extract_text(line)) for line in slow_buffer)
-                elapsed = time.monotonic() - (first_emit_monotonic or time.monotonic())
-                remaining_seconds = max(0.0, float(timing.target_duration_seconds or 0) - elapsed)
-                rate = remaining_text / remaining_seconds if remaining_seconds > 0 else float('inf')
-                deadline = (first_emit_monotonic or time.monotonic()) + float(timing.target_duration_seconds or 0)
+                started = first_emit_monotonic or time.monotonic()
+                duration = float(timing.target_duration_seconds or 0)
+                weights = []
                 for emitted in slow_buffer:
                     emitted_text = _extract_text(emitted)
-                    if emitted_text and rate != float('inf'):
-                        pause = len(emitted_text) / max(rate, 1.0)
-                        if (
-                            timing.mode == ResponseTimingMode.SLOW
-                            and timing.punctuation_pauses
-                            and re.search(r'[.!?,;:]\s*$', emitted_text)
-                        ):
-                            pause = min(pause * 1.35, pause + 0.15)
-                        pause = min(pause, max(0.0, deadline - time.monotonic()))
-                        if pause:
-                            await asyncio.sleep(pause)
+                    weight = max(1, len(emitted_text))
+                    if (
+                        timing.mode == ResponseTimingMode.SLOW
+                        and timing.punctuation_pauses
+                        and re.search(r'[.!?,;:]\s*$', emitted_text)
+                    ):
+                        weight *= 1.35
+                    weights.append(weight)
+                total_weight = sum(weights)
+                cumulative_weight = 0.0
+                for emitted in slow_buffer:
+                    emitted_text = _extract_text(emitted)
+                    cumulative_weight += weights.pop(0)
+                    deadline = started + duration * (
+                        cumulative_weight / max(total_weight, 1)
+                    )
+                    remaining = deadline - time.monotonic()
+                    if remaining > 0:
+                        await asyncio.sleep(remaining)
                     yield emitted
                     reveal_cursor += len(emitted_text)
                     if reveal_cursor - reveal_checkpoint >= 200:
@@ -606,19 +681,14 @@ async def apply_nonstream_timing(response, context: Optional[PerturbationRequest
         )
         return response
 
-    if timing.mode == ResponseTimingMode.SLOW and timing.stream_unit.value == 'WORD':
-        words = re.findall(r'\S+\s*', content)
-        chunks = [
-            ''.join(words[start : start + timing.maximum_chunk_size])
-            for start in range(0, len(words), timing.maximum_chunk_size)
-        ]
-    else:
-        chunks = [
-            content[start : start + timing.maximum_chunk_size]
-            for start in range(0, len(content), timing.maximum_chunk_size)
-        ]
-    chunks = chunks or [content]
     request_id = context.request_id
+    chunks = _bounded_text_chunks(
+        content,
+        request_id,
+        timing.stream_unit.value if timing.mode == ResponseTimingMode.SLOW else 'CHARACTER',
+        timing.minimum_chunk_size if timing.mode == ResponseTimingMode.SLOW else timing.maximum_chunk_size,
+        timing.maximum_chunk_size,
+    ) or [content]
     received_monotonic = time.monotonic()
 
     async def synthetic_generator():
@@ -640,34 +710,46 @@ async def apply_nonstream_timing(response, context: Optional[PerturbationRequest
                     await asyncio.sleep(remaining)
                 await update_request(request_id, artificial_delay_ended_at=time.time_ns())
             started = time.monotonic()
-            deadline = started + float(timing.target_duration_seconds or 0)
+            target_duration_mode = timing.mode == ResponseTimingMode.SLOW or (
+                timing.mode == ResponseTimingMode.FAST
+                and timing.rate_unit.value == 'TARGET_DURATION'
+            )
+            interval_weights = []
+            for chunk in chunks[1:]:
+                if (
+                    timing.mode == ResponseTimingMode.FAST
+                    and timing.rate_unit.value == 'WORDS_PER_SECOND'
+                ):
+                    weight = max(1, len(re.findall(r'\S+', chunk)))
+                else:
+                    weight = max(1, len(chunk))
+                if (
+                    timing.mode == ResponseTimingMode.SLOW
+                    and timing.punctuation_pauses
+                    and re.search(r'[.!?,;:]\s*$', chunk)
+                ):
+                    weight *= 1.35
+                interval_weights.append(weight)
+            total_weight = sum(interval_weights)
+            cumulative_weight = 0.0
             for index, chunk in enumerate(chunks):
                 if index:
-                    if timing.mode == ResponseTimingMode.DELAYED:
-                        pause = len(chunk) / 500
-                    elif timing.mode == ResponseTimingMode.FAST and timing.rate_unit.value == 'WORDS_PER_SECOND':
-                        pause = max(1, len(re.findall(r'\S+', chunk))) / float(timing.rate_value or 1)
-                    elif timing.mode == ResponseTimingMode.FAST and timing.rate_unit.value == 'CHARACTERS_PER_SECOND':
-                        pause = len(chunk) / float(timing.rate_value or 1)
+                    weight = interval_weights[index - 1]
+                    cumulative_weight += weight
+                    if target_duration_mode:
+                        deadline = started + float(
+                            timing.target_duration_seconds or 0
+                        ) * (cumulative_weight / max(total_weight, 1))
                     else:
-                        remaining_chars = sum(len(part) for part in chunks[index:])
-                        remaining_time = max(
-                            0.0,
-                            float(timing.target_duration_seconds or 0) - (time.monotonic() - started),
+                        rate = (
+                            500
+                            if timing.mode == ResponseTimingMode.DELAYED
+                            else float(timing.rate_value or 1)
                         )
-                        pause = len(chunk) * remaining_time / max(remaining_chars, 1)
-                    if (
-                        timing.mode == ResponseTimingMode.SLOW
-                        and timing.punctuation_pauses
-                        and re.search(r'[.!?,;:]\s*$', chunk)
-                    ):
-                        pause = min(pause * 1.35, pause + 0.15)
-                    if timing.mode == ResponseTimingMode.SLOW or (
-                        timing.mode == ResponseTimingMode.FAST and timing.rate_unit.value == 'TARGET_DURATION'
-                    ):
-                        pause = min(pause, max(0.0, deadline - time.monotonic()))
-                    if pause:
-                        await asyncio.sleep(pause)
+                        deadline = started + cumulative_weight / rate
+                    remaining = deadline - time.monotonic()
+                    if remaining > 0:
+                        await asyncio.sleep(remaining)
                 if index == 0:
                     await update_request(request_id, server_first_emit_at=time.time_ns())
                 yield f'data: {json.dumps({"choices": [{"delta": {"content": chunk}}]})}\n\n'

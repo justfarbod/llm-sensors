@@ -67,6 +67,7 @@ class QuestionTask(Base):
     status = Column(Text, nullable=False, default=QuestionTaskStatus.DRAFT.value)
     locked_at = Column(BigInteger, nullable=True)
     archived_at = Column(BigInteger, nullable=True)
+    workflow_managed = Column(Boolean, nullable=False, default=False)
     created_at = Column(BigInteger, nullable=False)
     updated_at = Column(BigInteger, nullable=False)
 
@@ -345,7 +346,7 @@ def grade_fill_blanks(
 class QuestionTaskTable:
     async def list_tasks(self, db: Optional[AsyncSession] = None, include_archived: bool = False):
         async with get_async_db_context(db) as db:
-            stmt = select(QuestionTask).order_by(QuestionTask.updated_at.desc())
+            stmt = select(QuestionTask).where(QuestionTask.workflow_managed.is_(False)).order_by(QuestionTask.updated_at.desc())
             if not include_archived:
                 stmt = stmt.where(QuestionTask.status != QuestionTaskStatus.ARCHIVED.value)
             tasks = (await db.execute(stmt)).scalars().all()

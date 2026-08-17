@@ -15,8 +15,9 @@
 	import Plus from '$lib/components/icons/Plus.svelte';
 	import XMark from '$lib/components/icons/XMark.svelte';
 	import QuestionTasks from './QuestionTasks.svelte';
-	import ExperimentPlans from './ExperimentPlans.svelte';
+	import ExperimentWorkflows from './ExperimentWorkflows.svelte';
 	import SurveyTasks from './SurveyTasks.svelte';
+	import './experiment-admin.css';
 
 	type EssayTopic = {
 		id: string;
@@ -35,17 +36,25 @@
 	let saving = false;
 	let loading = true;
 	let activeTab: 'essay' | 'question' | 'survey' | 'plans' = 'essay';
+	let topicsLoadGeneration = 0;
 
 	const loadTopics = async () => {
+		const generation = ++topicsLoadGeneration;
 		loading = true;
 		try {
 			const response = await getEssayTopics(localStorage.token);
+			if (generation !== topicsLoadGeneration) return;
 			topics = Array.isArray(response) ? response : [];
 		} catch (error) {
-			toast.error(`${error}`);
+			if (generation === topicsLoadGeneration) toast.error(`${error}`);
 		} finally {
-			loading = false;
+			if (generation === topicsLoadGeneration) loading = false;
 		}
+	};
+
+	const selectTab = async (tab: typeof activeTab) => {
+		activeTab = tab;
+		if (tab === 'essay') await loadTopics();
 	};
 
 	const resetForm = () => {
@@ -102,128 +111,152 @@
 			class="rounded-lg px-3 py-2 text-sm {activeTab === 'essay'
 				? 'bg-gray-100 font-medium dark:bg-gray-850'
 				: 'text-gray-500'}"
-			on:click={() => (activeTab = 'essay')}>{$i18n.t('Essay Tasks')}</button
+			on:click={() => selectTab('essay')}>{$i18n.t('Essay Tasks')}</button
 		>
 		<button
 			class="rounded-lg px-3 py-2 text-sm {activeTab === 'question'
 				? 'bg-gray-100 font-medium dark:bg-gray-850'
 				: 'text-gray-500'}"
-			on:click={() => (activeTab = 'question')}>{$i18n.t('Question Tasks')}</button
+			on:click={() => selectTab('question')}>{$i18n.t('Question Tasks')}</button
 		>
 		<button
 			class="rounded-lg px-3 py-2 text-sm {activeTab === 'survey'
 				? 'bg-gray-100 font-medium dark:bg-gray-850'
 				: 'text-gray-500'}"
-			on:click={() => (activeTab = 'survey')}>{$i18n.t('Survey Tasks')}</button
+			on:click={() => selectTab('survey')}>{$i18n.t('Survey Tasks')}</button
 		>
 		<button
 			class="rounded-lg px-3 py-2 text-sm {activeTab === 'plans'
 				? 'bg-gray-100 font-medium dark:bg-gray-850'
 				: 'text-gray-500'}"
-			on:click={() => (activeTab = 'plans')}>{$i18n.t('Experiment Plans')}</button
+			on:click={() => selectTab('plans')}>{$i18n.t('Workflows')}</button
 		>
 	</div>
 	{#if activeTab === 'plans'}
-		<ExperimentPlans />
+		<ExperimentWorkflows onResourcesImported={loadTopics} />
 	{:else if activeTab === 'question'}
 		<QuestionTasks />
 	{:else if activeTab === 'survey'}
 		<SurveyTasks />
 	{:else}
-		<div>
-			<div class="text-xl font-medium">{$i18n.t('Essay Topics')}</div>
-			<div class="mt-1 text-sm text-gray-500">
-				{$i18n.t('Create the topics that can be assigned to essay-enabled groups.')}
-			</div>
-		</div>
-
-		<form
-			class="rounded-3xl border border-gray-100 bg-white p-4 dark:border-gray-850 dark:bg-gray-900"
-			on:submit={(event) => {
-				event.preventDefault();
-				saveTopic();
-			}}
-		>
-			<div class="mb-3 flex items-center justify-between">
-				<div class="text-sm font-medium">
-					{editingId ? $i18n.t('Edit Essay Topic') : $i18n.t('Add Essay Topic')}
-				</div>
-				{#if editingId}
-					<button
-						type="button"
-						class="rounded-lg p-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-						on:click={resetForm}
-						aria-label={$i18n.t('Cancel')}
-					>
-						<XMark className="size-4" />
-					</button>
-				{/if}
-			</div>
-
-			<input
-				bind:value={title}
-				class="w-full rounded-xl bg-gray-50 px-3 py-2 text-sm outline-hidden dark:bg-gray-850"
-				placeholder={$i18n.t('Topic title')}
-				required
-			/>
-			<textarea
-				bind:value={question}
-				class="mt-2 min-h-28 w-full resize-y rounded-xl bg-gray-50 px-3 py-2 text-sm outline-hidden dark:bg-gray-850"
-				placeholder={$i18n.t('Essay question')}
-				required
-			></textarea>
-
-			<div class="mt-3 flex justify-end">
-				<button
-					type="submit"
-					disabled={saving || !title.trim() || !question.trim()}
-					class="flex items-center gap-1.5 rounded-full bg-black px-4 py-2 text-xs font-medium text-white disabled:opacity-40 dark:bg-white dark:text-black"
+		<div class="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+			<section class="min-w-0 space-y-4">
+				<form
+					class="rounded-2xl border border-gray-100 p-4 dark:border-gray-850"
+					on:submit={(event) => {
+						event.preventDefault();
+						saveTopic();
+					}}
 				>
-					<Plus className="size-3" />
-					{editingId ? $i18n.t('Update Topic') : $i18n.t('Add Topic')}
-				</button>
-			</div>
-		</form>
+					<div class="flex flex-wrap items-start justify-between gap-2">
+						<div>
+							<h2 class="font-medium">
+								{editingId ? $i18n.t('Edit Essay Topic') : $i18n.t('New Essay Topic')}
+							</h2>
+							<p class="mt-1 text-xs text-gray-500">
+								{$i18n.t('Create topics that can be selected in experiment workflows.')}
+							</p>
+						</div>
+						<button type="button" class="essay-button" on:click={resetForm}>
+							{$i18n.t('New')}
+						</button>
+					</div>
+					<div class="mt-4 space-y-3">
+						<label class="experiment-label">
+							{$i18n.t('Topic title')}
+							<input class="experiment-input" bind:value={title} required />
+						</label>
+						<label class="experiment-label">
+							{$i18n.t('Essay question')}
+							<textarea class="experiment-input min-h-32 resize-y" bind:value={question} required
+							></textarea>
+						</label>
+					</div>
+					<div class="mt-4 flex justify-end gap-2">
+						{#if editingId}
+							<button type="button" class="essay-button" on:click={resetForm}>
+								<XMark className="size-3.5" />
+								{$i18n.t('Cancel')}
+							</button>
+						{/if}
+						<button
+							type="submit"
+							disabled={saving || !title.trim() || !question.trim()}
+							class="essay-primary"
+						>
+							<Plus className="size-3" />
+							{editingId ? $i18n.t('Update Topic') : $i18n.t('Save Topic')}
+						</button>
+					</div>
+				</form>
+			</section>
 
-		<div class="flex flex-col gap-2">
-			{#if loading}
-				<div class="py-16 text-center text-sm text-gray-500">{$i18n.t('Loading...')}</div>
-			{:else}
-				{#each topics as topic (topic.id)}
-					<div
-						class="rounded-2xl border border-gray-100 bg-white px-4 py-3 dark:border-gray-850 dark:bg-gray-900"
-					>
-						<div class="flex items-start justify-between gap-3">
-							<div class="min-w-0">
-								<div class="text-sm font-medium">{topic.title}</div>
-								<div class="mt-1 whitespace-pre-wrap text-xs leading-5 text-gray-500">
+			<aside class="min-w-0">
+				<h2 class="mb-2 text-sm font-medium">{$i18n.t('Essay Topics')}</h2>
+				{#if loading}<p class="py-8 text-center text-sm text-gray-500">
+						{$i18n.t('Loading...')}
+					</p>{/if}
+				<div class="space-y-2">
+					{#each topics as topic (topic.id)}
+						<div class="rounded-xl border border-gray-100 p-3 dark:border-gray-850">
+							<button class="w-full min-w-0 text-left" on:click={() => editTopic(topic)}>
+								<div class="truncate text-sm font-medium">{topic.title}</div>
+								<div class="mt-1 line-clamp-3 whitespace-pre-wrap text-xs leading-5 text-gray-500">
 									{topic.question}
 								</div>
-							</div>
-							<div class="flex shrink-0 gap-1">
-								<button
-									class="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-									on:click={() => editTopic(topic)}
-									aria-label={$i18n.t('Edit')}
-								>
+							</button>
+							<div class="mt-2 flex flex-wrap gap-1">
+								<button class="essay-button" on:click={() => editTopic(topic)}>
 									<Pencil className="size-3.5" />
+									{$i18n.t('Edit')}
 								</button>
-								<button
-									class="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-red-600 dark:hover:bg-gray-800"
-									on:click={() => removeTopic(topic.id)}
-									aria-label={$i18n.t('Delete')}
-								>
+								<button class="essay-button text-red-600" on:click={() => removeTopic(topic.id)}>
 									<GarbageBin className="size-3.5" />
+									{$i18n.t('Delete')}
 								</button>
 							</div>
 						</div>
-					</div>
-				{:else}
-					<div class="py-16 text-center text-sm text-gray-500">
-						{$i18n.t('No essay topics yet.')}
-					</div>
-				{/each}
-			{/if}
+					{:else}
+						{#if !loading}<p class="py-8 text-center text-sm text-gray-500">
+								{$i18n.t('No essay topics yet.')}
+							</p>{/if}
+					{/each}
+				</div>
+			</aside>
 		</div>
 	{/if}
 </div>
+
+<style>
+	:global(.essay-button) {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		border-radius: 0.6rem;
+		background: rgb(243 244 246);
+		padding: 0.45rem 0.7rem;
+		font-size: 0.75rem;
+		font-weight: 500;
+	}
+	:global(.dark .essay-button) {
+		background: rgb(31 41 55);
+	}
+	:global(.essay-primary) {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		border-radius: 9999px;
+		background: black;
+		padding: 0.55rem 1rem;
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: white;
+	}
+	:global(.dark .essay-primary) {
+		background: white;
+		color: black;
+	}
+	:global(.essay-primary:disabled) {
+		opacity: 0.4;
+	}
+</style>

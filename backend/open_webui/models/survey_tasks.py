@@ -41,6 +41,7 @@ class SurveyTask(Base):
     status = Column(Text, nullable=False, default=SurveyTaskStatus.DRAFT.value)
     locked_at = Column(BigInteger, nullable=True)
     archived_at = Column(BigInteger, nullable=True)
+    workflow_managed = Column(Boolean, nullable=False, default=False)
     created_at = Column(BigInteger, nullable=False)
     updated_at = Column(BigInteger, nullable=False)
 
@@ -197,7 +198,7 @@ class ParticipantSurveyTaskModel(BaseModel):
 class SurveyTaskTable:
     async def list_tasks(self, db: Optional[AsyncSession] = None, include_archived: bool = False):
         async with get_async_db_context(db) as db:
-            stmt = select(SurveyTask).order_by(SurveyTask.updated_at.desc())
+            stmt = select(SurveyTask).where(SurveyTask.workflow_managed.is_(False)).order_by(SurveyTask.updated_at.desc())
             if not include_archived:
                 stmt = stmt.where(SurveyTask.status != SurveyTaskStatus.ARCHIVED.value)
             rows = list((await db.execute(stmt)).scalars().all())

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from open_webui.internal.db import Base, get_async_db_context
 from open_webui.models.essays import EssayTopic, EssayTopicModel
+from open_webui.models.groups import Group
 from open_webui.models.question_tasks import QuestionTask, QuestionTaskStatus
 from open_webui.models.survey_tasks import SurveyTask, SurveyTaskStatus
 from open_webui.models.experiment_perturbations import (
@@ -18,7 +19,6 @@ from open_webui.models.experiment_perturbations import (
     ExperimentConditionForm,
     ExperimentConditionModel,
     ExperimentConditionTaskScope,
-    ExperimentMemoryInjection,
     ExperimentPromptInjection,
     ExperimentResponseTiming,
     ExperimentWarningModal,
@@ -185,11 +185,11 @@ class ExperimentPlanForm(BaseModel):
             raise ValueError('Enabled condition allocation percentages must total 100.')
         item_ids = {item.id for item in self.items if item.id}
         for condition in enabled_conditions:
-            for settings in (condition.prompt_injection, condition.memory_injection):
-                if settings.activation.scope.value == 'SELECTED_TASKS' and not set(
-                    settings.activation.plan_item_ids
-                ).issubset(item_ids):
-                    raise ValueError('Condition task scope references an unavailable plan item.')
+            settings = condition.prompt_injection
+            if settings.activation.scope.value == 'SELECTED_TASKS' and not set(
+                settings.activation.plan_item_ids
+            ).issubset(item_ids):
+                raise ValueError('Condition task scope references an unavailable plan item.')
         return self
 
 
@@ -295,7 +295,6 @@ class ExperimentPlanTable:
             conditions = []
             for condition in condition_rows:
                 prompt = await db.get(ExperimentPromptInjection, condition.id)
-                memory = await db.get(ExperimentMemoryInjection, condition.id)
                 warning = await db.get(ExperimentWarningModal, condition.id)
                 timing = await db.get(ExperimentResponseTiming, condition.id)
                 scopes = list(
@@ -310,7 +309,6 @@ class ExperimentPlanTable:
                     .all()
                 )
                 prompt_scope = [row.plan_item_id for row in scopes if row.perturbation_type == 'PROMPT']
-                memory_scope = [row.plan_item_id for row in scopes if row.perturbation_type == 'MEMORY']
                 conditions.append(
                     ExperimentConditionModel.model_validate(
                         {
@@ -331,20 +329,6 @@ class ExperimentPlanTable:
                                     'probability': prompt.probability if prompt else 1,
                                     'scope': prompt.scope if prompt else 'ALL_TASKS',
                                     'plan_item_ids': prompt_scope,
-                                },
-                            },
-                            'memory_injection': {
-                                'enabled': memory.enabled if memory else False,
-                                'content': memory.content if memory else '',
-                                'persist_for_session': memory.persist_for_session if memory else False,
-                                'activation': {
-                                    'mode': memory.activation_mode if memory else 'EVERY_REQUEST',
-                                    'count': memory.activation_count if memory else None,
-                                    'range_start': memory.range_start if memory else None,
-                                    'range_end': memory.range_end if memory else None,
-                                    'probability': memory.probability if memory else 1,
-                                    'scope': memory.scope if memory else 'ALL_TASKS',
-                                    'plan_item_ids': memory_scope,
                                 },
                             },
                             'warning_modal': {
@@ -432,6 +416,13 @@ class ExperimentPlanTable:
 
     async def save_for_group(self, group_id: str, form: ExperimentPlanForm, db: Optional[AsyncSession] = None):
         async with get_async_db_context(db) as db:
+            group = (
+                await db.execute(
+                    select(Group).where(Group.id == group_id).with_for_update()
+                )
+            ).scalar_one_or_none()
+            if not group:
+                raise HTTPException(status_code=404, detail='Group not found.')
             topic_ids = set((await db.execute(select(EssayTopic.id))).scalars().all())
             question_tasks = {row.id: row for row in (await db.execute(select(QuestionTask))).scalars().all()}
             survey_tasks = {row.id: row for row in (await db.execute(select(SurveyTask))).scalars().all()}
@@ -545,10 +536,10 @@ class ExperimentPlanTable:
                         enabled=form_item.enabled,
                     )
                 )
-                if (
-                    form_item.task_type == ExperimentTaskType.ESSAY
-                    and form_item.essay_topic_mode == EssayTopicMode.RANDOM_SELECTED
-                ):
+                if form_item.task_type == ExperimentTaskType.ESSAY and form_item.essay_topic_mode in {
+                    EssayTopicMode.RANDOM_SELECTED,
+                    EssayTopicMode.RANDOM_ALL,
+                }:
                     for topic_id in dict.fromkeys(form_item.essay_topic_ids):
                         db.add(ExperimentPlanItemTopic(plan_item_id=item_id, topic_id=topic_id))
             await db.flush()
@@ -572,9 +563,6 @@ class ExperimentPlanTable:
                 )
                 await db.execute(delete(ExperimentWarningModal).where(ExperimentWarningModal.condition_id.in_(old_ids)))
                 await db.execute(
-                    delete(ExperimentMemoryInjection).where(ExperimentMemoryInjection.condition_id.in_(old_ids))
-                )
-                await db.execute(
                     delete(ExperimentPromptInjection).where(ExperimentPromptInjection.condition_id.in_(old_ids))
                 )
                 await db.execute(delete(ExperimentCondition).where(ExperimentCondition.id.in_(old_ids)))
@@ -596,7 +584,6 @@ class ExperimentPlanTable:
                 )
             )
             prompt = form.prompt_injection
-            memory = form.memory_injection
             db.add(
                 ExperimentPromptInjection(
                     condition_id=condition_id,
@@ -609,20 +596,6 @@ class ExperimentPlanTable:
                     range_end=prompt.activation.range_end,
                     probability=prompt.activation.probability,
                     scope=prompt.activation.scope.value,
-                )
-            )
-            db.add(
-                ExperimentMemoryInjection(
-                    condition_id=condition_id,
-                    enabled=memory.enabled,
-                    content=memory.content,
-                    persist_for_session=memory.persist_for_session,
-                    activation_mode=memory.activation.mode.value,
-                    activation_count=memory.activation.count,
-                    range_start=memory.activation.range_start,
-                    range_end=memory.activation.range_end,
-                    probability=memory.activation.probability,
-                    scope=memory.activation.scope.value,
                 )
             )
             warning = form.warning_modal
@@ -656,20 +629,16 @@ class ExperimentPlanTable:
                     rate_unit=timing.rate_unit.value,
                 )
             )
-            for perturbation_type, ids in (
-                ('PROMPT', prompt.activation.plan_item_ids),
-                ('MEMORY', memory.activation.plan_item_ids),
-            ):
-                for plan_item_id in ids:
-                    mapped_id = item_map.get(plan_item_id, plan_item_id)
-                    if mapped_id in saved_item_ids:
-                        db.add(
-                            ExperimentConditionTaskScope(
-                                condition_id=condition_id,
-                                perturbation_type=perturbation_type,
-                                plan_item_id=mapped_id,
-                            )
+            for plan_item_id in prompt.activation.plan_item_ids:
+                mapped_id = item_map.get(plan_item_id, plan_item_id)
+                if mapped_id in saved_item_ids:
+                    db.add(
+                        ExperimentConditionTaskScope(
+                            condition_id=condition_id,
+                            perturbation_type='PROMPT',
+                            plan_item_id=mapped_id,
                         )
+                    )
 
     async def _delete_items(self, plan_id: str, db: AsyncSession):
         ids = list(
@@ -699,8 +668,11 @@ class ExperimentPlanTable:
         plan = await self.get_plan(plan_id, db=db)
         if not plan:
             raise HTTPException(status_code=422, detail='Experiment plan is unavailable.')
-        all_topics = list((await db.execute(select(EssayTopic))).scalars().all())
-        topic_map = {topic.id: topic for topic in all_topics}
+        topic_rows = list((await db.execute(select(EssayTopic))).scalars().all())
+        topic_map = {topic.id: topic for topic in topic_rows}
+        # Workflow-owned snapshots are resolved by explicit ID below, but must
+        # never leak into the legacy installation-wide RANDOM_ALL candidate set.
+        all_topics = [topic for topic in topic_rows if not topic.workflow_managed]
         now = int(time.time_ns())
         rows = []
         enabled_items = [item for item in plan.items if item.enabled]
@@ -713,7 +685,12 @@ class ExperimentPlanTable:
                     candidates = [topic_map[topic_id] for topic_id in item.essay_topic_ids if topic_id in topic_map]
                     topic = random.choice(candidates) if candidates else None
                 else:
-                    topic = random.choice(all_topics) if all_topics else None
+                    # Workflow applications persist an explicit RANDOM_ALL snapshot in
+                    # ExperimentPlanItemTopic. Legacy plans have no pool and retain the
+                    # original installation-wide behavior.
+                    explicit = [topic_map[topic_id] for topic_id in item.essay_topic_ids if topic_id in topic_map]
+                    candidates = explicit or all_topics
+                    topic = random.choice(candidates) if candidates else None
                 if not topic:
                     raise HTTPException(status_code=422, detail='An Essay Task has no available topic.')
             elif item.task_type == ExperimentTaskType.QUESTION:

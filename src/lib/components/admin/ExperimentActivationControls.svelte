@@ -3,6 +3,7 @@
 	import type { Writable } from 'svelte/store';
 	import type { i18n as i18nType } from 'i18next';
 	import type { ActivationRule, PlanItem } from '$lib/apis/experiment-plans';
+	import './experiment-admin.css';
 
 	export let rule: ActivationRule;
 	export let items: PlanItem[] = [];
@@ -16,9 +17,9 @@
 </script>
 
 <div class="mt-3 grid gap-2 sm:grid-cols-2">
-	<label class="text-xs"
+	<label class="experiment-label"
 		>{$i18n.t('Activation')}
-		<select class="plan-input mt-1" bind:value={rule.mode}>
+		<select class="experiment-input mt-1" bind:value={rule.mode}>
 			<option value="EVERY_REQUEST">{$i18n.t('Every request')}</option><option value="FIRST_REQUEST"
 				>{$i18n.t('First request only')}</option
 			><option value="AFTER_PROMPT_COUNT">{$i18n.t('After prompt count')}</option><option
@@ -26,9 +27,9 @@
 			><option value="PROMPT_RANGE">{$i18n.t('Prompt-number range')}</option>
 		</select>
 	</label>
-	<label class="text-xs"
+	<label class="experiment-label"
 		>{$i18n.t('Activation probability')}<input
-			class="plan-input mt-1"
+			class="experiment-input mt-1"
 			type="number"
 			min="0"
 			max="1"
@@ -36,31 +37,34 @@
 			bind:value={rule.probability}
 		/></label
 	>
-	{#if rule.mode === 'AFTER_PROMPT_COUNT' || rule.mode === 'EVERY_N_PROMPTS'}<label class="text-xs"
+	{#if rule.mode === 'AFTER_PROMPT_COUNT' || rule.mode === 'EVERY_N_PROMPTS'}<label
+			class="experiment-label"
 			>{$i18n.t('Prompt count')}<input
-				class="plan-input mt-1"
+				class="experiment-input mt-1"
 				type="number"
 				min="1"
 				bind:value={rule.count}
 			/></label
 		>{/if}
-	{#if rule.mode === 'PROMPT_RANGE'}<label class="text-xs"
+	{#if rule.mode === 'PROMPT_RANGE'}<label class="experiment-label"
 			>{$i18n.t('Range start')}<input
-				class="plan-input mt-1"
+				class="experiment-input mt-1"
 				type="number"
 				min="1"
 				bind:value={rule.range_start}
 			/></label
-		><label class="text-xs"
+		><label class="experiment-label"
 			>{$i18n.t('Range end')}<input
-				class="plan-input mt-1"
+				class="experiment-input mt-1"
 				type="number"
 				min="1"
 				bind:value={rule.range_end}
 			/></label
 		>{/if}
-	<label class="text-xs"
-		>{$i18n.t('Task or conversation scope')}<select class="plan-input mt-1" bind:value={rule.scope}
+	<label class="experiment-label"
+		>{$i18n.t('Task or conversation scope')}<select
+			class="experiment-input mt-1"
+			bind:value={rule.scope}
 			><option value="ALL_TASKS">{$i18n.t('Every task')}</option><option value="SELECTED_TASKS"
 				>{$i18n.t('Selected tasks')}</option
 			></select

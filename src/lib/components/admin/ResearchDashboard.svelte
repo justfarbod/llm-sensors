@@ -904,8 +904,6 @@
 				<p class="mt-1 text-xs text-gray-500">
 					{detail.configuration_summary?.prompt_injection_enabled
 						? 'Prompt injection; '
-						: ''}{detail.configuration_summary?.memory_injection_enabled
-						? 'Memory injection; '
 						: ''}{detail.configuration_summary?.warning_modal_enabled
 						? 'Warning modal; '
 						: ''}Timing: {detail.configuration_summary?.response_timing_mode ?? 'NORMAL'}

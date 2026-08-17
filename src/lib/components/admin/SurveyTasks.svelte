@@ -14,6 +14,7 @@
 		type SurveyQuestionType,
 		type SurveyTask
 	} from '$lib/apis/survey-tasks';
+	import './experiment-admin.css';
 
 	const i18n: Writable<i18nType> = getContext('i18n');
 	let tasks: SurveyTask[] = [];
@@ -164,12 +165,16 @@
 					<button class="survey-button" on:click={reset}>{$i18n.t('New')}</button>
 				</div>
 			</div>
-			<input class="survey-input mt-3" bind:value={title} placeholder={$i18n.t('Survey title')} />
-			<textarea
-				class="survey-input mt-2 min-h-20"
-				bind:value={description}
-				placeholder={$i18n.t('Survey description or instructions')}
-			></textarea>
+			<div class="mt-4 grid gap-3">
+				<label class="experiment-label">
+					{$i18n.t('Survey title')}
+					<input class="experiment-input" bind:value={title} />
+				</label>
+				<label class="experiment-label">
+					{$i18n.t('Survey description or instructions')}
+					<textarea class="experiment-input min-h-20" bind:value={description}></textarea>
+				</label>
+			</div>
 			{#if editing?.status !== 'DRAFT'}<div
 					class="mt-3 rounded-xl bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-950/20 dark:text-amber-200"
 				>
@@ -197,7 +202,7 @@
 							{$i18n.t('Required')}</label
 						>
 						<select
-							class="survey-input ml-auto !w-auto"
+							class="experiment-input ml-auto !w-auto"
 							value={question.question_type}
 							on:change={(event) =>
 								changeType(index, event.currentTarget.value as SurveyQuestionType)}
@@ -222,21 +227,22 @@
 							>{$i18n.t('Delete')}</button
 						>
 					</div>
-					<input
-						class="survey-input mt-3"
-						bind:value={question.prompt}
-						placeholder={$i18n.t('Question prompt')}
-					/>
-					<textarea
-						class="survey-input mt-2 min-h-20"
-						bind:value={question.description}
-						placeholder={$i18n.t('Optional description')}
-					></textarea>
+					<div class="mt-3 grid gap-3">
+						<label class="experiment-label">
+							{$i18n.t('Question prompt')}
+							<input class="experiment-input" bind:value={question.prompt} />
+						</label>
+						<label class="experiment-label">
+							{$i18n.t('Optional description')}
+							<textarea class="experiment-input min-h-20" bind:value={question.description}
+							></textarea>
+						</label>
+					</div>
 					{#if ['SINGLE_CHOICE', 'MULTIPLE_SELECT'].includes(question.question_type)}
 						<div class="mt-3 space-y-2">
 							{#each question.choices as choice, choiceIndex}<div class="flex gap-2">
 									<input
-										class="survey-input"
+										class="experiment-input"
 										bind:value={choice.text}
 										placeholder={`${$i18n.t('Choice')} ${choiceIndex + 1}`}
 									/>
@@ -262,12 +268,12 @@
 					{:else if question.question_type === 'SCALE'}
 						<div class="mt-3 grid gap-2 sm:grid-cols-2">
 							<input
-								class="survey-input"
+								class="experiment-input"
 								bind:value={question.scale_low_label}
 								placeholder={$i18n.t('Label for 1')}
 							/>
 							<input
-								class="survey-input"
+								class="experiment-input"
 								bind:value={question.scale_high_label}
 								placeholder={$i18n.t('Label for 5')}
 							/>
@@ -365,7 +371,7 @@
 								>{/each}
 						</div>
 					{:else}<textarea
-							class="survey-input mt-3"
+							class="experiment-input mt-3"
 							disabled
 							rows={question.question_type === 'LONG_TEXT' ? 5 : 2}
 						></textarea>{/if}
@@ -374,18 +380,6 @@
 	</div>{/if}
 
 <style>
-	:global(.survey-input) {
-		width: 100%;
-		min-width: 0;
-		border-radius: 0.65rem;
-		background: rgb(249 250 251);
-		padding: 0.55rem 0.7rem;
-		font-size: 0.8rem;
-		outline: none;
-	}
-	:global(.dark .survey-input) {
-		background: rgb(17 24 39);
-	}
 	:global(.survey-button) {
 		border-radius: 0.6rem;
 		background: rgb(243 244 246);

@@ -93,6 +93,7 @@ from open_webui.routers import (
     experiment_telemetry,
     experiment_analytics,
     experiment_plans,
+    experiment_workflows,
     question_tasks,
     survey_tasks,
     folders,
@@ -1450,6 +1451,11 @@ app.include_router(experiments.router, prefix='/api/v1/experiments', tags=['expe
 app.include_router(question_tasks.router, prefix='/api/v1/question-tasks', tags=['question-tasks'])
 app.include_router(survey_tasks.router, prefix='/api/v1/survey-tasks', tags=['survey-tasks'])
 app.include_router(experiment_plans.router, prefix='/api/v1/experiment-plans', tags=['experiment-plans'])
+app.include_router(
+    experiment_workflows.router,
+    prefix='/api/v1/experiment-workflows',
+    tags=['experiment-workflows'],
+)
 app.include_router(
     experiment_telemetry.router,
     prefix='/api/v1/experiments/telemetry',

@@ -4,7 +4,7 @@
 	import type { i18n as i18nType } from 'i18next';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { DropdownMenu } from 'bits-ui';
+	import { Popover } from 'bits-ui';
 
 	import { WEBUI_API_BASE_URL } from '$lib/constants';
 	import { WEBUI_NAME, user } from '$lib/stores';
@@ -14,7 +14,6 @@
 
 	let loaded = false;
 	let showAdvanced = false;
-	let hoverCloseTimer: ReturnType<typeof setTimeout>;
 
 	const primaryLinks = [
 		{ label: 'Research Dashboard', href: '/admin/analytics/overview', match: '/admin/analytics' },
@@ -28,17 +27,6 @@
 		{ label: 'Settings', href: '/admin/settings' },
 		{ label: 'System Analytics', href: '/admin/system-analytics' }
 	];
-
-	const supportsHover = () => window.matchMedia('(hover: hover)').matches;
-	const openAdvanced = () => {
-		if (!supportsHover()) return;
-		clearTimeout(hoverCloseTimer);
-		showAdvanced = true;
-	};
-	const scheduleAdvancedClose = () => {
-		if (!supportsHover()) return;
-		hoverCloseTimer = setTimeout(() => (showAdvanced = false), 160);
-	};
 
 	onMount(async () => {
 		if ($user?.role !== 'admin') {
@@ -82,44 +70,44 @@
 					</a>
 				{/each}
 
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div on:mouseenter={openAdvanced} on:mouseleave={scheduleAdvancedClose}>
-					<DropdownMenu.Root bind:open={showAdvanced}>
-						<DropdownMenu.Trigger
+				<div>
+					<Popover.Root bind:open={showAdvanced}>
+						<Popover.Trigger
 							id="admin-advanced-trigger"
+							openOnHover={true}
+							openDelay={80}
+							closeDelay={220}
 							class="flex min-w-fit items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-900 dark:hover:text-white"
 						>
 							<EllipsisHorizontal className="size-4" />
 							<span>Advanced</span>
-						</DropdownMenu.Trigger>
-						<DropdownMenu.Portal>
-							<DropdownMenu.Content
+						</Popover.Trigger>
+						<Popover.Portal>
+							<Popover.Content
 								align="start"
 								sideOffset={4}
+								trapFocus={false}
+								role="menu"
+								aria-label="Advanced admin navigation"
 								class="z-[9999] w-52 rounded-xl border border-gray-100 bg-white p-1 shadow-xl outline-none dark:border-gray-800 dark:bg-gray-900"
-								onmouseenter={openAdvanced}
-								onmouseleave={scheduleAdvancedClose}
 							>
 								{#each advancedLinks as link}
-									<DropdownMenu.Item textValue={link.label}>
-										{#snippet child({ props })}
-											<a
-												{...props}
-												href={link.href}
-												class="block rounded-lg px-3 py-2 text-sm outline-none {$page.url.pathname.startsWith(
-													link.href
-												)
-													? 'bg-gray-100 font-medium text-gray-900 dark:bg-gray-800 dark:text-white'
-													: 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus:bg-gray-100 focus:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white dark:focus:bg-gray-800 dark:focus:text-white'}"
-											>
-												{$i18n.t(link.label)}
-											</a>
-										{/snippet}
-									</DropdownMenu.Item>
+									<a
+										href={link.href}
+										role="menuitem"
+										on:click={() => (showAdvanced = false)}
+										class="block rounded-lg px-3 py-2 text-sm outline-none {$page.url.pathname.startsWith(
+											link.href
+										)
+											? 'bg-gray-100 font-medium text-gray-900 dark:bg-gray-800 dark:text-white'
+											: 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus:bg-gray-100 focus:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white dark:focus:bg-gray-800 dark:focus:text-white'}"
+									>
+										{$i18n.t(link.label)}
+									</a>
 								{/each}
-							</DropdownMenu.Content>
-						</DropdownMenu.Portal>
-					</DropdownMenu.Root>
+							</Popover.Content>
+						</Popover.Portal>
+					</Popover.Root>
 				</div>
 			</nav>
 

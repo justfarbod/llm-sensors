@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import asyncio
+import json
 
 import pytest
 from pydantic import ValidationError
@@ -14,6 +15,7 @@ from open_webui.models.experiment_perturbations import (
 )
 from open_webui.models.experiment_plans import ExperimentPlanForm
 from open_webui.utils.experiment_perturbations import (
+    _BoundedSSEChunker,
     PerturbationRequestContext,
     _cadence_matches,
     apply_request_injections,
@@ -67,6 +69,19 @@ def test_control_and_allocation_validation():
                 ],
             }
         )
+
+
+def test_condition_payload_rejects_removed_memory_injection():
+    with pytest.raises(ValidationError) as error:
+        ExperimentConditionForm.model_validate(
+            {
+                'name': 'Treatment',
+                'allocation_percent': 100,
+                'memory_injection': {'enabled': False},
+            }
+        )
+
+    assert 'memory_injection' in str(error.value)
 
 
 def test_timing_and_activation_validation():
@@ -126,21 +141,19 @@ def test_request_only_injections_preserve_genuine_message():
                 'instruction': 'hidden instruction',
                 'position': 'AFTER_PARTICIPANT',
             },
-            'memory_injection': {'enabled': True, 'content': 'hidden memory'},
         }
     )
-    context = PerturbationRequestContext('request', condition, True, True, condition.response_timing)
+    context = PerturbationRequestContext('request', condition, True, condition.response_timing)
     original = [{'role': 'system', 'content': 'base'}, {'role': 'user', 'content': 'genuine'}]
     result = apply_request_injections(original, context)
     assert original == [{'role': 'system', 'content': 'base'}, {'role': 'user', 'content': 'genuine'}]
     assert result[1]['content'] == 'genuine'
-    assert 'hidden memory' in result[0]['content']
     assert 'hidden instruction' in result[2]['content']
 
 
 def test_delayed_stream_buffers_real_provider_content(monkeypatch):
     timing = ResponseTimingForm(mode='DELAYED', delay_seconds=1, reveal_style='FULL')
-    context = PerturbationRequestContext('request', SimpleNamespace(), False, False, timing)
+    context = PerturbationRequestContext('request', SimpleNamespace(), False, timing)
     updates = AsyncMock()
     sleeps = AsyncMock()
     monkeypatch.setattr('open_webui.utils.experiment_perturbations.update_request', updates)
@@ -164,7 +177,7 @@ def test_delayed_stream_buffers_real_provider_content(monkeypatch):
 
 def test_provider_stream_error_bypasses_artificial_delay(monkeypatch):
     timing = ResponseTimingForm(mode='DELAYED', delay_seconds=300, reveal_style='FULL')
-    context = PerturbationRequestContext('request', SimpleNamespace(), False, False, timing)
+    context = PerturbationRequestContext('request', SimpleNamespace(), False, timing)
     updates = AsyncMock()
     sleeps = AsyncMock()
     monkeypatch.setattr('open_webui.utils.experiment_perturbations.update_request', updates)
@@ -186,10 +199,16 @@ def test_provider_stream_error_bypasses_artificial_delay(monkeypatch):
 
 
 def test_slow_stream_drains_buffer_before_terminal_event(monkeypatch):
-    timing = ResponseTimingForm(mode='SLOW', target_duration_seconds=2, maximum_chunk_size=2)
-    context = PerturbationRequestContext('request', SimpleNamespace(), False, False, timing)
+    timing = ResponseTimingForm(
+        mode='SLOW',
+        target_duration_seconds=2,
+        minimum_chunk_size=2,
+        maximum_chunk_size=2,
+    )
+    context = PerturbationRequestContext('request', SimpleNamespace(), False, timing)
     monkeypatch.setattr('open_webui.utils.experiment_perturbations.update_request', AsyncMock())
-    monkeypatch.setattr('open_webui.utils.experiment_perturbations.asyncio.sleep', AsyncMock())
+    sleeps = AsyncMock()
+    monkeypatch.setattr('open_webui.utils.experiment_perturbations.asyncio.sleep', sleeps)
 
     async def source():
         yield 'data: {"choices":[{"delta":{"content":"answer"}}]}\n\n'
@@ -203,6 +222,8 @@ def test_slow_stream_drains_buffer_before_terminal_event(monkeypatch):
     emitted = asyncio.run(collect())
     assert emitted[-1] == 'data: [DONE]\n\n'
     assert ''.join(_line for _line in emitted[:-1]).count('content') == 3
+    assert sleeps.await_count == 2
+    assert 1.9 < sleeps.await_args_list[-1].args[0] <= 2
 
 
 def test_nonstream_fast_response_becomes_paced_stream(monkeypatch):
@@ -212,7 +233,7 @@ def test_nonstream_fast_response_becomes_paced_stream(monkeypatch):
         rate_unit='CHARACTERS_PER_SECOND',
         maximum_chunk_size=3,
     )
-    context = PerturbationRequestContext('request', SimpleNamespace(), False, False, timing)
+    context = PerturbationRequestContext('request', SimpleNamespace(), False, timing)
     updates = AsyncMock()
     monkeypatch.setattr('open_webui.utils.experiment_perturbations.update_request', updates)
     monkeypatch.setattr('open_webui.utils.experiment_perturbations.asyncio.sleep', AsyncMock())
@@ -227,3 +248,16 @@ def test_nonstream_fast_response_becomes_paced_stream(monkeypatch):
     assert emitted[-1] == 'data: [DONE]\n\n'
     assert any('ans' in line for line in emitted)
     assert any(call.kwargs.get('status') == 'COMPLETED' for call in updates.await_args_list)
+
+
+def test_slow_chunker_buffers_provider_fragments_within_configured_bounds():
+    chunker = _BoundedSSEChunker('request', 'CHARACTER', 3, 5)
+    emitted = []
+    for text in ('a', 'bc', 'def', 'ghij', 'klmnop'):
+        emitted.extend(chunker.feed(f'data: {{"choices":[{{"delta":{{"content":"{text}"}}}}]}}\n\n'))
+    emitted.extend(chunker.flush())
+
+    contents = [json.loads(line[5:])['choices'][0]['delta']['content'] for line in emitted]
+    assert ''.join(contents) == 'abcdefghijklmnop'
+    assert all(3 <= len(content) <= 5 for content in contents[:-1])
+    assert 1 <= len(contents[-1]) <= 5

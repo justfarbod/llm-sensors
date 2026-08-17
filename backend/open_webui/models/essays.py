@@ -4,8 +4,9 @@ import random
 from typing import Optional
 from types import SimpleNamespace
 
+from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import BigInteger, Column, Index, Integer, Text, UniqueConstraint, delete, select, update
+from sqlalchemy import BigInteger, Boolean, Column, Index, Integer, Text, UniqueConstraint, delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from open_webui.internal.db import Base, get_async_db_context
@@ -56,6 +57,8 @@ class EssayTopic(Base):
     id = Column(Text, primary_key=True)
     title = Column(Text, nullable=False)
     question = Column(Text, nullable=False)
+    locked_at = Column(BigInteger, nullable=True)
+    workflow_managed = Column(Boolean, nullable=False, default=False)
     created_at = Column(BigInteger, nullable=False)
     updated_at = Column(BigInteger, nullable=False)
 
@@ -66,6 +69,8 @@ class EssayTopicModel(BaseModel):
     id: str
     title: str
     question: str
+    locked_at: Optional[int] = None
+    workflow_managed: bool = False
     created_at: int
     updated_at: int
 
@@ -161,7 +166,11 @@ class EssayTopicTable:
 
     async def get_topics(self, db: Optional[AsyncSession] = None) -> list[EssayTopicModel]:
         async with get_async_db_context(db) as db:
-            result = await db.execute(select(EssayTopic).order_by(EssayTopic.created_at.desc()))
+            result = await db.execute(
+                select(EssayTopic)
+                .where(EssayTopic.workflow_managed.is_(False))
+                .order_by(EssayTopic.created_at.desc())
+            )
             return [EssayTopicModel.model_validate(topic) for topic in result.scalars().all()]
 
     async def get_topic_by_id(self, topic_id: str, db: Optional[AsyncSession] = None) -> Optional[EssayTopicModel]:
@@ -174,6 +183,9 @@ class EssayTopicTable:
         self, topic_id: str, form_data: EssayTopicForm, db: Optional[AsyncSession] = None
     ) -> Optional[EssayTopicModel]:
         async with get_async_db_context(db) as db:
+            topic = await db.get(EssayTopic, topic_id)
+            if topic and topic.locked_at:
+                raise HTTPException(status_code=409, detail='Applied workflow topics are immutable.')
             await db.execute(
                 update(EssayTopic)
                 .filter_by(id=topic_id)
@@ -184,6 +196,9 @@ class EssayTopicTable:
 
     async def delete_topic_by_id(self, topic_id: str, db: Optional[AsyncSession] = None) -> bool:
         async with get_async_db_context(db) as db:
+            topic = await db.get(EssayTopic, topic_id)
+            if topic and topic.locked_at:
+                raise HTTPException(status_code=409, detail='Applied workflow topics are immutable.')
             await db.execute(delete(EssayTopicAssignment).filter_by(topic_id=topic_id))
             result = await db.execute(delete(EssayTopic).filter_by(id=topic_id))
             await db.commit()

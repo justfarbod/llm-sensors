@@ -13,6 +13,29 @@ from open_webui.config import DEFAULT_RAG_TEMPLATE
 log = logging.getLogger(__name__)
 
 
+async def task_model_available(request, user=None) -> bool:
+    """Resolve configured task models after lazily initializing the model cache."""
+    configured_model_ids = (
+        request.app.state.config.TASK_MODEL,
+        request.app.state.config.TASK_MODEL_EXTERNAL,
+    )
+    if not any(configured_model_ids):
+        return False
+
+    models = request.app.state.MODELS or {}
+    if not models:
+        # The shared model cache starts empty after every process restart unless
+        # base-model caching is enabled. Validation routes can run before the
+        # normal /api/models request, so initialize it here before deciding that
+        # a persisted task-model selection is unavailable.
+        from open_webui.utils.models import get_all_models
+
+        await get_all_models(request, user=user)
+        models = request.app.state.MODELS or {}
+
+    return any(model_id and model_id in models for model_id in configured_model_ids)
+
+
 # Let the right tool be given for the work at hand,
 # not the one that flatters, but the one that serves.
 def get_task_model_id(default_model_id: str, task_model: str, task_model_external: str, models) -> str:

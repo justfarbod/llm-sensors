@@ -279,6 +279,8 @@ def test_republishing_a_plan_creates_a_new_version_and_leaves_old_items_unchange
     )
     db = AsyncMock()
     db.add = MagicMock()
+    group_result = MagicMock()
+    group_result.scalar_one_or_none.return_value = SimpleNamespace(id='group')
     topic_result = scalar_result([])
     question_result = scalar_result([])
     survey_result = scalar_result([survey])
@@ -286,6 +288,7 @@ def test_republishing_a_plan_creates_a_new_version_and_leaves_old_items_unchange
     max_result = MagicMock()
     max_result.scalar.return_value = 2
     db.execute.side_effect = [
+        group_result,
         topic_result,
         question_result,
         survey_result,

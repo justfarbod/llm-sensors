@@ -40,12 +40,6 @@ export type ExperimentCondition = {
 		position: 'SYSTEM' | 'BEFORE_PARTICIPANT' | 'AFTER_PARTICIPANT';
 		activation: ActivationRule;
 	};
-	memory_injection: {
-		enabled: boolean;
-		content: string;
-		persist_for_session: boolean;
-		activation: ActivationRule;
-	};
 	warning_modal: {
 		enabled: boolean;
 		title: string;

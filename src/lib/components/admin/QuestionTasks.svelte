@@ -16,6 +16,7 @@
 		type QuestionType
 	} from '$lib/apis/question-tasks';
 	import QuestionImage from '$lib/components/experiment/QuestionImage.svelte';
+	import './experiment-admin.css';
 
 	const i18n: Writable<i18nType> = getContext('i18n');
 	let tasks: QuestionTask[] = [];
@@ -210,12 +211,16 @@
 					<button class="task-button" on:click={reset}>{$i18n.t('New')}</button>
 				</div>
 			</div>
-			<input class="task-input mt-3" bind:value={title} placeholder={$i18n.t('Task title')} />
-			<textarea
-				class="task-input mt-2 min-h-20"
-				bind:value={description}
-				placeholder={$i18n.t('Task description or instructions')}
-			></textarea>
+			<div class="mt-4 grid gap-3">
+				<label class="experiment-label">
+					{$i18n.t('Task title')}
+					<input class="experiment-input" bind:value={title} />
+				</label>
+				<label class="experiment-label">
+					{$i18n.t('Task description or instructions')}
+					<textarea class="experiment-input min-h-20" bind:value={description}></textarea>
+				</label>
+			</div>
 			{#if editingTask}<p class="mt-2 text-xs text-gray-500">
 					{$i18n.t('Version')}
 					{editingTask.version} · {$i18n.t(
@@ -243,7 +248,7 @@
 							>{$i18n.t('Question')} {index + 1}</span
 						>
 						<select
-							class="task-input ml-auto !w-auto"
+							class="experiment-input ml-auto !w-auto"
 							value={question.question_type}
 							on:change={(event) => changeType(index, event.currentTarget.value as QuestionType)}
 						>
@@ -266,23 +271,27 @@
 							>{$i18n.t('Delete')}</button
 						>
 					</div>
-					<input
-						class="task-input mt-3"
-						bind:value={question.title}
-						placeholder={$i18n.t('Question title')}
-					/>
-					<textarea
-						class="task-input mt-2 min-h-24"
-						bind:value={question.description}
-						placeholder={question.question_type === 'FILL_BLANK'
-							? $i18n.t('Use blank tokens such as {{blank_1}}')
-							: $i18n.t('Description or instructions')}
-					></textarea>
+					<div class="mt-3 grid gap-3">
+						<label class="experiment-label">
+							{$i18n.t('Question title')}
+							<input class="experiment-input" bind:value={question.title} />
+						</label>
+						<label class="experiment-label">
+							{$i18n.t('Description or instructions')}
+							<textarea
+								class="experiment-input min-h-24"
+								bind:value={question.description}
+								placeholder={question.question_type === 'FILL_BLANK'
+									? $i18n.t('Use blank tokens such as {{blank_1}}')
+									: ''}
+							></textarea>
+						</label>
+					</div>
 					<div class="mt-2 flex flex-wrap items-center gap-3">
 						<label class="text-xs"
 							>{$i18n.t('Points')}
 							<input
-								class="task-input ml-1 !w-24"
+								class="experiment-input ml-1 !w-24"
 								type="number"
 								min="0.01"
 								max="10000"
@@ -325,7 +334,7 @@
 										aria-label={$i18n.t('Correct answer')}
 									/>
 									<input
-										class="task-input"
+										class="experiment-input"
 										bind:value={choice.text}
 										placeholder={`${$i18n.t('Choice')} ${choiceIndex + 1}`}
 									/>
@@ -362,7 +371,7 @@
 									{#each blank.accepted_answers as answer, answerIndex}
 										<div class="mt-2 flex gap-2">
 											<input
-												class="task-input"
+												class="experiment-input"
 												bind:value={blank.accepted_answers[answerIndex]}
 												placeholder={$i18n.t('Accepted answer')}
 											/><button
@@ -396,13 +405,13 @@
 						</div>
 					{:else}
 						<div class="mt-3 flex flex-wrap gap-3">
-							<select class="task-input !w-auto" bind:value={question.grading_mode}
+							<select class="experiment-input !w-auto" bind:value={question.grading_mode}
 								><option value="MANUAL">{$i18n.t('Manual grading')}</option><option
 									value="LLM_ASSISTED">{$i18n.t('LLM-assisted grading')}</option
 								></select
 							>
 							{#if question.grading_mode === 'LLM_ASSISTED'}
-								<select class="task-input !w-auto" bind:value={question.strictness}
+								<select class="experiment-input !w-auto" bind:value={question.strictness}
 									><option value="LENIENT">{$i18n.t('Lenient')}</option><option value="BALANCED"
 										>{$i18n.t('Balanced')}</option
 									><option value="STRICT">{$i18n.t('Strict')}</option></select
@@ -411,7 +420,7 @@
 									{strictnessHelp(question.strictness)}
 								</p>
 								<textarea
-									class="task-input min-h-24 basis-full"
+									class="experiment-input min-h-24 basis-full"
 									bind:value={question.expected_answer}
 									placeholder={$i18n.t('Sample or expected answer')}
 								></textarea>
@@ -542,7 +551,7 @@
 						</div>
 					{:else if question.question_type === 'FREE_TEXT'}
 						<textarea
-							class="task-input mt-3 min-h-28"
+							class="experiment-input mt-3 min-h-28"
 							disabled
 							placeholder={$i18n.t('Participant answer')}
 						></textarea>
@@ -554,18 +563,6 @@
 {/if}
 
 <style>
-	:global(.task-input) {
-		width: 100%;
-		min-width: 0;
-		border-radius: 0.65rem;
-		background: rgb(249 250 251);
-		padding: 0.55rem 0.7rem;
-		font-size: 0.8rem;
-		outline: none;
-	}
-	:global(.dark .task-input) {
-		background: rgb(17 24 39);
-	}
 	:global(.task-button) {
 		border-radius: 0.6rem;
 		background: rgb(243 244 246);

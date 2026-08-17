@@ -1,0 +1,79 @@
+.experiment-input,
+.experiment-title-input {
+	width: 100%;
+	min-width: 0;
+	border: 1px solid rgb(209 213 219);
+	border-radius: 0.7rem;
+	background: rgb(255 255 255);
+	padding: 0.6rem 0.75rem;
+	font-size: 0.8rem;
+	color: rgb(17 24 39);
+	outline: none;
+	transition:
+		border-color 120ms ease,
+		box-shadow 120ms ease,
+		background-color 120ms ease;
+}
+
+.experiment-title-input {
+	font-size: 1.15rem;
+	font-weight: 600;
+}
+
+.experiment-input:hover,
+.experiment-title-input:hover {
+	border-color: rgb(156 163 175);
+}
+
+.experiment-input:focus,
+.experiment-title-input:focus {
+	border-color: rgb(75 85 99);
+	box-shadow: 0 0 0 3px rgb(156 163 175 / 0.2);
+}
+
+.experiment-input:disabled,
+.experiment-title-input:disabled {
+	cursor: not-allowed;
+	border-color: rgb(229 231 235);
+	background: rgb(243 244 246);
+	color: rgb(107 114 128);
+}
+
+.experiment-label {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 0.4rem;
+	font-size: 0.75rem;
+	font-weight: 500;
+	color: rgb(75 85 99);
+}
+
+.dark .experiment-input,
+.dark .experiment-title-input {
+	border-color: rgb(75 85 99);
+	background: rgb(17 24 39);
+	color: rgb(243 244 246);
+}
+
+.dark .experiment-input:hover,
+.dark .experiment-title-input:hover {
+	border-color: rgb(107 114 128);
+}
+
+.dark .experiment-input:focus,
+.dark .experiment-title-input:focus {
+	border-color: rgb(156 163 175);
+	box-shadow: 0 0 0 3px rgb(156 163 175 / 0.2);
+}
+
+.dark .experiment-input:disabled,
+.dark .experiment-title-input:disabled {
+	border-color: rgb(55 65 81);
+	background: rgb(31 41 55);
+	color: rgb(156 163 175);
+}
+
+.dark .experiment-label {
+	color: rgb(209 213 219);
+}

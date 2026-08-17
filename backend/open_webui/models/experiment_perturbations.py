@@ -103,22 +103,6 @@ class PromptInjectionForm(BaseModel):
         return self
 
 
-class MemoryInjectionForm(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-
-    enabled: bool = False
-    content: str = Field(default='', max_length=100000)
-    persist_for_session: bool = False
-    activation: ActivationRuleForm = Field(default_factory=ActivationRuleForm)
-
-    @model_validator(mode='after')
-    def validate_memory(self):
-        self.content = self.content.strip()
-        if self.enabled and not self.content:
-            raise ValueError('Enabled memory injection requires content.')
-        return self
-
-
 class WarningModalForm(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
@@ -214,7 +198,6 @@ class ExperimentConditionForm(BaseModel):
     enabled: bool = True
     is_control: bool = False
     prompt_injection: PromptInjectionForm = Field(default_factory=PromptInjectionForm)
-    memory_injection: MemoryInjectionForm = Field(default_factory=MemoryInjectionForm)
     warning_modal: WarningModalForm = Field(default_factory=WarningModalForm)
     response_timing: ResponseTimingForm = Field(default_factory=ResponseTimingForm)
 
@@ -223,7 +206,6 @@ class ExperimentConditionForm(BaseModel):
         self.name = self.name.strip()
         if self.is_control and (
             self.prompt_injection.enabled
-            or self.memory_injection.enabled
             or self.warning_modal.enabled
             or self.response_timing.mode != ResponseTimingMode.NORMAL
         ):
@@ -260,21 +242,6 @@ class ExperimentPromptInjection(Base):
     enabled = Column(Boolean, nullable=False, default=False)
     instruction = Column(Text, nullable=False, default='')
     position = Column(Text, nullable=False, default=PromptInsertionPosition.SYSTEM.value)
-    activation_mode = Column(Text, nullable=False, default=ActivationMode.EVERY_REQUEST.value)
-    activation_count = Column(Integer, nullable=True)
-    range_start = Column(Integer, nullable=True)
-    range_end = Column(Integer, nullable=True)
-    probability = Column(Float, nullable=False, default=1.0)
-    scope = Column(Text, nullable=False, default=PerturbationScope.ALL_TASKS.value)
-
-
-class ExperimentMemoryInjection(Base):
-    __tablename__ = 'experiment_memory_injection'
-
-    condition_id = Column(Text, ForeignKey('experiment_condition.id', ondelete='CASCADE'), primary_key=True)
-    enabled = Column(Boolean, nullable=False, default=False)
-    content = Column(Text, nullable=False, default='')
-    persist_for_session = Column(Boolean, nullable=False, default=False)
     activation_mode = Column(Text, nullable=False, default=ActivationMode.EVERY_REQUEST.value)
     activation_count = Column(Integer, nullable=True)
     range_start = Column(Integer, nullable=True)
@@ -338,12 +305,8 @@ class ExperimentLLMRequest(Base):
     prompt_number = Column(Integer, nullable=False)
     assignment_identifier = Column(Text, nullable=True)
     prompt_active = Column(Boolean, nullable=False, default=False)
-    memory_active = Column(Boolean, nullable=False, default=False)
-    memory_latched = Column(Boolean, nullable=False, default=False)
     prompt_draw = Column(Float, nullable=True)
-    memory_draw = Column(Float, nullable=True)
     prompt_randomization_id = Column(Text, nullable=True)
-    memory_randomization_id = Column(Text, nullable=True)
     timing_mode = Column(Text, nullable=False, default=ResponseTimingMode.NORMAL.value)
     timing_parameters = Column(JSONField, nullable=False, default=dict)
     request_at = Column(BigInteger, nullable=False)
