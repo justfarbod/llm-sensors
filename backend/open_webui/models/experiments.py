@@ -19,6 +19,7 @@ from open_webui.models.experiment_plans import (
     SessionTaskStatus,
 )
 from open_webui.models.groups import Groups
+from open_webui.utils.essay_text import essay_text_metrics
 
 
 class ExperimentState(StrEnum):
@@ -381,6 +382,7 @@ class ExperimentTable:
                 raise HTTPException(status_code=409, detail='Use the ordered experiment task submission endpoint.')
             return await self.finalize_essay_task(user, active, content, db)
         now = int(time.time_ns())
+        word_count, character_count = essay_text_metrics(content)
         essay = Essay(
             id=str(uuid.uuid4()),
             user_id=user.id,
@@ -388,8 +390,8 @@ class ExperimentTable:
             topic_id=session_model.topic_id,
             topic_title=session_model.topic_title,
             topic_question=session_model.topic_question,
-            word_count=len(content.split()),
-            character_count=len(content),
+            word_count=word_count,
+            character_count=character_count,
             created_at=now,
             updated_at=now,
         )
@@ -428,6 +430,7 @@ class ExperimentTable:
         }:
             raise HTTPException(status_code=409, detail='Essay Task is locked or finalized.')
         now = int(time.time_ns())
+        word_count, character_count = essay_text_metrics(content)
         essay = Essay(
             id=str(uuid.uuid4()),
             user_id=user.id,
@@ -435,8 +438,8 @@ class ExperimentTable:
             topic_id=session_task.essay_topic_id,
             topic_title=session_task.essay_topic_title,
             topic_question=session_task.essay_topic_question,
-            word_count=len(content.split()),
-            character_count=len(content),
+            word_count=word_count,
+            character_count=character_count,
             experiment_session_task_id=session_task.id,
             created_at=now,
             updated_at=now,

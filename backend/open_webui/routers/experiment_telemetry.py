@@ -1,8 +1,9 @@
 import json
 import time
 from datetime import datetime
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 from uuid import UUID
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -12,8 +13,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from open_webui.internal.db import get_async_session
 from open_webui.models.experiment_telemetry import (
     ExperimentTelemetryEvent,
+    ExperimentTelemetryExtensionPresence,
     ExperimentTelemetrySummary,
     empty_summary,
+)
+from open_webui.config import (
+    EXPERIMENT_TELEMETRY_EXTENSION_ENABLED,
+    EXPERIMENT_TELEMETRY_EXTENSION_ID,
+    EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION,
+    EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN,
+    EXPERIMENT_TELEMETRY_EXTENSION_STALE_SECONDS,
+    EXPERIMENT_TELEMETRY_SCHEMA_VERSION,
 )
 from open_webui.models.experiments import ExperimentSession, ExperimentState, Experiments
 from open_webui.models.experiment_plans import ExperimentSessionTask
@@ -37,6 +47,30 @@ EVENT_TYPES = {
     'focus_away',
     'focus_return',
     'answer_change',
+    'tab_snapshot',
+    'tab_created',
+    'tab_updated',
+    'tab_activated',
+    'tab_highlighted',
+    'tab_moved',
+    'tab_attached',
+    'tab_detached',
+    'tab_replaced',
+    'tab_removed',
+    'window_focus_changed',
+    'telemetry_loss',
+}
+TAB_EVENT_TYPES = {
+    'tab_snapshot',
+    'tab_created',
+    'tab_updated',
+    'tab_activated',
+    'tab_highlighted',
+    'tab_moved',
+    'tab_attached',
+    'tab_detached',
+    'tab_replaced',
+    'tab_removed',
 }
 KEY_CLASSES = {
     'printable',
@@ -49,6 +83,8 @@ KEY_CLASSES = {
     'shortcut',
     'other',
 }
+ChromeId = Annotated[int, Field(ge=-1, le=2_147_483_647)]
+BoundedFieldName = Annotated[str, Field(min_length=1, max_length=128)]
 
 
 def _reject_forbidden_keys(value: Any):
@@ -56,6 +92,8 @@ def _reject_forbidden_keys(value: Any):
         for key, child in value.items():
             if str(key).lower() in FORBIDDEN_KEYS:
                 raise ValueError(f'Forbidden telemetry field: {key}')
+            if str(key).lower() == 'incognito' and child is not False:
+                raise ValueError('Incognito telemetry is forbidden.')
             _reject_forbidden_keys(child)
     elif isinstance(value, list):
         for child in value:
@@ -69,6 +107,52 @@ class ModifierFlags(BaseModel):
     shift: bool
     alt: bool
     meta: bool
+
+
+class MutedInfo(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    muted: bool
+    reason: Optional[Literal['user', 'capture', 'extension']] = None
+    extension_id: Optional[str] = Field(default=None, max_length=128)
+
+
+class TabSnapshot(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    tab_id: ChromeId
+    window_id: ChromeId
+    index: int = Field(ge=-1, le=1_000_000)
+    opener_tab_id: Optional[ChromeId] = None
+    group_id: Optional[ChromeId] = None
+    split_view_id: Optional[ChromeId] = None
+    active: bool
+    highlighted: bool
+    pinned: bool
+    incognito: bool
+    audible: Optional[bool] = None
+    auto_discardable: Optional[bool] = None
+    discarded: Optional[bool] = None
+    frozen: Optional[bool] = None
+    muted_info: Optional[MutedInfo] = None
+    status: Optional[Literal['unloaded', 'loading', 'complete']] = None
+    url: Optional[str] = Field(default=None, max_length=16_384)
+    pending_url: Optional[str] = Field(default=None, max_length=16_384)
+    title: Optional[str] = Field(default=None, max_length=8_192)
+    fav_icon_url: Optional[str] = Field(default=None, max_length=16_384)
+    width: Optional[int] = Field(default=None, ge=0, le=1_000_000)
+    height: Optional[int] = Field(default=None, ge=0, le=1_000_000)
+    last_accessed: Optional[float] = Field(default=None, ge=0, le=10_000_000_000_000_000)
+    session_id: Optional[str] = Field(default=None, max_length=256)
+    truncated_fields: list[Literal['url', 'pending_url', 'title', 'fav_icon_url']] = Field(
+        default_factory=list, max_length=4
+    )
+
+    @model_validator(mode='after')
+    def exclude_incognito(self):
+        if self.incognito:
+            raise ValueError('Incognito tabs are not accepted for experiment telemetry.')
+        return self
 
 
 class TelemetryEventForm(BaseModel):
@@ -91,6 +175,20 @@ class TelemetryEventForm(BaseModel):
     away_duration_ms: Optional[int] = Field(default=None, ge=0, le=86_400_000)
     control_type: Optional[Literal['single_choice', 'multiple_select', 'fill_blank', 'free_text']] = None
     answered: Optional[bool] = None
+    browser_session_id: Optional[UUID] = None
+    sequence: Optional[int] = Field(default=None, ge=1, le=9_007_199_254_740_991)
+    tab: Optional[TabSnapshot] = None
+    snapshot_phase: Optional[Literal['initial', 'final']] = None
+    changed_fields: Optional[list[BoundedFieldName]] = Field(default=None, max_length=64)
+    from_index: Optional[int] = Field(default=None, ge=-1, le=1_000_000)
+    to_index: Optional[int] = Field(default=None, ge=-1, le=1_000_000)
+    old_window_id: Optional[ChromeId] = None
+    new_window_id: Optional[ChromeId] = None
+    replaced_tab_id: Optional[ChromeId] = None
+    is_window_closing: Optional[bool] = None
+    window_id: Optional[ChromeId] = None
+    window_focused: Optional[bool] = None
+    dropped_event_count: Optional[int] = Field(default=None, ge=1, le=10_000_000)
 
     @model_validator(mode='after')
     def validate_event_shape(self):
@@ -110,6 +208,20 @@ class TelemetryEventForm(BaseModel):
             'focus_away': set(),
             'focus_return': {'away_duration_ms'},
             'answer_change': {'control_type', 'answered'},
+            'tab_snapshot': {'browser_session_id', 'sequence', 'tab', 'snapshot_phase'},
+            'tab_created': {'browser_session_id', 'sequence', 'tab'},
+            'tab_updated': {'browser_session_id', 'sequence', 'tab', 'changed_fields'},
+            'tab_activated': {'browser_session_id', 'sequence', 'tab'},
+            'tab_highlighted': {'browser_session_id', 'sequence', 'tab'},
+            'tab_moved': {'browser_session_id', 'sequence', 'tab', 'from_index', 'to_index'},
+            'tab_attached': {'browser_session_id', 'sequence', 'tab', 'old_window_id', 'new_window_id'},
+            'tab_detached': {'browser_session_id', 'sequence', 'tab', 'old_window_id', 'new_window_id'},
+            'tab_replaced': {'browser_session_id', 'sequence', 'tab', 'replaced_tab_id'},
+            'tab_removed': {'browser_session_id', 'sequence', 'tab', 'is_window_closing'},
+            'window_focus_changed': {
+                'browser_session_id', 'sequence', 'window_id', 'window_focused'
+            },
+            'telemetry_loss': {'browser_session_id', 'sequence', 'dropped_event_count'},
         }[self.type]
         if present - allowed:
             raise ValueError('Event contains fields that are not valid for its type.')
@@ -123,6 +235,34 @@ class TelemetryEventForm(BaseModel):
             raise ValueError('Question answer changes require control type and answered state.')
         if self.field == 'question' and (not self.session_task_id or not self.question_id):
             raise ValueError('Question telemetry requires task and question context.')
+        if self.type in TAB_EVENT_TYPES:
+            if self.browser_session_id is None or self.sequence is None or self.tab is None:
+                raise ValueError('Tab telemetry requires browser session, sequence, and tab snapshot.')
+        if self.type == 'tab_snapshot' and self.snapshot_phase is None:
+            raise ValueError('Tab snapshots require an initial or final phase.')
+        if self.type == 'tab_updated' and self.changed_fields is None:
+            raise ValueError('Tab updates require a changed-fields list.')
+        if self.type == 'tab_moved' and (self.from_index is None or self.to_index is None):
+            raise ValueError('Tab move telemetry requires original and destination positions.')
+        if self.type == 'tab_attached' and self.new_window_id is None:
+            raise ValueError('Tab attachment telemetry requires the destination window.')
+        if self.type == 'tab_detached' and self.old_window_id is None:
+            raise ValueError('Tab detachment telemetry requires the original window.')
+        if self.type == 'tab_replaced' and self.replaced_tab_id is None:
+            raise ValueError('Tab replacement telemetry requires the replaced tab ID.')
+        if self.type == 'tab_removed' and self.is_window_closing is None:
+            raise ValueError('Tab removal telemetry requires the window-closing state.')
+        if self.type == 'window_focus_changed' and (
+            self.browser_session_id is None
+            or self.sequence is None
+            or self.window_id is None
+            or self.window_focused is None
+        ):
+            raise ValueError('Window focus telemetry requires browser session, sequence, window, and focus state.')
+        if self.type == 'telemetry_loss' and (
+            self.browser_session_id is None or self.sequence is None or self.dropped_event_count is None
+        ):
+            raise ValueError('Telemetry loss events require browser session, sequence, and dropped count.')
         return self
 
 
@@ -130,6 +270,7 @@ class TelemetryBatchForm(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
     experiment_session_id: str = Field(min_length=1, max_length=100)
+    schema_version: int = Field(default=1, ge=1, le=EXPERIMENT_TELEMETRY_SCHEMA_VERSION)
     events: list[TelemetryEventForm] = Field(min_length=1, max_length=MAX_BATCH_SIZE)
 
     @model_validator(mode='before')
@@ -139,6 +280,51 @@ class TelemetryBatchForm(BaseModel):
         if len(json.dumps(value, separators=(',', ':'), default=str).encode()) > MAX_PAYLOAD_BYTES:
             raise ValueError('Telemetry batch exceeds maximum payload size.')
         return value
+
+    @model_validator(mode='after')
+    def validate_schema_version(self):
+        if self.schema_version < 2 and any(event.type in TAB_EVENT_TYPES for event in self.events):
+            raise ValueError('Tab telemetry requires schema version 2.')
+        return self
+
+
+class ExtensionHeartbeatForm(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    extension_version: str = Field(min_length=1, max_length=32)
+    extension_id: str = Field(min_length=1, max_length=64)
+    schema_version: int = Field(ge=EXPERIMENT_TELEMETRY_SCHEMA_VERSION, le=EXPERIMENT_TELEMETRY_SCHEMA_VERSION)
+    tabs_permission: bool
+    incognito_allowed: bool
+    origin: str = Field(min_length=1, max_length=2048)
+
+
+def _version_tuple(value: str):
+    try:
+        parts = [int(part) for part in value.split('.')]
+    except ValueError:
+        return ()
+    if not 1 <= len(parts) <= 4 or any(part < 0 or part > 65_535 for part in parts):
+        return ()
+    return tuple(parts + [0] * (4 - len(parts)))
+
+
+def extension_presence_ready(presence: Optional[ExperimentTelemetryExtensionPresence]) -> bool:
+    if not EXPERIMENT_TELEMETRY_EXTENSION_ENABLED:
+        return True
+    if presence is None:
+        return False
+    age_ns = time.time_ns() - presence.last_seen_at
+    return (
+        age_ns <= EXPERIMENT_TELEMETRY_EXTENSION_STALE_SECONDS * 1_000_000_000
+        and presence.tabs_permission
+        and not presence.incognito_allowed
+        and presence.schema_version == EXPERIMENT_TELEMETRY_SCHEMA_VERSION
+        and bool(_version_tuple(presence.extension_version))
+        and bool(_version_tuple(EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION))
+        and _version_tuple(presence.extension_version) >= _version_tuple(EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION)
+        and presence.origin.rstrip('/') == EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN
+    )
 
 
 class TelemetryStatusResponse(BaseModel):
@@ -202,6 +388,70 @@ async def telemetry_status(user=Depends(get_verified_user), db: AsyncSession = D
         state=state,
         allowed_contexts=['essay', 'question', 'chat'],
     )
+
+
+@router.post('/extension/heartbeat')
+async def extension_heartbeat(
+    form: ExtensionHeartbeatForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    if not EXPERIMENT_TELEMETRY_EXTENSION_ENABLED:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='Experiment telemetry extension is disabled.')
+    if user.role == 'admin':
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Administrators cannot report telemetry.')
+    state, session, _ = await Experiments.get_current(user, db=db)
+    if state not in {
+        ExperimentState.TOPIC_REQUIRED,
+        ExperimentState.TASK_REQUIRED,
+        ExperimentState.IN_PROGRESS,
+    } or session is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='Experiment extension is not required now.')
+    try:
+        normalized_origin = f'{urlsplit(form.origin).scheme}://{urlsplit(form.origin).netloc}'.rstrip('/')
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail='Invalid extension origin.') from error
+    if (
+        not normalized_origin
+        or (
+            urlsplit(normalized_origin).scheme != 'https'
+            and not (
+                urlsplit(normalized_origin).scheme == 'http'
+                and urlsplit(normalized_origin).hostname in {'localhost', '127.0.0.1', '::1'}
+            )
+        )
+        or not urlsplit(normalized_origin).netloc
+        or normalized_origin != form.origin.rstrip('/')
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail='Extension origin must be one HTTPS origin, or HTTP loopback for development.',
+        )
+    if EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN and normalized_origin != EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN:
+        raise HTTPException(status_code=403, detail='Extension origin does not match this deployment.')
+    if EXPERIMENT_TELEMETRY_EXTENSION_ID and form.extension_id != EXPERIMENT_TELEMETRY_EXTENSION_ID:
+        raise HTTPException(status_code=403, detail='Unexpected telemetry extension identity.')
+    now = time.time_ns()
+    presence = await db.get(ExperimentTelemetryExtensionPresence, session.id)
+    if presence is None:
+        presence = ExperimentTelemetryExtensionPresence(
+            experiment_session_id=session.id,
+            user_id=user.id,
+            connected_at=now,
+        )
+        db.add(presence)
+    presence.extension_version = form.extension_version
+    presence.schema_version = form.schema_version
+    presence.tabs_permission = form.tabs_permission
+    presence.incognito_allowed = form.incognito_allowed
+    presence.origin = normalized_origin
+    presence.last_seen_at = now
+    await db.commit()
+    return {
+        'ready': extension_presence_ready(presence),
+        'experiment_session_id': session.id,
+        'state': state,
+    }
 
 
 @router.post('/events')
@@ -313,6 +563,7 @@ async def telemetry_events(
             session_task_id=event.session_task_id,
             question_id=event.question_id,
             submission_id=event.submission_id,
+            schema_version=form.schema_version,
         )
         db.add(telemetry_event)
         _apply_to_summary(summary, event)

@@ -15,6 +15,15 @@ describe('Experiment participant access', () => {
 		cy.get('button[aria-label="Controls"]').should('not.exist');
 	});
 
+	it('formats and previews participant essay Markdown', () => {
+		cy.get('button[aria-label="Essay"]').click();
+		cy.get('textarea[data-experiment-field="essay"]').as('essay').clear();
+		cy.get('button[aria-label="Bold"]').click();
+		cy.get('@essay').should('have.value', '**bold text**');
+		cy.contains('button', 'Preview').click();
+		cy.contains('strong', 'bold text').should('be.visible');
+	});
+
 	it('restricts the profile menu to sign out', () => {
 		cy.get('img[src*="/profile/image"]').last().click();
 		cy.contains('Sign Out').should('exist');

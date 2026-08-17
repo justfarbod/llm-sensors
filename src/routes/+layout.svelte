@@ -30,6 +30,7 @@
 		appInfo,
 		toolServers,
 		playingNotificationSound,
+		experimentCurrent,
 		channels,
 		channelId,
 		terminalServers,
@@ -65,6 +66,7 @@
 	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL, WEBUI_HOSTNAME } from '$lib/constants';
 	import { bestMatchingLanguage, displayFileHandler, getUserTimezone } from '$lib/utils';
 	import { setTextScale } from '$lib/utils/text-scale';
+	import { flushExperimentTelemetry } from '$lib/utils/experimentTelemetry';
 
 	import NotificationToast from '$lib/components/NotificationToast.svelte';
 	import AppSidebar from '$lib/components/app/AppSidebar.svelte';
@@ -746,6 +748,14 @@
 		}
 
 		if (now >= exp - TOKEN_EXPIRY_BUFFER) {
+			if (
+				$experimentCurrent?.state === 'IN_PROGRESS' &&
+				$experimentCurrent?.telemetry_extension?.required
+			)
+				await flushExperimentTelemetry(true);
+			window.dispatchEvent(
+				new CustomEvent('open-webui-experiment-state', { detail: { state: 'SIGNED_OUT' } })
+			);
 			const res = await userSignOut();
 			user.set(null);
 			localStorage.removeItem('token');

@@ -15,6 +15,8 @@
 		type QuestionTask,
 		type QuestionType
 	} from '$lib/apis/question-tasks';
+	import MarkdownEditor from '$lib/components/common/MarkdownEditor.svelte';
+	import SafeMarkdown from '$lib/components/common/SafeMarkdown.svelte';
 	import QuestionImage from '$lib/components/experiment/QuestionImage.svelte';
 	import './experiment-admin.css';
 
@@ -216,10 +218,15 @@
 					{$i18n.t('Task title')}
 					<input class="experiment-input" bind:value={title} />
 				</label>
-				<label class="experiment-label">
-					{$i18n.t('Task description or instructions')}
-					<textarea class="experiment-input min-h-20" bind:value={description}></textarea>
-				</label>
+				<div class="experiment-label">
+					<span>{$i18n.t('Task description or instructions')}</span>
+					<MarkdownEditor
+						bind:value={description}
+						ariaLabel={$i18n.t('Task description or instructions')}
+						className="min-h-32"
+						textareaClass="min-h-20 resize-y"
+					/>
+				</div>
 			</div>
 			{#if editingTask}<p class="mt-2 text-xs text-gray-500">
 					{$i18n.t('Version')}
@@ -276,16 +283,23 @@
 							{$i18n.t('Question title')}
 							<input class="experiment-input" bind:value={question.title} />
 						</label>
-						<label class="experiment-label">
-							{$i18n.t('Description or instructions')}
-							<textarea
-								class="experiment-input min-h-24"
-								bind:value={question.description}
-								placeholder={question.question_type === 'FILL_BLANK'
-									? $i18n.t('Use blank tokens such as {{blank_1}}')
-									: ''}
-							></textarea>
-						</label>
+						<div class="experiment-label">
+							<span>{$i18n.t('Description or instructions')}</span>
+							{#if question.question_type === 'FILL_BLANK'}
+								<textarea
+									class="experiment-input min-h-24"
+									bind:value={question.description}
+									placeholder={$i18n.t('Use blank tokens such as {{blank_1}}')}
+								></textarea>
+							{:else}
+								<MarkdownEditor
+									bind:value={question.description}
+									ariaLabel={$i18n.t('Description or instructions')}
+									className="min-h-36"
+									textareaClass="min-h-24 resize-y"
+								/>
+							{/if}
+						</div>
 					</div>
 					<div class="mt-2 flex flex-wrap items-center gap-3">
 						<label class="text-xs"
@@ -515,7 +529,9 @@
 				<h2 class="text-lg font-semibold">{title || $i18n.t('Untitled Question Task')}</h2>
 				<button class="task-button" on:click={() => (preview = false)}>{$i18n.t('Close')}</button>
 			</div>
-			<p class="mt-2 whitespace-pre-wrap text-sm text-gray-500">{description}</p>
+			<div class="mt-2 text-gray-500">
+				<SafeMarkdown content={description} className="markdown-prose-sm" />
+			</div>
 			{#each questions as question, index}
 				<div class="mt-5 rounded-xl border border-gray-100 p-4 dark:border-gray-800">
 					<div class="font-medium">
@@ -531,7 +547,9 @@
 									/>{:else}{part}{/if}{/each}
 						</div>
 					{:else}
-						<p class="mt-2 whitespace-pre-wrap text-sm">{question.description}</p>
+						<div class="mt-2">
+							<SafeMarkdown content={question.description} className="markdown-prose-sm" />
+						</div>
 					{/if}
 					{#if question.image_file_id}<QuestionImage
 							fileId={question.image_file_id}

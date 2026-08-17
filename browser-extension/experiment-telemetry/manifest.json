@@ -1,15 +1,22 @@
 {
 	"manifest_version": 3,
 	"name": "Open WebUI Experiment Telemetry",
-	"version": "1.0.0",
-	"description": "Records privacy-limited interaction metadata during active Open WebUI experiment writing sessions.",
-	"permissions": ["storage", "scripting"],
-	"optional_host_permissions": ["http://*/*", "https://*/*"],
+	"version": "2.0.0",
+	"description": "Records experiment interactions and normal-window tab lifecycle metadata during active research sessions.",
+	"permissions": ["alarms", "scripting", "storage", "tabs"],
+	"host_permissions": ["__OPEN_WEBUI_ORIGIN__/*"],
+	"incognito": "not_allowed",
 	"background": {
 		"service_worker": "background.js"
 	},
-	"options_page": "options.html",
+	"content_scripts": [
+		{
+			"matches": ["__OPEN_WEBUI_ORIGIN__/*"],
+			"js": ["deployment-config.js", "content.js"],
+			"run_at": "document_idle"
+		}
+	],
 	"action": {
-		"default_title": "Configure Open WebUI Experiment Telemetry"
+		"default_title": "Open Open WebUI Experiment"
 	}
 }

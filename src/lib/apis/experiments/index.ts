@@ -24,6 +24,17 @@ export type ExperimentCurrent = {
 	topic?: { id: string; title: string; question: string } | null;
 	agreement_text?: string | null;
 	error?: string | null;
+	telemetry_extension?: {
+		required: boolean;
+		ready: boolean;
+		store_url?: string | null;
+		extension_id?: string | null;
+		minimum_version: string;
+		schema_version: number;
+		detected_version?: string | null;
+		last_seen_at?: number | null;
+		configuration_error?: string | null;
+	} | null;
 };
 
 export type ExperimentTaskSummary = {

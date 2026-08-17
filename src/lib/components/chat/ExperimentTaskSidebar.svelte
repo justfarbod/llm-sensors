@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { getContext, onDestroy, onMount, tick } from 'svelte';
+	import { quintOut } from 'svelte/easing';
+	import { slide } from 'svelte/transition';
 	import type { Writable } from 'svelte/store';
 	import type { i18n as i18nType } from 'i18next';
 	import { toast } from 'svelte-sonner';
@@ -20,8 +22,13 @@
 		showEssaySidebar
 	} from '$lib/stores';
 	import Drawer from '$lib/components/common/Drawer.svelte';
+	import MarkdownEditor from '$lib/components/common/MarkdownEditor.svelte';
+	import SafeMarkdown from '$lib/components/common/SafeMarkdown.svelte';
 	import QuestionImage from '$lib/components/experiment/QuestionImage.svelte';
+	import ChevronDown from '$lib/components/icons/ChevronDown.svelte';
 	import { firstUnlockedExperimentTask } from '$lib/utils/experiments';
+	import { flushExperimentTelemetry } from '$lib/utils/experimentTelemetry';
+	import { markdownTextMetrics } from '$lib/utils/markdownEditor';
 
 	const i18n: Writable<i18nType> = getContext('i18n');
 	export let onTaskChange: (
@@ -32,6 +39,7 @@
 	let detail: any = null;
 	let questionIndex = 0;
 	let essayContent = '';
+	let showEssayExplanation = true;
 	let answers: Record<
 		string,
 		{ choice_ids: string[]; blank_answers: Record<string, string>; text: string }
@@ -54,6 +62,7 @@
 	$: selectedSummary = tasks.find((task) => task.id === selectedTaskId);
 	$: questions = detail?.question_task?.questions ?? [];
 	$: currentQuestion = questions[questionIndex];
+	$: essayWordCount = markdownTextMetrics(essayContent).wordCount;
 	$: if (initialSelectionChecked && !selectedTaskId) {
 		const firstUnlocked = firstUnlockedExperimentTask(tasks);
 		if (firstUnlocked) void selectTask(firstUnlocked);
@@ -128,8 +137,10 @@
 		loading = true;
 		try {
 			detail = await getExperimentTask(localStorage.token, task.id);
-			if (detail.task_type === 'ESSAY') essayContent = detail.draft ?? '';
-			else {
+			if (detail.task_type === 'ESSAY') {
+				essayContent = detail.draft ?? '';
+				showEssayExplanation = true;
+			} else {
 				answers = {};
 				for (const question of detail.question_task.questions)
 					answers[question.id] = { choice_ids: [], blank_answers: {}, text: '' };
@@ -195,6 +206,11 @@
 			return;
 		submitting = true;
 		try {
+			if (
+				$experimentCurrent?.telemetry_extension?.required &&
+				!(await flushExperimentTelemetry(false))
+			)
+				throw new Error($i18n.t('Interaction telemetry could not be saved. Please try again.'));
 			clearTimeout(saveTimer);
 			if (savePromise && !(await savePromise)) throw new Error($i18n.t('Draft could not be saved'));
 			let nextExperiment: any = null;
@@ -232,6 +248,11 @@
 			return;
 		try {
 			if (!(await saveCurrent())) return;
+			if (
+				$experimentCurrent?.telemetry_extension?.required &&
+				!(await flushExperimentTelemetry(true))
+			)
+				throw new Error($i18n.t('Interaction telemetry could not be saved. Please try again.'));
 			experimentCurrent.set(await finalizeExperimentTasks(localStorage.token));
 			experimentRefresh.update((value) => value + 1);
 		} catch (error) {
@@ -303,18 +324,69 @@
 			</div>
 		{:else if detail}
 			{#if detail.task_type === 'ESSAY'}
-				<div class="shrink-0 border-b border-gray-100 p-4 dark:border-gray-800">
-					<div class="font-medium">{detail.topic?.title}</div>
-					<p class="mt-2 whitespace-pre-wrap text-sm text-gray-500">{detail.topic?.question}</p>
+				<div
+					class="shrink-0 border-b border-gray-100 p-2 transition-colors duration-200 dark:border-gray-800 {showEssayExplanation
+						? 'bg-gray-50/60 dark:bg-gray-900/40'
+						: 'bg-white dark:bg-gray-850'}"
+				>
+					<button
+						type="button"
+						class="group flex w-full items-center justify-between gap-3 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-gray-100/80 dark:hover:bg-gray-800/80"
+						on:click={() => (showEssayExplanation = !showEssayExplanation)}
+						aria-expanded={showEssayExplanation}
+						aria-controls={`essay-instructions-${detail.id}`}
+						aria-label={showEssayExplanation
+							? $i18n.t('Collapse essay instructions')
+							: $i18n.t('Expand essay instructions')}
+					>
+						<span class="min-w-0">
+							<span class="block text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+								{$i18n.t('Essay instructions')}
+							</span>
+							<span class="block truncate text-sm font-medium text-gray-900 dark:text-white">
+								{detail.topic?.title}
+							</span>
+						</span>
+						<span class="flex shrink-0 items-center gap-2">
+							<span class="hidden text-[11px] font-medium text-gray-400 sm:inline">
+								{showEssayExplanation ? $i18n.t('Hide') : $i18n.t('Show')}
+							</span>
+							<span
+								class="flex size-7 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition-all duration-300 group-hover:bg-gray-200 group-hover:text-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:group-hover:bg-gray-700 dark:group-hover:text-gray-200 {showEssayExplanation
+									? 'rotate-180'
+									: ''}"
+							>
+								<ChevronDown className="size-3.5" />
+							</span>
+						</span>
+					</button>
+					{#if showEssayExplanation}
+						<div
+							id={`essay-instructions-${detail.id}`}
+							transition:slide={{ duration: 240, easing: quintOut, axis: 'y' }}
+						>
+							<div
+								class="mx-2 mt-1 max-h-[30dvh] overflow-y-auto rounded-xl border border-gray-100 bg-white/80 px-3 py-2.5 text-sm text-gray-500 shadow-xs dark:border-gray-800 dark:bg-gray-850/80"
+							>
+								<SafeMarkdown
+									content={detail.topic?.question ?? ''}
+									className="markdown-prose-sm"
+								/>
+							</div>
+						</div>
+					{/if}
 				</div>
-				<textarea
-					data-experiment-field="essay"
-					class="min-h-0 min-w-0 flex-1 resize-none bg-transparent p-4 text-sm leading-6 outline-hidden"
+				<MarkdownEditor
 					bind:value={essayContent}
-					on:input={changed}
+					experimentField="essay"
+					sessionTaskId={detail.id}
+					className="min-h-40 flex-1 !rounded-none !border-0 !ring-0"
+					textareaClass="p-4"
+					ariaLabel={$i18n.t('Essay')}
+					onInput={changed}
 					readonly={detail.status === 'FINALIZED'}
 					placeholder={$i18n.t('Start writing your essay...')}
-				></textarea>
+				/>
 			{:else}
 				<div
 					class="grid min-h-0 flex-1 grid-cols-[4.5rem_minmax(0,1fr)] overflow-hidden sm:grid-cols-[11rem_minmax(0,1fr)]"
@@ -345,6 +417,16 @@
 							data-question-id={currentQuestion.id}
 							data-submission-id={detail.submission?.id}
 						>
+							{#if detail.question_task?.description}
+								<div
+									class="mb-4 rounded-xl bg-gray-50 p-3 text-sm text-gray-600 dark:bg-gray-900 dark:text-gray-300"
+								>
+									<SafeMarkdown
+										content={detail.question_task.description}
+										className="markdown-prose-sm"
+									/>
+								</div>
+							{/if}
 							<div class="flex flex-wrap items-start justify-between gap-2">
 								<h2 class="min-w-0 text-base font-semibold">{currentQuestion.title}</h2>
 								<span class="shrink-0 text-xs text-gray-500"
@@ -367,11 +449,12 @@
 												}}
 												readonly={detail.status === 'FINALIZED'}
 											/>{:else}{part}{/if}{/each}
-								</div>{:else}<p
-									class="mt-3 whitespace-pre-wrap text-sm leading-6 text-gray-600 dark:text-gray-300"
-								>
-									{currentQuestion.description}
-								</p>{/if}
+								</div>{:else}<div class="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">
+									<SafeMarkdown
+										content={currentQuestion.description}
+										className="markdown-prose-sm"
+									/>
+								</div>{/if}
 							{#if currentQuestion.image_file_id}<QuestionImage
 									fileId={currentQuestion.image_file_id}
 									alt={currentQuestion.title}
@@ -421,6 +504,12 @@
 				</div>
 			{/if}
 			<div class="shrink-0 border-t border-gray-100 p-3 dark:border-gray-800">
+				{#if detail.task_type === 'ESSAY'}
+					<div class="mb-2 text-right text-xs text-gray-400">
+						{essayWordCount}
+						{$i18n.t('words')}
+					</div>
+				{/if}
 				{#if detail.status !== 'FINALIZED'}<button
 						class="w-full rounded-xl bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-40 dark:bg-white dark:text-black"
 						disabled={submitting ||

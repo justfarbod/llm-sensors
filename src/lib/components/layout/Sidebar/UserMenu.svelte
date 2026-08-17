@@ -14,8 +14,10 @@
 		showShortcuts,
 		user,
 		config,
-		settings
+		settings,
+		experimentCurrent
 	} from '$lib/stores';
+	import { flushExperimentTelemetry } from '$lib/utils/experimentTelemetry';
 
 	import { WEBUI_API_BASE_URL } from '$lib/constants';
 
@@ -627,6 +629,17 @@
 				class="flex rounded-xl py-1.5 px-3 w-full hover:bg-gray-50 dark:hover:bg-gray-800 transition cursor-pointer select-none"
 				type="button"
 				on:click={async () => {
+					if (
+						$experimentCurrent?.state === 'IN_PROGRESS' &&
+						$experimentCurrent?.telemetry_extension?.required &&
+						!(await flushExperimentTelemetry(true))
+					) {
+						toast.error('Interaction telemetry could not be saved. Please try again.');
+						return;
+					}
+					window.dispatchEvent(
+						new CustomEvent('open-webui-experiment-state', { detail: { state: 'SIGNED_OUT' } })
+					);
 					const res = await userSignOut();
 					user.set(null);
 					localStorage.removeItem('token');

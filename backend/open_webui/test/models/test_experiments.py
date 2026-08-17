@@ -327,7 +327,41 @@ def test_experiment_essay_stores_word_and_character_counts(monkeypatch):
         AsyncMock(return_value=(ExperimentState.IN_PROGRESS, session, None)),
     )
 
-    essay = run(Experiments.submit_essay(user, 'One two three.', db))
+    source = '## One\n\n- **two**\n- [three](https://example.com)'
+    essay = run(Experiments.submit_essay(user, source, db))
 
+    assert essay.content == source
     assert essay.word_count == 3
-    assert essay.character_count == len('One two three.')
+    assert essay.character_count == len('One two three')
+
+
+def test_workflow_essay_finalization_stores_markdown_source_with_visible_counts(monkeypatch):
+    user = SimpleNamespace(id='user', role='user')
+    session = SimpleNamespace(
+        user_id='user',
+        state=ExperimentState.IN_PROGRESS.value,
+        essay_id=None,
+        essay_submitted_at=None,
+    )
+    task = SimpleNamespace(
+        id='task',
+        experiment_session_id='session',
+        status='ACTIVE',
+        essay_id=None,
+        essay_topic_id='topic',
+        essay_topic_title='Title',
+        essay_topic_question='Question',
+    )
+    db = AsyncMock()
+    db.get.return_value = session
+    db.add = MagicMock()
+    monkeypatch.setattr(Experiments, 'advance_after_stage', AsyncMock())
+    source = '## One\n\n- **two**\n- [three](https://example.com)'
+
+    essay = run(Experiments.finalize_essay_task(user, task, source, db))
+
+    assert essay.content == source
+    assert essay.word_count == 3
+    assert essay.character_count == len('One two three')
+    assert task.essay_draft == source
+    assert task.essay_id == essay.id

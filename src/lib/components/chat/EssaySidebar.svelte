@@ -1,15 +1,21 @@
 <script lang="ts">
 	import { getContext, onMount, tick } from 'svelte';
+	import { quintOut } from 'svelte/easing';
+	import { slide } from 'svelte/transition';
 	import { toast } from 'svelte-sonner';
 	import type { i18n as i18nType } from 'i18next';
 	import type { Writable } from 'svelte/store';
 
 	import { getEssayWorkspace, submitEssay } from '$lib/apis/essays';
-	import { experimentRefresh, showEssaySidebar } from '$lib/stores';
+	import { experimentCurrent, experimentRefresh, showEssaySidebar } from '$lib/stores';
 	import Drawer from '../common/Drawer.svelte';
+	import MarkdownEditor from '../common/MarkdownEditor.svelte';
+	import SafeMarkdown from '../common/SafeMarkdown.svelte';
 	import ChevronDown from '../icons/ChevronDown.svelte';
 	import FloppyDisk from '../icons/FloppyDisk.svelte';
 	import XMark from '../icons/XMark.svelte';
+	import { flushExperimentTelemetry } from '$lib/utils/experimentTelemetry';
+	import { markdownTextMetrics } from '$lib/utils/markdownEditor';
 
 	type EssayTopic = {
 		id: string;
@@ -27,6 +33,7 @@
 	let largeScreen = false;
 	let sidebarWidth = 420;
 	let resizing = false;
+	$: wordCount = markdownTextMetrics(content).wordCount;
 	const minSize = 20;
 	const maxSize = 50;
 
@@ -78,7 +85,11 @@
 
 		submitting = true;
 		try {
-			window.dispatchEvent(new CustomEvent('open-webui-experiment-telemetry-flush'));
+			if (
+				$experimentCurrent?.telemetry_extension?.required &&
+				!(await flushExperimentTelemetry(true))
+			)
+				throw new Error($i18n.t('Interaction telemetry could not be saved. Please try again.'));
 			await submitEssay(localStorage.token, normalizedContent);
 			content = normalizedContent;
 			lastSubmittedContent = normalizedContent;
@@ -121,49 +132,73 @@
 {#snippet editor()}
 	<div class="flex size-full min-h-0 min-w-0 flex-col bg-white dark:bg-gray-850">
 		<div
-			class="flex w-full min-w-0 shrink-0 items-center justify-between border-b border-gray-100 px-3 py-2 dark:border-gray-800"
+			class="w-full min-w-0 shrink-0 border-b border-gray-100 px-3 py-2 transition-colors duration-200 dark:border-gray-800 {showQuestion
+				? 'bg-gray-50/60 dark:bg-gray-900/40'
+				: 'bg-white dark:bg-gray-850'}"
 		>
-			<button
-				class="min-w-0 flex-1 rounded-lg px-1 py-1 text-left transition hover:bg-gray-50 dark:hover:bg-gray-800"
-				on:click={() => (showQuestion = !showQuestion)}
-				disabled={!topic}
-				aria-expanded={showQuestion}
-			>
-				<div class="flex items-center justify-between gap-2">
-					<div class="truncate text-sm font-medium text-gray-900 dark:text-white">
-						{topic?.title ?? $i18n.t('Essay')}
-					</div>
-					{#if topic}
-						<div class="shrink-0 transition-transform {showQuestion ? 'rotate-180' : ''}">
-							<ChevronDown className="size-3.5" />
+			<div class="flex items-center justify-between gap-2">
+				<button
+					type="button"
+					class="group min-w-0 flex-1 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-gray-100/80 dark:hover:bg-gray-800/80"
+					on:click={() => (showQuestion = !showQuestion)}
+					disabled={!topic}
+					aria-expanded={showQuestion}
+					aria-controls="legacy-essay-instructions"
+				>
+					<div class="flex items-center justify-between gap-3">
+						<div class="min-w-0">
+							<div class="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+								{$i18n.t('Essay instructions')}
+							</div>
+							<div class="truncate text-sm font-medium text-gray-900 dark:text-white">
+								{topic?.title ?? $i18n.t('Essay')}
+							</div>
 						</div>
-					{/if}
-				</div>
-				{#if showQuestion && topic}
-					<div class="mt-2 whitespace-pre-wrap text-xs leading-5 text-gray-500">
-						{topic.question}
+						{#if topic}
+							<div
+								class="flex size-7 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition-all duration-300 group-hover:bg-gray-200 group-hover:text-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:group-hover:bg-gray-700 dark:group-hover:text-gray-200 {showQuestion
+									? 'rotate-180'
+									: ''}"
+							>
+								<ChevronDown className="size-3.5" />
+							</div>
+						{/if}
 					</div>
-				{/if}
-			</button>
-			<button
-				class="rounded-lg p-1.5 text-gray-500 transition hover:bg-gray-100 dark:hover:bg-gray-800"
-				on:click={() => showEssaySidebar.set(false)}
-				aria-label={$i18n.t('Close')}
-			>
-				<XMark className="size-4" />
-			</button>
+				</button>
+				<button
+					class="rounded-lg p-1.5 text-gray-500 transition hover:bg-gray-100 dark:hover:bg-gray-800"
+					on:click={() => showEssaySidebar.set(false)}
+					aria-label={$i18n.t('Close')}
+				>
+					<XMark className="size-4" />
+				</button>
+			</div>
+			{#if showQuestion && topic}
+				<div
+					id="legacy-essay-instructions"
+					transition:slide={{ duration: 240, easing: quintOut, axis: 'y' }}
+				>
+					<div
+						class="mx-2 mt-1 max-h-[30dvh] overflow-y-auto rounded-xl border border-gray-100 bg-white/80 px-3 py-2.5 text-xs leading-5 text-gray-500 shadow-xs dark:border-gray-800 dark:bg-gray-850/80"
+					>
+						<SafeMarkdown content={topic.question} className="markdown-prose-xs" />
+					</div>
+				</div>
+			{/if}
 		</div>
 
-		<textarea
+		<MarkdownEditor
 			bind:value={content}
-			data-experiment-field="essay"
-			class="min-h-0 w-full min-w-0 flex-1 resize-none bg-transparent p-4 text-sm leading-6 text-gray-900 outline-hidden placeholder:text-gray-400 dark:text-gray-100"
+			experimentField="essay"
+			className="min-h-40 flex-1 !rounded-none !border-0 !ring-0"
+			textareaClass="p-4"
+			ariaLabel={$i18n.t('Essay')}
 			placeholder={$i18n.t('Start writing your essay...')}
-		></textarea>
+		/>
 
 		<div class="w-full min-w-0 shrink-0 border-t border-gray-100 p-3 dark:border-gray-800">
 			<div class="mb-2 text-right text-xs text-gray-400">
-				{content.trim() ? content.trim().split(/\s+/).length : 0}
+				{wordCount}
 				{$i18n.t('words')}
 			</div>
 			<button

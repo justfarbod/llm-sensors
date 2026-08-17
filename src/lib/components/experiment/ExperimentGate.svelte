@@ -15,6 +15,7 @@
 	} from '$lib/apis/experiments';
 	import { userSignOut } from '$lib/apis/auths';
 	import { experimentCurrent, experimentRefresh, showEssaySidebar, user } from '$lib/stores';
+	import SafeMarkdown from '$lib/components/common/SafeMarkdown.svelte';
 	import ExperimentSurveyModal from './ExperimentSurveyModal.svelte';
 	import {
 		createExperimentStateLoader,
@@ -29,6 +30,27 @@
 	let agreed = false;
 	let channel: BroadcastChannel | null = null;
 	let refreshValue = 0;
+	let extensionPollTimer: ReturnType<typeof setInterval>;
+	$: telemetryExtension = $experimentCurrent?.telemetry_extension;
+	$: extensionRequiredForStart = Boolean(
+		telemetryExtension?.required &&
+		['TOPIC_REQUIRED', 'TASK_REQUIRED'].includes($experimentCurrent?.state ?? '')
+	);
+	$: extensionReadyForStart = !extensionRequiredForStart || Boolean(telemetryExtension?.ready);
+	const chromeSupported = () => {
+		if (typeof navigator === 'undefined') return false;
+		const clientHints = (navigator as any).userAgentData;
+		if (
+			clientHints?.mobile ||
+			(navigator as any).brave ||
+			/Mobile|Edg\/|OPR\//.test(navigator.userAgent)
+		)
+			return false;
+		return (
+			clientHints?.brands?.some((brand: any) => brand.brand === 'Google Chrome') ??
+			/Chrome\//.test(navigator.userAgent)
+		);
+	};
 
 	let pre = {
 		school_class: '',
@@ -172,7 +194,13 @@
 		channel.onmessage = () => refresh();
 		const focus = () => refresh();
 		window.addEventListener('focus', focus);
-		return () => window.removeEventListener('focus', focus);
+		extensionPollTimer = setInterval(() => {
+			if (extensionRequiredForStart && !telemetryExtension?.ready) void refresh(true);
+		}, 2500);
+		return () => {
+			window.removeEventListener('focus', focus);
+			clearInterval(extensionPollTimer);
+		};
 	});
 
 	onDestroy(() => {
@@ -202,6 +230,15 @@
 					>
 						{$experimentCurrent.agreement_text}
 					</div>
+					{#if telemetryExtension?.required}<div
+							class="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-100"
+						>
+							<strong>Mandatory browser telemetry disclosure</strong><br />During the active
+							experiment, the required Chrome extension collects complete URLs—including paths,
+							query strings, and fragments—page titles, favicon URLs, and lifecycle/state metadata
+							for every tab in normal browser windows. Incognito tabs are excluded. These raw
+							records are retained indefinitely.
+						</div>{/if}
 					<label class="mt-5 flex items-start gap-3 text-sm">
 						<input class="mt-1" type="checkbox" bind:checked={agreed} />
 						<span>I have read and agree to participate.</span>
@@ -298,6 +335,44 @@
 						>
 					</form>
 				{:else if $experimentCurrent.state === 'TOPIC_REQUIRED' || $experimentCurrent.state === 'TASK_REQUIRED'}
+					{#if extensionRequiredForStart}
+						<div class="mb-5 rounded-2xl border border-gray-200 p-4 dark:border-gray-700">
+							<h2 class="font-semibold">Required Chrome telemetry extension</h2>
+							<p class="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
+								The experiment cannot start until Chrome confirms the extension, version
+								{telemetryExtension?.minimum_version} or newer, full tab permission, and disabled incognito
+								access. Chrome will ask you to approve installation.
+							</p>
+							{#if telemetryExtension?.configuration_error}
+								<p
+									class="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300"
+								>
+									Deployment error: {telemetryExtension.configuration_error}
+								</p>
+							{:else if telemetryExtension?.ready}
+								<p class="mt-3 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+									Extension connected{telemetryExtension.detected_version
+										? ` · version ${telemetryExtension.detected_version}`
+										: ''}.
+								</p>
+							{:else if !chromeSupported()}
+								<p class="mt-3 text-sm text-red-700 dark:text-red-300">
+									This experiment requires Google Chrome on a desktop computer.
+								</p>
+							{:else}
+								{#if telemetryExtension?.store_url}<a
+										class="mt-4 inline-flex rounded-xl bg-black px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-black"
+										href={telemetryExtension.store_url}
+										target="_blank"
+										rel="noopener noreferrer">Install from Chrome Web Store</a
+									>{:else}<p class="mt-3 text-sm text-gray-600 dark:text-gray-300">
+										Local manual installation: open <code>chrome://extensions</code>, enable
+										Developer mode, and load the generated <code>experiment-telemetry/dist</code> directory.
+									</p>{/if}
+								<p class="mt-2 text-xs text-gray-500">Waiting for the extension heartbeat…</p>
+							{/if}
+						</div>
+					{/if}
 					{#if $experimentCurrent.state === 'TASK_REQUIRED'}
 						<h1 class="text-xl font-semibold">{$i18n.t('Your Experiment Tasks')}</h1>
 						<p class="mt-2 text-sm text-gray-500">
@@ -318,19 +393,22 @@
 						</div>
 						<button
 							class="mt-6 w-full rounded-xl bg-black px-4 py-2.5 font-medium text-white dark:bg-white dark:text-black"
-							disabled={loading}
+							disabled={loading || !extensionReadyForStart}
 							on:click={() => run(() => startExperiment(localStorage.token))}
 							>{$i18n.t('Start Tasks')}</button
 						>
 					{:else}
 						<h1 class="text-xl font-semibold">Your Essay Topic</h1>
 						<h2 class="mt-5 font-medium">{$experimentCurrent.topic?.title}</h2>
-						<p class="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-600 dark:text-gray-300">
-							{$experimentCurrent.topic?.question}
-						</p>
+						<div class="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
+							<SafeMarkdown
+								content={$experimentCurrent.topic?.question ?? ''}
+								className="markdown-prose-sm"
+							/>
+						</div>
 						<button
 							class="mt-6 w-full rounded-xl bg-black px-4 py-2.5 font-medium text-white dark:bg-white dark:text-black"
-							disabled={loading}
+							disabled={loading || !extensionReadyForStart}
 							on:click={() => run(() => startExperiment(localStorage.token))}>Start Writing</button
 						>
 					{/if}

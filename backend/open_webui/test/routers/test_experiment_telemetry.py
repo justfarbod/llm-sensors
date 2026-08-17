@@ -10,8 +10,12 @@ from pydantic import ValidationError
 
 from open_webui.models.experiment_telemetry import ExperimentTelemetryEvent
 from open_webui.models.experiments import ExperimentState, Experiments
+from open_webui.routers import experiment_telemetry as telemetry_module
+from open_webui.routers import experiments as experiments_router
 from open_webui.routers.experiment_telemetry import (
+    ExtensionHeartbeatForm,
     TelemetryBatchForm,
+    extension_heartbeat,
     router,
     telemetry_events,
     telemetry_status,
@@ -49,6 +53,29 @@ def event(event_type='keystroke', **values):
     return base
 
 
+def tab_event(event_type='tab_created', **values):
+    base = event(
+        event_type,
+        field='unknown',
+        browser_session_id=str(uuid4()),
+        sequence=1,
+        tab={
+            'tab_id': 12,
+            'window_id': 3,
+            'index': 1,
+            'active': True,
+            'highlighted': True,
+            'pinned': False,
+            'incognito': False,
+            'url': 'https://example.com/a/path?secret=query#fragment',
+            'title': 'Complete title',
+            'fav_icon_url': 'https://example.com/favicon.ico',
+        },
+    )
+    base.update(values)
+    return base
+
+
 def result(*, first=None, all_rows=None):
     scalars = MagicMock()
     scalars.first.return_value = first
@@ -60,7 +87,7 @@ def result(*, first=None, all_rows=None):
 
 def test_routes_require_authenticated_verified_user():
     routes = [route for route in router.routes if isinstance(route, APIRoute)]
-    assert {route.path for route in routes} == {'/status', '/events'}
+    assert {route.path for route in routes} == {'/status', '/events', '/extension/heartbeat'}
     for route in routes:
         assert any(dependency.call is get_verified_user for dependency in route.dependant.dependencies)
 
@@ -130,6 +157,95 @@ def test_schema_rejects_raw_text_unknown_fields_and_batch_limits():
                 'events': [event(timestamp='2026-06-15T12:00:01')],
             }
         )
+
+
+def test_schema_v2_accepts_complete_tab_metadata_and_rejects_v1_or_incognito():
+    valid = tab_event()
+    form = TelemetryBatchForm.model_validate(
+        {'experiment_session_id': 'session', 'schema_version': 2, 'events': [valid]}
+    )
+    assert form.events[0].tab.url.endswith('/a/path?secret=query#fragment')
+
+    with pytest.raises(ValidationError):
+        TelemetryBatchForm.model_validate({'experiment_session_id': 'session', 'events': [valid]})
+
+    invalid = tab_event()
+    invalid['tab']['incognito'] = True
+    with pytest.raises(ValidationError):
+        TelemetryBatchForm.model_validate(
+            {'experiment_session_id': 'session', 'schema_version': 2, 'events': [invalid]}
+        )
+
+
+def test_heartbeat_derives_session_and_checks_identity_permissions_and_version(monkeypatch):
+    session = SimpleNamespace(id='session')
+    monkeypatch.setattr(telemetry_module, 'EXPERIMENT_TELEMETRY_EXTENSION_ENABLED', True)
+    monkeypatch.setattr(telemetry_module, 'EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN', 'https://research.test')
+    monkeypatch.setattr(telemetry_module, 'EXPERIMENT_TELEMETRY_EXTENSION_ID', 'expected-id')
+    monkeypatch.setattr(telemetry_module, 'EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION', '2.0.0')
+    monkeypatch.setattr(
+        Experiments,
+        'get_current',
+        AsyncMock(return_value=(ExperimentState.TOPIC_REQUIRED, session, None)),
+    )
+
+    async def scenario(tabs_permission=True, extension_id='expected-id', version='2.0.0'):
+        db = AsyncMock()
+        db.add = MagicMock()
+        db.get.return_value = None
+        form = ExtensionHeartbeatForm(
+            extension_version=version,
+            extension_id=extension_id,
+            schema_version=2,
+            tabs_permission=tabs_permission,
+            incognito_allowed=False,
+            origin='https://research.test',
+        )
+        try:
+            response = await extension_heartbeat(form, SimpleNamespace(id='user', role='user'), db)
+            return response, db.add.call_args.args[0]
+        except HTTPException as error:
+            return error.status_code, None
+
+    ready, presence = run(scenario())
+    assert ready['ready'] is True
+    assert presence.experiment_session_id == 'session'
+    assert presence.user_id == 'user'
+    assert run(scenario(tabs_permission=False))[0]['ready'] is False
+    assert run(scenario(version='1.9.9'))[0]['ready'] is False
+    assert run(scenario(extension_id='wrong'))[0] == 403
+
+
+def test_start_is_blocked_server_side_without_fresh_extension(monkeypatch):
+    session = SimpleNamespace(id='session')
+    monkeypatch.setattr(experiments_router, 'EXPERIMENT_TELEMETRY_EXTENSION_ENABLED', True)
+    monkeypatch.setattr(experiments_router, '_extension_ready', lambda presence: False)
+    monkeypatch.setattr(
+        Experiments,
+        'get_current',
+        AsyncMock(return_value=(ExperimentState.TOPIC_REQUIRED, session, None)),
+    )
+    begin = AsyncMock()
+    monkeypatch.setattr(Experiments, 'start', begin)
+    db = AsyncMock()
+    db.get.return_value = None
+
+    with pytest.raises(HTTPException) as error:
+        run(experiments_router.start(SimpleNamespace(id='user', role='user'), db))
+    assert error.value.status_code == 412
+    begin.assert_not_awaited()
+
+
+def test_manual_loopback_configuration_does_not_require_store_listing(monkeypatch):
+    monkeypatch.setattr(experiments_router, 'EXPERIMENT_TELEMETRY_EXTENSION_ENABLED', True)
+    monkeypatch.setattr(experiments_router, 'EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN', 'http://localhost:8080')
+    monkeypatch.setattr(experiments_router, 'EXPERIMENT_TELEMETRY_EXTENSION_ID', '')
+    monkeypatch.setattr(experiments_router, 'EXPERIMENT_TELEMETRY_EXTENSION_STORE_URL', '')
+    monkeypatch.setattr(experiments_router, 'EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION', '2.0.0')
+    assert experiments_router._extension_configuration_error() is None
+
+    monkeypatch.setattr(experiments_router, 'EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN', 'http://research.test')
+    assert experiments_router._extension_configuration_error() is not None
 
 
 def test_valid_batch_is_idempotent_and_updates_summary():

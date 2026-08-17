@@ -14,6 +14,11 @@ export type ResearchFilters = {
 	direction?: 'asc' | 'desc';
 };
 
+export type FullSessionExportDownload = {
+	blob: Blob;
+	filename: string;
+};
+
 const baseUrl = `${WEBUI_API_BASE_URL}/analytics/experiments`;
 
 const queryString = (filters: ResearchFilters = {}) => {
@@ -68,6 +73,17 @@ export const getResearchSection = (
 export const getResearchSession = (token: string, sessionId: string, signal?: AbortSignal) =>
 	request(token, `/sessions/${sessionId}`, {}, signal);
 
+export const getResearchTabActivity = (
+	token: string,
+	sessionId: string,
+	filters: ResearchFilters & {
+		event_type?: string;
+		browser_tab_id?: number | string;
+		browser_window_id?: number | string;
+	} = {},
+	signal?: AbortSignal
+) => request(token, `/sessions/${sessionId}/tab-activity`, filters, signal);
+
 export const getQuestionSubmission = (token: string, submissionId: string, signal?: AbortSignal) =>
 	request(token, `/question-submissions/${submissionId}`, {}, signal);
 
@@ -81,25 +97,30 @@ export const overrideQuestionScore = (
 export const retryQuestionGrading = (token: string, responseId: string) =>
 	mutate(token, `/question-responses/${responseId}/retry`, 'POST');
 
-export const exportResearchData = async (
+export const exportFullResearchSessions = async (
 	token: string,
-	section: 'participants' | 'essays' | 'surveys' | 'perturbations',
 	ids: string[],
-	format: 'csv' | 'json',
 	anonymized: boolean
-) => {
-	const response = await fetch(`${baseUrl}/export/${section}`, {
+): Promise<FullSessionExportDownload> => {
+	const response = await fetch(`${baseUrl}/export/sessions`, {
 		method: 'POST',
 		headers: {
-			Accept: format === 'csv' ? 'text/csv' : 'application/json',
+			Accept: 'application/json',
 			'Content-Type': 'application/json',
 			authorization: `Bearer ${token}`
 		},
-		body: JSON.stringify({ ids, format, anonymized })
+		body: JSON.stringify({ ids, anonymized })
 	});
 	if (!response.ok) {
 		const body = await response.json().catch(() => null);
-		throw body?.detail ?? `Export failed with status ${response.status}`;
+		const detail = body?.detail;
+		throw (
+			(typeof detail === 'string' ? detail : detail?.message) ??
+			`Export failed with status ${response.status}`
+		);
 	}
-	return response.blob();
+	const disposition = response.headers.get('Content-Disposition') ?? '';
+	const filename =
+		disposition.match(/filename="?([^";]+)"?/i)?.[1] ?? 'experiment-full-sessions.json';
+	return { blob: await response.blob(), filename };
 };

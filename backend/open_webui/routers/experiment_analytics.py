@@ -7,34 +7,46 @@ import statistics
 import time
 import uuid
 from collections import Counter, defaultdict
-from datetime import datetime
-from typing import Literal, Optional
+from datetime import date, datetime, timezone
+from enum import Enum
+from typing import AsyncIterator, Literal, Optional
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import Integer, and_, case, cast, func, or_, select
+from sqlalchemy import Integer, and_, case, cast, func, inspect as sqlalchemy_inspect, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from open_webui.env import WEBUI_SECRET_KEY
 from open_webui.internal.db import get_async_session
 from open_webui.models.chat_messages import ChatMessage, _token_columns
-from open_webui.models.essays import Essay, EssayTopics
+from open_webui.models.chats import Chat, ChatFile
+from open_webui.models.essays import Essay, EssayTopic, EssayTopicAssignment, EssayTopics
 from open_webui.models.experiment_telemetry import (
     ExperimentTelemetryEvent,
+    ExperimentTelemetryExtensionPresence,
     ExperimentTelemetrySummary,
     ExperimentTelemetrySummaryModel,
 )
 from open_webui.models.experiment_perturbations import (
     ExperimentCondition,
+    ExperimentConditionTaskScope,
     ExperimentLLMRequest,
     ExperimentPromptInjection,
     ExperimentResponseTiming,
+    ExperimentWarningState,
     ExperimentWarningModal,
 )
 from open_webui.models.experiments import ACTIVE_STATES, ExperimentSession, ExperimentState
-from open_webui.models.experiment_plans import ExperimentSessionTask
+from open_webui.models.experiment_plans import (
+    ExperimentPlan,
+    ExperimentPlanItem,
+    ExperimentPlanItemTopic,
+    ExperimentSessionTask,
+)
+from open_webui.models.feedbacks import Feedback
+from open_webui.models.files import File
 from open_webui.models.question_submissions import (
     QuestionGradingAttempt,
     QuestionResponse,
@@ -44,7 +56,16 @@ from open_webui.models.question_submissions import (
     QuestionSubmission,
     QuestionSubmissions,
 )
-from open_webui.models.question_tasks import GradingStatus, QuestionTasks
+from open_webui.models.question_tasks import (
+    GradingStatus,
+    QuestionBlank,
+    QuestionBlankAcceptedAnswer,
+    QuestionChoice,
+    QuestionFreeTextConfig,
+    QuestionTask,
+    QuestionTaskQuestion,
+    QuestionTasks,
+)
 from open_webui.models.survey_submissions import (
     SurveyResponse,
     SurveyResponseChoice,
@@ -54,11 +75,26 @@ from open_webui.models.survey_tasks import SurveyChoice, SurveyQuestion, SurveyT
 from open_webui.models.groups import Group, GroupMember, Groups
 from open_webui.models.users import User
 from open_webui.utils.auth import get_admin_user
+from open_webui.utils.essay_text import essay_text_metrics
 from open_webui.tasks import create_task
 from open_webui.utils.question_grading import grade_response
 
 router = APIRouter()
 NS = 1_000_000_000
+TAB_TELEMETRY_EVENT_TYPES = {
+    'tab_snapshot',
+    'tab_created',
+    'tab_updated',
+    'tab_activated',
+    'tab_highlighted',
+    'tab_moved',
+    'tab_attached',
+    'tab_detached',
+    'tab_replaced',
+    'tab_removed',
+    'window_focus_changed',
+    'telemetry_loss',
+}
 
 
 class DashboardFilters(BaseModel):
@@ -74,6 +110,932 @@ class ExportRequest(BaseModel):
     ids: list[str] = Field(min_length=1, max_length=10000)
     format: Literal['csv', 'json'] = 'csv'
     anonymized: bool = False
+
+
+class FullSessionExportRequest(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=10000)
+    anonymized: bool = True
+
+
+def _json_value(value):
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(key): _json_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_value(item) for item in value]
+    return value
+
+
+def _anonymize_identity_fields(value):
+    if isinstance(value, list):
+        return [_anonymize_identity_fields(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    anonymized = {}
+    for key, item in value.items():
+        if key in {'user_id', 'admin_id'} and item:
+            anonymized[key] = _anonymous_id(str(item))
+        else:
+            anonymized[key] = _anonymize_identity_fields(item)
+    return anonymized
+
+
+def _row_payload(row, anonymized: bool = False):
+    if row is None:
+        return None
+    payload = {
+        column.key: _json_value(getattr(row, column.key)) for column in sqlalchemy_inspect(row).mapper.column_attrs
+    }
+    return _anonymize_identity_fields(payload) if anonymized else payload
+
+
+def _participant_payload(participant: Optional[User], anonymized: bool):
+    if participant is None:
+        return None
+    participant_id = _anonymous_id(participant.id)
+    payload = {
+        'id': participant_id if anonymized else participant.id,
+        'participant_id': participant_id,
+        'role': participant.role,
+        'last_active_at': participant.last_active_at,
+        'created_at': participant.created_at,
+        'updated_at': participant.updated_at,
+    }
+    if not anonymized:
+        payload.update(
+            {
+                'name': participant.name,
+                'username': participant.username,
+                'email': participant.email,
+            }
+        )
+    return payload
+
+
+def _group_payload(group: Optional[Group], anonymized: bool):
+    if group is None:
+        return None
+    payload = {
+        key: _json_value(getattr(group, key))
+        for key in ('id', 'name', 'description', 'data', 'meta', 'permissions', 'created_at', 'updated_at')
+    }
+    return _anonymize_identity_fields(payload) if anonymized else payload
+
+
+def _derived_payload(row: dict, anonymized: bool):
+    payload = _json_value(row)
+    if anonymized:
+        payload = _anonymize_identity_fields(payload)
+        for key in ('name', 'username', 'email'):
+            payload.pop(key, None)
+    return payload
+
+
+async def _file_metadata_payload(
+    db: AsyncSession,
+    file_id: Optional[str],
+    cache: dict[str, Optional[dict]],
+    anonymized: bool,
+):
+    if not file_id:
+        return None
+    if file_id not in cache:
+        row = await db.get(File, file_id)
+        if row is None:
+            cache[file_id] = None
+        else:
+            meta = _json_value(row.meta) if isinstance(row.meta, dict) else {}
+            if anonymized:
+                meta = _anonymize_identity_fields(meta)
+            cache[file_id] = {
+                'id': row.id,
+                'filename': row.filename,
+                'hash': row.hash,
+                'content_type': meta.get('content_type'),
+                'size': meta.get('size'),
+                'meta': meta,
+                'created_at': row.created_at,
+                'updated_at': row.updated_at,
+            }
+    return cache[file_id]
+
+
+def _embedded_file_ids(files) -> set[str]:
+    ids: set[str] = set()
+    if not isinstance(files, list):
+        return ids
+    for item in files:
+        if isinstance(item, str):
+            ids.add(item)
+        elif isinstance(item, dict):
+            value = item.get('file_id') or item.get('id')
+            if isinstance(value, str):
+                ids.add(value)
+    return ids
+
+
+async def _question_task_export(
+    db: AsyncSession,
+    task_id: Optional[str],
+    task_cache: dict[str, Optional[dict]],
+    file_cache: dict[str, Optional[dict]],
+    anonymized: bool,
+):
+    if not task_id:
+        return None
+    if task_id in task_cache:
+        return task_cache[task_id]
+    task = await db.get(QuestionTask, task_id)
+    if task is None:
+        task_cache[task_id] = None
+        return None
+    questions = list(
+        (
+            await db.execute(
+                select(QuestionTaskQuestion)
+                .where(QuestionTaskQuestion.task_id == task_id)
+                .order_by(QuestionTaskQuestion.position)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    question_ids = [question.id for question in questions]
+    choices = (
+        list(
+            (
+                await db.execute(
+                    select(QuestionChoice)
+                    .where(QuestionChoice.question_id.in_(question_ids))
+                    .order_by(QuestionChoice.question_id, QuestionChoice.position)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if question_ids
+        else []
+    )
+    blanks = (
+        list(
+            (
+                await db.execute(
+                    select(QuestionBlank)
+                    .where(QuestionBlank.question_id.in_(question_ids))
+                    .order_by(QuestionBlank.question_id, QuestionBlank.position)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if question_ids
+        else []
+    )
+    blank_ids = [blank.id for blank in blanks]
+    accepted_answers = (
+        list(
+            (
+                await db.execute(
+                    select(QuestionBlankAcceptedAnswer)
+                    .where(QuestionBlankAcceptedAnswer.blank_id.in_(blank_ids))
+                    .order_by(QuestionBlankAcceptedAnswer.blank_id, QuestionBlankAcceptedAnswer.position)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if blank_ids
+        else []
+    )
+    free_text_configs = (
+        list(
+            (
+                await db.execute(
+                    select(QuestionFreeTextConfig).where(QuestionFreeTextConfig.question_id.in_(question_ids))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if question_ids
+        else []
+    )
+    choice_map: dict[str, list] = defaultdict(list)
+    blank_map: dict[str, list] = defaultdict(list)
+    answer_map: dict[str, list] = defaultdict(list)
+    for choice in choices:
+        choice_map[choice.question_id].append(choice)
+    for blank in blanks:
+        blank_map[blank.question_id].append(blank)
+    for answer in accepted_answers:
+        answer_map[answer.blank_id].append(answer)
+    config_map = {config.question_id: config for config in free_text_configs}
+    payload = {
+        'record': _row_payload(task),
+        'questions': [
+            {
+                'record': _row_payload(question),
+                'choices': [_row_payload(choice) for choice in choice_map[question.id]],
+                'blanks': [
+                    {
+                        'record': _row_payload(blank),
+                        'accepted_answers': [_row_payload(answer) for answer in answer_map[blank.id]],
+                    }
+                    for blank in blank_map[question.id]
+                ],
+                'free_text_config': _row_payload(config_map.get(question.id)),
+                'image': await _file_metadata_payload(db, question.image_file_id, file_cache, anonymized),
+            }
+            for question in questions
+        ],
+    }
+    task_cache[task_id] = payload
+    return payload
+
+
+async def _survey_task_export(db: AsyncSession, task_id: Optional[str], task_cache: dict[str, Optional[dict]]):
+    if not task_id:
+        return None
+    if task_id in task_cache:
+        return task_cache[task_id]
+    task = await db.get(SurveyTask, task_id)
+    if task is None:
+        task_cache[task_id] = None
+        return None
+    questions = list(
+        (
+            await db.execute(
+                select(SurveyQuestion).where(SurveyQuestion.task_id == task_id).order_by(SurveyQuestion.position)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    question_ids = [question.id for question in questions]
+    choices = (
+        list(
+            (
+                await db.execute(
+                    select(SurveyChoice)
+                    .where(SurveyChoice.question_id.in_(question_ids))
+                    .order_by(SurveyChoice.question_id, SurveyChoice.position)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if question_ids
+        else []
+    )
+    choice_map: dict[str, list] = defaultdict(list)
+    for choice in choices:
+        choice_map[choice.question_id].append(choice)
+    payload = {
+        'record': _row_payload(task),
+        'questions': [
+            {
+                'record': _row_payload(question),
+                'choices': [_row_payload(choice) for choice in choice_map[question.id]],
+            }
+            for question in questions
+        ],
+    }
+    task_cache[task_id] = payload
+    return payload
+
+
+async def _topic_export(db: AsyncSession, topic_id: Optional[str], topic_cache: dict[str, Optional[dict]]):
+    if not topic_id:
+        return None
+    if topic_id not in topic_cache:
+        topic_cache[topic_id] = _row_payload(await db.get(EssayTopic, topic_id))
+    return topic_cache[topic_id]
+
+
+async def _plan_export(
+    db: AsyncSession,
+    plan_id: Optional[str],
+    assigned_condition_id: Optional[str],
+    caches: dict,
+):
+    if not plan_id:
+        return None, {}
+    plan = await db.get(ExperimentPlan, plan_id)
+    if plan is None:
+        return None, {}
+    items = list(
+        (
+            await db.execute(
+                select(ExperimentPlanItem)
+                .where(ExperimentPlanItem.plan_id == plan_id)
+                .order_by(ExperimentPlanItem.position)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    item_ids = [item.id for item in items]
+    pools = (
+        list(
+            (
+                await db.execute(
+                    select(ExperimentPlanItemTopic)
+                    .where(ExperimentPlanItemTopic.plan_item_id.in_(item_ids))
+                    .order_by(ExperimentPlanItemTopic.plan_item_id, ExperimentPlanItemTopic.topic_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if item_ids
+        else []
+    )
+    pool_map: dict[str, list] = defaultdict(list)
+    for pool in pools:
+        pool_map[pool.plan_item_id].append(pool)
+    item_payloads = []
+    for item in items:
+        item_payloads.append(
+            {
+                'record': _row_payload(item),
+                'topic': await _topic_export(db, item.essay_topic_id, caches['topics']),
+                'topic_pool': [
+                    {
+                        'record': _row_payload(pool),
+                        'topic': await _topic_export(db, pool.topic_id, caches['topics']),
+                    }
+                    for pool in pool_map[item.id]
+                ],
+                'question_task': await _question_task_export(
+                    db, item.question_task_id, caches['question_tasks'], caches['files'], caches['anonymized']
+                ),
+                'survey_task': await _survey_task_export(db, item.survey_task_id, caches['survey_tasks']),
+            }
+        )
+    item_map = {item['record']['id']: item for item in item_payloads}
+    conditions = list(
+        (
+            await db.execute(
+                select(ExperimentCondition)
+                .where(ExperimentCondition.plan_id == plan_id)
+                .order_by(ExperimentCondition.position)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    condition_ids = [condition.id for condition in conditions]
+    scopes = (
+        list(
+            (
+                await db.execute(
+                    select(ExperimentConditionTaskScope)
+                    .where(ExperimentConditionTaskScope.condition_id.in_(condition_ids))
+                    .order_by(
+                        ExperimentConditionTaskScope.condition_id,
+                        ExperimentConditionTaskScope.perturbation_type,
+                        ExperimentConditionTaskScope.plan_item_id,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if condition_ids
+        else []
+    )
+    scope_map: dict[str, list] = defaultdict(list)
+    for scope in scopes:
+        scope_map[scope.condition_id].append(scope)
+    condition_payloads = []
+    for condition in conditions:
+        condition_payloads.append(
+            {
+                'record': _row_payload(condition),
+                'assigned_to_session': condition.id == assigned_condition_id,
+                'prompt_injection': _row_payload(await db.get(ExperimentPromptInjection, condition.id)),
+                'warning_modal': _row_payload(await db.get(ExperimentWarningModal, condition.id)),
+                'response_timing': _row_payload(await db.get(ExperimentResponseTiming, condition.id)),
+                'task_scopes': [
+                    {
+                        'record': _row_payload(scope),
+                        'plan_item': item_map.get(scope.plan_item_id),
+                    }
+                    for scope in scope_map[condition.id]
+                ],
+            }
+        )
+    return (
+        {
+            'record': _row_payload(plan),
+            'assigned_condition_id': assigned_condition_id,
+            'items': item_payloads,
+            'conditions': condition_payloads,
+        },
+        item_map,
+    )
+
+
+async def _question_submission_export(
+    db: AsyncSession,
+    session_task: ExperimentSessionTask,
+    question_task: Optional[dict],
+    anonymized: bool,
+):
+    submission = (
+        (await db.execute(select(QuestionSubmission).where(QuestionSubmission.session_task_id == session_task.id)))
+        .scalars()
+        .first()
+    )
+    if submission is None:
+        return None
+    responses = list(
+        (await db.execute(select(QuestionResponse).where(QuestionResponse.submission_id == submission.id)))
+        .scalars()
+        .all()
+    )
+    response_ids = [response.id for response in responses]
+    selected = (
+        list(
+            (
+                await db.execute(
+                    select(QuestionResponseChoice)
+                    .where(QuestionResponseChoice.response_id.in_(response_ids))
+                    .order_by(QuestionResponseChoice.response_id, QuestionResponseChoice.choice_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if response_ids
+        else []
+    )
+    blanks = (
+        list(
+            (
+                await db.execute(
+                    select(QuestionResponseBlank)
+                    .where(QuestionResponseBlank.response_id.in_(response_ids))
+                    .order_by(QuestionResponseBlank.response_id, QuestionResponseBlank.blank_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if response_ids
+        else []
+    )
+    attempts = (
+        list(
+            (
+                await db.execute(
+                    select(QuestionGradingAttempt)
+                    .where(QuestionGradingAttempt.response_id.in_(response_ids))
+                    .order_by(QuestionGradingAttempt.created_at)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if response_ids
+        else []
+    )
+    overrides = (
+        list(
+            (
+                await db.execute(
+                    select(QuestionScoreOverride)
+                    .where(QuestionScoreOverride.response_id.in_(response_ids))
+                    .order_by(QuestionScoreOverride.created_at)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if response_ids
+        else []
+    )
+    selected_map: dict[str, list] = defaultdict(list)
+    blank_map: dict[str, list] = defaultdict(list)
+    attempt_map: dict[str, list] = defaultdict(list)
+    override_map: dict[str, list] = defaultdict(list)
+    for row in selected:
+        selected_map[row.response_id].append(row)
+    for row in blanks:
+        blank_map[row.response_id].append(row)
+    for row in attempts:
+        attempt_map[row.response_id].append(row)
+    for row in overrides:
+        override_map[row.response_id].append(row)
+    question_map = {item['record']['id']: item for item in (question_task or {}).get('questions', [])}
+    choice_map = {choice['id']: choice for question in question_map.values() for choice in question.get('choices', [])}
+    blank_definition_map = {
+        blank['record']['id']: blank for question in question_map.values() for blank in question.get('blanks', [])
+    }
+    responses.sort(
+        key=lambda response: (question_map.get(response.question_id) or {}).get('record', {}).get('position', 0)
+    )
+    return {
+        'record': _row_payload(submission, anonymized),
+        'responses': [
+            {
+                'record': _row_payload(response, anonymized),
+                'question': question_map.get(response.question_id),
+                'selected_choices': [
+                    {
+                        'record': _row_payload(row),
+                        'choice': choice_map.get(row.choice_id),
+                    }
+                    for row in selected_map[response.id]
+                ],
+                'blank_answers': [
+                    {
+                        'record': _row_payload(row),
+                        'blank': blank_definition_map.get(row.blank_id),
+                    }
+                    for row in blank_map[response.id]
+                ],
+                'grading_attempts': [_row_payload(row) for row in attempt_map[response.id]],
+                'score_overrides': [_row_payload(row, anonymized) for row in override_map[response.id]],
+            }
+            for response in responses
+        ],
+    }
+
+
+async def _survey_submission_export(
+    db: AsyncSession,
+    session_task: ExperimentSessionTask,
+    survey_task: Optional[dict],
+    anonymized: bool,
+):
+    submission = (
+        (await db.execute(select(SurveySubmission).where(SurveySubmission.session_task_id == session_task.id)))
+        .scalars()
+        .first()
+    )
+    if submission is None:
+        return None
+    responses = list(
+        (await db.execute(select(SurveyResponse).where(SurveyResponse.submission_id == submission.id))).scalars().all()
+    )
+    response_ids = [response.id for response in responses]
+    selections = (
+        list(
+            (
+                await db.execute(
+                    select(SurveyResponseChoice)
+                    .where(SurveyResponseChoice.response_id.in_(response_ids))
+                    .order_by(SurveyResponseChoice.response_id, SurveyResponseChoice.choice_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if response_ids
+        else []
+    )
+    selection_map: dict[str, list] = defaultdict(list)
+    for selection in selections:
+        selection_map[selection.response_id].append(selection)
+    question_map = {item['record']['id']: item for item in (survey_task or {}).get('questions', [])}
+    choice_map = {choice['id']: choice for question in question_map.values() for choice in question.get('choices', [])}
+    responses.sort(
+        key=lambda response: (question_map.get(response.question_id) or {}).get('record', {}).get('position', 0)
+    )
+    return {
+        'record': _row_payload(submission, anonymized),
+        'responses': [
+            {
+                'record': _row_payload(response),
+                'question': question_map.get(response.question_id),
+                'selected_choices': [
+                    {
+                        'record': _row_payload(selection),
+                        'choice': choice_map.get(selection.choice_id),
+                    }
+                    for selection in selection_map[response.id]
+                ],
+            }
+            for response in responses
+        ],
+    }
+
+
+async def _session_tasks_export(
+    db: AsyncSession,
+    tasks: list[ExperimentSessionTask],
+    item_map: dict[str, dict],
+    caches: dict,
+    anonymized: bool,
+):
+    payloads = []
+    for task in tasks:
+        question_task = await _question_task_export(
+            db, task.question_task_id, caches['question_tasks'], caches['files'], anonymized
+        )
+        survey_task = await _survey_task_export(db, task.survey_task_id, caches['survey_tasks'])
+        essay = await db.get(Essay, task.essay_id) if task.essay_id else None
+        payloads.append(
+            {
+                'record': _row_payload(task),
+                'plan_item': item_map.get(task.plan_item_id),
+                'topic': await _topic_export(db, task.essay_topic_id, caches['topics']),
+                'question_task': question_task,
+                'survey_task': survey_task,
+                'essay': _row_payload(essay, anonymized),
+                'question_submission': (
+                    await _question_submission_export(db, task, question_task, anonymized)
+                    if task.question_task_id
+                    else None
+                ),
+                'survey_submission': (
+                    await _survey_submission_export(db, task, survey_task, anonymized) if task.survey_task_id else None
+                ),
+            }
+        )
+    return payloads
+
+
+async def _chats_export(
+    db: AsyncSession,
+    session: ExperimentSession,
+    task_ids: list[str],
+    anonymized: bool,
+    file_cache: dict[str, Optional[dict]],
+):
+    task_clause = Chat.experiment_session_task_id.in_(task_ids) if task_ids else False
+    chats = list(
+        (
+            await db.execute(
+                select(Chat)
+                .where(or_(Chat.experiment_session_id == session.id, task_clause))
+                .order_by(Chat.created_at, Chat.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    chat_ids = [chat.id for chat in chats]
+    if not chat_ids:
+        return []
+    messages = list(
+        (
+            await db.execute(
+                select(ChatMessage)
+                .where(ChatMessage.chat_id.in_(chat_ids))
+                .order_by(ChatMessage.chat_id, ChatMessage.created_at, ChatMessage.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    chat_files = list(
+        (
+            await db.execute(
+                select(ChatFile).where(ChatFile.chat_id.in_(chat_ids)).order_by(ChatFile.created_at, ChatFile.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    feedback_rows = list(
+        (
+            await db.execute(
+                select(Feedback).where(Feedback.user_id == session.user_id).order_by(Feedback.created_at, Feedback.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    feedback_rows = [row for row in feedback_rows if isinstance(row.meta, dict) and row.meta.get('chat_id') in chat_ids]
+    message_map: dict[str, list] = defaultdict(list)
+    file_link_map: dict[str, list] = defaultdict(list)
+    feedback_map: dict[str, list] = defaultdict(list)
+    for message in messages:
+        message_map[message.chat_id].append(message)
+    for link in chat_files:
+        file_link_map[link.chat_id].append(link)
+    for feedback in feedback_rows:
+        feedback_map[feedback.meta.get('chat_id')].append(feedback)
+    payloads = []
+    for chat in chats:
+        record = _row_payload(chat, anonymized)
+        record.pop('share_id', None)
+        file_ids = {link.file_id for link in file_link_map[chat.id]}
+        for message in message_map[chat.id]:
+            file_ids.update(_embedded_file_ids(message.files))
+        embedded_metadata = []
+        for file_id in sorted(file_ids):
+            metadata = await _file_metadata_payload(db, file_id, file_cache, anonymized)
+            if metadata is not None:
+                embedded_metadata.append(metadata)
+        payloads.append(
+            {
+                'record': record,
+                'messages': [_row_payload(message, anonymized) for message in message_map[chat.id]],
+                'attachments': [
+                    {
+                        'record': _row_payload(link, anonymized),
+                        'file': await _file_metadata_payload(db, link.file_id, file_cache, anonymized),
+                    }
+                    for link in file_link_map[chat.id]
+                ],
+                'embedded_file_metadata': embedded_metadata,
+                'feedback': [_row_payload(feedback, anonymized) for feedback in feedback_map[chat.id]],
+            }
+        )
+    return payloads
+
+
+async def _full_session_payload(db: AsyncSession, session: ExperimentSession, anonymized: bool):
+    participant = await db.get(User, session.user_id)
+    group = await db.get(Group, session.group_id)
+    membership = (
+        (
+            await db.execute(
+                select(GroupMember).where(
+                    GroupMember.group_id == session.group_id,
+                    GroupMember.user_id == session.user_id,
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    tasks = list(
+        (
+            await db.execute(
+                select(ExperimentSessionTask)
+                .where(ExperimentSessionTask.experiment_session_id == session.id)
+                .order_by(ExperimentSessionTask.position)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    caches = {'question_tasks': {}, 'survey_tasks': {}, 'topics': {}, 'files': {}, 'anonymized': anonymized}
+    plan, item_map = await _plan_export(db, session.plan_id, session.condition_id, caches)
+    task_payloads = await _session_tasks_export(db, tasks, item_map, caches, anonymized)
+    legacy_essay = await db.get(Essay, session.essay_id) if session.essay_id else None
+    primary_task_essay = None
+    for task in tasks:
+        if task.essay_id:
+            primary_task_essay = await db.get(Essay, task.essay_id)
+            if primary_task_essay is not None:
+                break
+    usage = (await _usage_by_session(db, [session.id])).get(session.id, {})
+    telemetry_summary = (await _telemetry_by_session(db, [session.id])).get(session.id)
+    derived = _session_row(
+        session,
+        group,
+        participant,
+        legacy_essay or primary_task_essay,
+        usage,
+        telemetry_summary,
+        next((task for task in tasks if task.task_type == 'ESSAY'), None),
+    )
+    telemetry_events = list(
+        (
+            await db.execute(
+                select(ExperimentTelemetryEvent)
+                .where(ExperimentTelemetryEvent.experiment_session_id == session.id)
+                .order_by(ExperimentTelemetryEvent.event_time, ExperimentTelemetryEvent.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    telemetry_presence = await db.get(ExperimentTelemetryExtensionPresence, session.id)
+    llm_requests = list(
+        (
+            await db.execute(
+                select(ExperimentLLMRequest)
+                .where(ExperimentLLMRequest.experiment_session_id == session.id)
+                .order_by(ExperimentLLMRequest.request_sequence, ExperimentLLMRequest.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    warning_states = list(
+        (
+            await db.execute(
+                select(ExperimentWarningState)
+                .where(ExperimentWarningState.experiment_session_id == session.id)
+                .order_by(ExperimentWarningState.created_at, ExperimentWarningState.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    topic_assignment = (
+        (
+            await db.execute(
+                select(EssayTopicAssignment).where(
+                    EssayTopicAssignment.user_id == session.user_id,
+                    EssayTopicAssignment.group_id == session.group_id,
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    session_topic_id = session.topic_id or (topic_assignment.topic_id if topic_assignment else None)
+    return {
+        'session': _row_payload(session, anonymized),
+        'derived_summary': _derived_payload(derived, anonymized),
+        'participant': _participant_payload(participant, anonymized),
+        'group': _group_payload(group, anonymized),
+        'membership': _row_payload(membership, anonymized),
+        'topic': await _topic_export(db, session_topic_id, caches['topics']),
+        'topic_assignment': (
+            {
+                'record': _row_payload(topic_assignment, anonymized),
+                'topic': await _topic_export(db, topic_assignment.topic_id, caches['topics']),
+            }
+            if topic_assignment
+            else None
+        ),
+        'legacy_essay': _row_payload(legacy_essay, anonymized),
+        'plan': plan,
+        'tasks': task_payloads,
+        'chats': await _chats_export(db, session, [task.id for task in tasks], anonymized, caches['files']),
+        'telemetry': {
+            'summary': _row_payload(telemetry_summary, anonymized),
+            'extension_presence': _row_payload(telemetry_presence, anonymized),
+            'events': [_row_payload(event, anonymized) for event in telemetry_events],
+        },
+        'perturbations': {
+            'llm_requests': [_row_payload(request_row) for request_row in llm_requests],
+            'warning_states': [_row_payload(warning_state) for warning_state in warning_states],
+        },
+    }
+
+
+async def _full_session_json_stream(
+    db: AsyncSession,
+    sessions: list[ExperimentSession],
+    anonymized: bool,
+    exported_at: str,
+) -> AsyncIterator[str]:
+    metadata = {
+        'schema_version': '1.0',
+        'exported_at': exported_at,
+        'anonymized': anonymized,
+        'timestamp_units': {
+            'experiment_session_plan_task_submission_telemetry': 'nanoseconds since Unix epoch',
+            'chat_message_file_user_group': 'seconds since Unix epoch unless the source row documents otherwise',
+            'values': 'Raw database timestamp integers are preserved without conversion.',
+        },
+    }
+    prefix = json.dumps(metadata, ensure_ascii=False)[:-1] + ',"sessions":['
+    yield prefix
+    for index, session in enumerate(sessions):
+        if index:
+            yield ','
+        payload = await _full_session_payload(db, session, anonymized)
+        yield json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
+    yield ']}'
+
+
+def _tab_event_row(event: ExperimentTelemetryEvent):
+    payload = event.payload_json or {}
+    tab = payload.get('tab') or {}
+    return {
+        'event_id': event.id,
+        'session_id': event.experiment_session_id,
+        'user_id': event.user_id,
+        'event_type': event.event_type,
+        'event_time': event.event_time / NS,
+        'event_time_ns': event.event_time,
+        'schema_version': getattr(event, 'schema_version', 1),
+        'browser_session_id': payload.get('browser_session_id'),
+        'sequence': payload.get('sequence'),
+        'tab_id': tab.get('tab_id'),
+        'window_id': tab.get('window_id', payload.get('window_id')),
+        'title': tab.get('title'),
+        'url': tab.get('url'),
+        'payload': payload,
+    }
+
+
+def _flatten_tab_event(row):
+    payload = row.get('payload') or {}
+    tab = payload.get('tab') or {}
+    flat = {key: value for key, value in row.items() if key != 'payload'}
+    for key, value in tab.items():
+        flat[f'tab_{key}'] = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else value
+    for key, value in payload.items():
+        if key in {'tab', 'browser_session_id', 'sequence'}:
+            continue
+        flat[key] = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else value
+    return flat
 
 
 def _anonymous_id(user_id: str) -> str:
@@ -215,8 +1177,11 @@ def _telemetry_payload(summary):
     )
 
 
-def _session_row(session, group, user, essay, usage, telemetry=None):
+def _session_row(session, group, user, essay, usage, telemetry=None, essay_task=None):
     telemetry_payload = _telemetry_payload(telemetry)
+    topic_id = session.topic_id or (essay_task.essay_topic_id if essay_task else None)
+    topic_title = session.topic_title or (essay_task.essay_topic_title if essay_task else None)
+    essay_id = session.essay_id or (essay_task.essay_id if essay_task else None)
     return {
         'session_id': session.id,
         'user_id': session.user_id,
@@ -228,12 +1193,12 @@ def _session_row(session, group, user, essay, usage, telemetry=None):
         'group_name': group.name if group else None,
         'condition_id': getattr(session, 'condition_id', None),
         'configuration_revision': getattr(session, 'plan_id', None),
-        'topic_id': session.topic_id,
-        'topic_title': session.topic_title,
+        'topic_id': topic_id,
+        'topic_title': topic_title,
         'state': session.state,
         'consented': session.consented_at is not None,
         'pre_survey_completed': session.pre_survey is not None,
-        'essay_submitted': session.essay_id is not None,
+        'essay_submitted': essay_id is not None,
         'post_survey_completed': session.post_survey is not None,
         'session_start_time': _seconds(session.created_at),
         'session_completion_time': _seconds(session.completed_at),
@@ -245,7 +1210,7 @@ def _session_row(session, group, user, essay, usage, telemetry=None):
         'input_tokens': usage.get('input_tokens', 0),
         'output_tokens': usage.get('output_tokens', 0),
         'total_tokens': usage.get('total_tokens', 0),
-        'essay_id': session.essay_id,
+        'essay_id': essay_id,
         'essay_word_count': essay.word_count if essay else None,
         'essay_character_count': essay.character_count if essay else None,
         **telemetry_payload,
@@ -274,7 +1239,16 @@ async def _participant_rows(db: AsyncSession, filters: DashboardFilters):
         .where(GroupMember.group_id.in_(group_ids), User.role != 'admin')
     )
     if filters.topic_id:
-        stmt = stmt.where(ExperimentSession.topic_id == filters.topic_id)
+        task_topic_sessions = select(ExperimentSessionTask.experiment_session_id).where(
+            ExperimentSessionTask.task_type == 'ESSAY',
+            ExperimentSessionTask.essay_topic_id == filters.topic_id,
+        )
+        stmt = stmt.where(
+            or_(
+                ExperimentSession.topic_id == filters.topic_id,
+                ExperimentSession.id.in_(task_topic_sessions),
+            )
+        )
     if filters.date_from:
         stmt = stmt.where(ExperimentSession.created_at >= filters.date_from * NS)
     if filters.date_to:
@@ -292,20 +1266,47 @@ async def _participant_rows(db: AsyncSession, filters: DashboardFilters):
 
     records = (await db.execute(stmt)).all()
     sessions = [record[2] for record in records if record[2]]
+    session_ids = [session.id for session in sessions]
+    essay_task_rows = (
+        list(
+            (
+                await db.execute(
+                    select(ExperimentSessionTask)
+                    .where(
+                        ExperimentSessionTask.experiment_session_id.in_(session_ids),
+                        ExperimentSessionTask.task_type == 'ESSAY',
+                    )
+                    .order_by(ExperimentSessionTask.experiment_session_id, ExperimentSessionTask.position)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if session_ids
+        else []
+    )
+    essay_task_by_session = {}
+    for task in essay_task_rows:
+        essay_task_by_session.setdefault(task.experiment_session_id, task)
     usage = await _usage_by_session(db, [session.id for session in sessions])
     telemetry = await _telemetry_by_session(db, [session.id for session in sessions])
-    essays = await _essays_by_ids(db, [session.essay_id for session in sessions if session.essay_id])
+    essay_ids = [session.essay_id for session in sessions if session.essay_id]
+    essay_ids.extend(task.essay_id for task in essay_task_rows if task.essay_id)
+    essays = await _essays_by_ids(db, list(dict.fromkeys(essay_ids)))
     rows = []
     for member, user, session in records:
         if session:
+            essay_task = essay_task_by_session.get(session.id)
+            essay_id = session.essay_id or (essay_task.essay_id if essay_task else None)
             rows.append(
                 _session_row(
                     session,
                     group_map.get(member.group_id),
                     user,
-                    essays.get(session.essay_id),
+                    essays.get(essay_id),
                     usage.get(session.id, {}),
                     telemetry.get(session.id),
+                    essay_task,
                 )
             )
         else:
@@ -494,6 +1495,49 @@ async def session_detail(
         if session.essay_id
         else None
     )
+    session_tasks = list(
+        (
+            await db.execute(
+                select(ExperimentSessionTask)
+                .where(ExperimentSessionTask.experiment_session_id == session.id)
+                .order_by(ExperimentSessionTask.position)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    essay_tasks = [task for task in session_tasks if task.task_type == 'ESSAY']
+    task_essay_ids = [task.essay_id for task in essay_tasks if task.essay_id]
+    task_essays = (
+        list((await db.execute(select(Essay).where(Essay.id.in_(task_essay_ids)))).scalars().all())
+        if task_essay_ids
+        else []
+    )
+    task_essay_map = {item.id: item for item in task_essays}
+    essay_task_payloads = []
+    for task in essay_tasks:
+        task_essay = task_essay_map.get(task.essay_id)
+        content = task_essay.content if task_essay else (task.essay_draft or '')
+        draft_word_count, draft_character_count = essay_text_metrics(content)
+        essay_task_payloads.append(
+            {
+                'session_task_id': task.id,
+                'position': task.position,
+                'title': task.title,
+                'status': task.status,
+                'topic_id': task.essay_topic_id or (task_essay.topic_id if task_essay else None),
+                'topic_title': task.essay_topic_title or (task_essay.topic_title if task_essay else None),
+                'topic_question': task.essay_topic_question or (task_essay.topic_question if task_essay else None),
+                'essay_id': task_essay.id if task_essay else None,
+                'content': content,
+                'is_draft': task_essay is None,
+                'word_count': task_essay.word_count if task_essay else draft_word_count,
+                'character_count': task_essay.character_count if task_essay else draft_character_count,
+                'submitted_at': _seconds(task_essay.created_at) if task_essay else None,
+                'updated_at': _seconds(task_essay.updated_at if task_essay else task.updated_at),
+            }
+        )
+    primary_essay_task = essay_task_payloads[0] if essay_task_payloads else None
     usage = (await _usage_by_session(db, [session.id])).get(session.id, {})
     telemetry = (await _telemetry_by_session(db, [session.id])).get(session.id)
     row = _session_row(session, group, participant, essay, usage, telemetry)
@@ -537,7 +1581,9 @@ async def session_detail(
     )
     row.update(
         {
-            'topic_question': session.topic_question,
+            'topic_id': session.topic_id or (primary_essay_task or {}).get('topic_id'),
+            'topic_title': session.topic_title or (primary_essay_task or {}).get('topic_title'),
+            'topic_question': session.topic_question or (primary_essay_task or {}).get('topic_question'),
             'pre_survey': session.pre_survey,
             'post_survey': session.post_survey,
             'timeline': {
@@ -554,13 +1600,26 @@ async def session_detail(
             'essay': (
                 {
                     'id': essay.id,
+                    'content': essay.content,
                     'submitted_at': _seconds(essay.created_at),
                     'word_count': essay.word_count,
                     'character_count': essay.character_count,
                 }
                 if essay
-                else None
+                else (
+                    {
+                        'id': primary_essay_task['essay_id'],
+                        'content': primary_essay_task['content'],
+                        'submitted_at': primary_essay_task['submitted_at'],
+                        'word_count': primary_essay_task['word_count'],
+                        'character_count': primary_essay_task['character_count'],
+                        'is_draft': primary_essay_task['is_draft'],
+                    }
+                    if primary_essay_task
+                    else None
+                )
             ),
+            'essay_tasks': essay_task_payloads,
             'condition': (
                 {
                     'id': condition.id,
@@ -629,6 +1688,44 @@ async def session_detail(
         }
     )
     return row
+
+
+@router.get('/sessions/{session_id}/tab-activity')
+async def tab_activity(
+    session_id: str,
+    event_type: Optional[str] = None,
+    browser_tab_id: Optional[int] = None,
+    browser_window_id: Optional[int] = None,
+    date_from: Optional[int] = None,
+    date_to: Optional[int] = None,
+    page: int = Query(1, ge=1),
+    limit: int = Query(100, ge=1, le=500),
+    user=Depends(get_admin_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    if not await db.get(ExperimentSession, session_id):
+        raise HTTPException(status_code=404, detail='Experiment session not found.')
+    if event_type and event_type not in TAB_TELEMETRY_EVENT_TYPES:
+        raise HTTPException(status_code=422, detail='Unsupported tab activity event type.')
+    stmt = select(ExperimentTelemetryEvent).where(
+        ExperimentTelemetryEvent.experiment_session_id == session_id,
+        ExperimentTelemetryEvent.event_type.in_(TAB_TELEMETRY_EVENT_TYPES),
+    )
+    if event_type:
+        stmt = stmt.where(ExperimentTelemetryEvent.event_type == event_type)
+    if date_from:
+        stmt = stmt.where(ExperimentTelemetryEvent.event_time >= date_from * NS)
+    if date_to:
+        stmt = stmt.where(ExperimentTelemetryEvent.event_time < (date_to + 1) * NS)
+    events = list((await db.execute(stmt.order_by(ExperimentTelemetryEvent.event_time))).scalars().all())
+    rows = [_tab_event_row(event) for event in events]
+    if browser_tab_id is not None:
+        rows = [row for row in rows if row['tab_id'] == browser_tab_id]
+    if browser_window_id is not None:
+        rows = [row for row in rows if row['window_id'] == browser_window_id]
+    total = len(rows)
+    start = (page - 1) * limit
+    return {'items': rows[start : start + limit], 'total': total, 'page': page, 'limit': limit}
 
 
 @router.get('/essays')
@@ -1078,6 +2175,33 @@ def _export_response(rows, form: ExportRequest, filename: str):
     )
 
 
+@router.post('/export/sessions')
+async def export_full_sessions(
+    form: FullSessionExportRequest,
+    user=Depends(get_admin_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    session_ids = list(dict.fromkeys(form.ids))
+    rows = list(
+        (await db.execute(select(ExperimentSession).where(ExperimentSession.id.in_(session_ids)))).scalars().all()
+    )
+    session_map = {row.id: row for row in rows}
+    missing = [session_id for session_id in session_ids if session_id not in session_map]
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={'message': 'One or more experiment sessions no longer exist.', 'missing_ids': missing},
+        )
+    sessions = [session_map[session_id] for session_id in session_ids]
+    now = datetime.now(timezone.utc)
+    filename = f'experiment-full-sessions-{now.strftime("%Y%m%d-%H%M%S")}.json'
+    return StreamingResponse(
+        _full_session_json_stream(db, sessions, form.anonymized, now.isoformat()),
+        media_type='application/json',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+    )
+
+
 @router.post('/export/participants')
 async def export_participants(
     form: ExportRequest,
@@ -1104,6 +2228,32 @@ async def export_participants(
         for session in sessions
     ]
     return _export_response(rows, form, 'experiment-participants')
+
+
+@router.post('/export/tab-activity')
+async def export_tab_activity(
+    form: ExportRequest,
+    user=Depends(get_admin_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    events = list(
+        (
+            await db.execute(
+                select(ExperimentTelemetryEvent)
+                .where(
+                    ExperimentTelemetryEvent.experiment_session_id.in_(form.ids),
+                    ExperimentTelemetryEvent.event_type.in_(TAB_TELEMETRY_EVENT_TYPES),
+                )
+                .order_by(ExperimentTelemetryEvent.experiment_session_id, ExperimentTelemetryEvent.event_time)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    rows = [_tab_event_row(event) for event in events]
+    if form.format == 'csv':
+        rows = [_flatten_tab_event(row) for row in rows]
+    return _export_response(rows, form, 'experiment-tab-activity')
 
 
 @router.post('/export/perturbations')

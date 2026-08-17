@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from open_webui.internal.db import Base, get_async_db_context
 from open_webui.models.groups import Groups
+from open_webui.utils.essay_text import essay_text_metrics
 
 
 class Essay(Base):
@@ -117,6 +118,7 @@ class EssayTable:
     ) -> EssayModel:
         async with get_async_db_context(db) as db:
             now = int(time.time_ns())
+            word_count, character_count = essay_text_metrics(content)
             essay = Essay(
                 id=str(uuid.uuid4()),
                 user_id=user_id,
@@ -124,8 +126,8 @@ class EssayTable:
                 topic_id=topic.id if topic else None,
                 topic_title=topic.title if topic else None,
                 topic_question=topic.question if topic else None,
-                word_count=len(content.split()),
-                character_count=len(content),
+                word_count=word_count,
+                character_count=character_count,
                 created_at=now,
                 updated_at=now,
             )

@@ -1,0 +1,286 @@
+{
+  "schema_version": "1.0",
+  "exported_at": "2026-08-17T12:00:00+00:00",
+  "anonymized": true,
+  "timestamp_units": {
+    "experiment_session_plan_task_submission_telemetry": "nanoseconds since Unix epoch",
+    "chat_message_file_user_group": "seconds since Unix epoch unless the source row documents otherwise",
+    "values": "Raw database timestamp integers are preserved without conversion."
+  },
+  "sessions": [
+    {
+      "session": {
+        "id": "session-complete",
+        "user_id": "P-ALPHA",
+        "group_id": "group-1",
+        "topic_id": "topic-1",
+        "topic_title": "Public transport",
+        "topic_question": "Should cities make public transport free?",
+        "essay_id": "essay-1",
+        "state": "COMPLETED",
+        "pre_survey": {"ai_familiarity": 3},
+        "post_survey": {"ai_helpfulness": 4},
+        "consented_at": 1700000000000000000,
+        "writing_started_at": 1700000010000000000,
+        "essay_submitted_at": 1700000040000000000,
+        "completed_at": 1700000060000000000,
+        "created_at": 1700000000000000000,
+        "updated_at": 1700000060000000000,
+        "plan_id": "plan-1",
+        "condition_id": "condition-treatment"
+      },
+      "derived_summary": {
+        "session_id": "session-complete",
+        "participant_id": "P-ALPHA",
+        "group_id": "group-1",
+        "group_name": "Synthetic research group",
+        "condition_id": "condition-treatment",
+        "state": "COMPLETED",
+        "session_start_time": 1700000000,
+        "session_completion_time": 1700000060,
+        "session_duration": 60.0,
+        "writing_duration": 30.0,
+        "prompts": 1,
+        "responses": 1,
+        "input_tokens": 20,
+        "output_tokens": 30,
+        "total_tokens": 50,
+        "essay_word_count": 8,
+        "total_keystrokes": 120,
+        "total_time_away_ms": 1500,
+        "telemetry_summary": {"event_count": 2, "custom_metric": 7}
+      },
+      "participant": {
+        "id": "P-ALPHA",
+        "participant_id": "P-ALPHA",
+        "role": "user",
+        "last_active_at": 1700000060,
+        "created_at": 1699000000,
+        "updated_at": 1700000060
+      },
+      "group": {
+        "id": "group-1",
+        "name": "Synthetic research group",
+        "description": "An anonymized demonstration group",
+        "data": {"config": {"experiment_mode_enabled": true}},
+        "meta": {},
+        "permissions": {"chat": true},
+        "created_at": 1699000000,
+        "updated_at": 1700000000
+      },
+      "membership": {
+        "id": "membership-1",
+        "group_id": "group-1",
+        "user_id": "P-ALPHA",
+        "created_at": 1699000001,
+        "updated_at": 1699000001
+      },
+      "topic": {
+        "id": "topic-1",
+        "title": "Public transport",
+        "question": "Should cities make public transport free?",
+        "workflow_managed": false,
+        "created_at": 1699500000000000000,
+        "updated_at": 1699500000000000000
+      },
+      "topic_assignment": {
+        "record": {
+          "id": "topic-assignment-1",
+          "user_id": "P-ALPHA",
+          "group_id": "group-1",
+          "topic_id": "topic-1",
+          "created_at": 1700000000000000000,
+          "updated_at": 1700000000000000000
+        },
+        "topic": {
+          "id": "topic-1",
+          "title": "Public transport",
+          "question": "Should cities make public transport free?",
+          "workflow_managed": false,
+          "created_at": 1699500000000000000,
+          "updated_at": 1699500000000000000
+        }
+      },
+      "legacy_essay": null,
+      "plan": {
+        "record": {
+          "id": "plan-1",
+          "group_id": "group-1",
+          "version": 3,
+          "status": "PUBLISHED",
+          "progression_mode": "STRICT_SEQUENTIAL",
+          "chat_mode": "PER_TASK",
+          "survey_variant": "TASK_NEUTRAL",
+          "consent_enabled": true,
+          "locked_at": 1699900000000000000,
+          "created_at": 1699800000000000000,
+          "updated_at": 1699900000000000000
+        },
+        "assigned_condition_id": "condition-treatment",
+        "items": [
+          {
+            "record": {"id": "item-essay", "plan_id": "plan-1", "position": 0, "task_type": "ESSAY", "title": "Write an essay", "essay_topic_mode": "SPECIFIC", "essay_topic_id": "topic-1", "survey_required": false, "enabled": true},
+            "topic": {"id": "topic-1", "title": "Public transport", "question": "Should cities make public transport free?", "workflow_managed": false, "created_at": 1699500000000000000, "updated_at": 1699500000000000000},
+            "topic_pool": [{"record": {"plan_item_id": "item-essay", "topic_id": "topic-1"}, "topic": {"id": "topic-1", "title": "Public transport", "question": "Should cities make public transport free?", "workflow_managed": false, "created_at": 1699500000000000000, "updated_at": 1699500000000000000}}],
+            "question_task": null,
+            "survey_task": null
+          },
+          {
+            "record": {"id": "item-question", "plan_id": "plan-1", "position": 1, "task_type": "QUESTION", "title": "Knowledge check", "question_task_id": "question-task-1", "survey_required": false, "enabled": true},
+            "topic": null,
+            "topic_pool": [],
+            "question_task": {
+              "record": {"id": "question-task-1", "family_id": "question-family-1", "version": 1, "title": "Transport knowledge", "status": "PUBLISHED", "created_at": 1699600000000000000, "updated_at": 1699600000000000000},
+              "questions": [
+                {
+                  "record": {"id": "question-1", "task_id": "question-task-1", "position": 0, "prompt": "Choose the sustainable mode", "question_type": "SINGLE_CHOICE", "max_score": 1.0, "created_at": 1699600000000000000, "updated_at": 1699600000000000000},
+                  "choices": [
+                    {"id": "choice-bike", "question_id": "question-1", "position": 0, "text": "Bicycle", "is_correct": true},
+                    {"id": "choice-car", "question_id": "question-1", "position": 1, "text": "Private car", "is_correct": false}
+                  ],
+                  "blanks": [],
+                  "free_text_config": null,
+                  "image": {"id": "file-question-image", "filename": "transport.png", "hash": "sha256-image", "content_type": "image/png", "size": 1024, "meta": {"content_type": "image/png", "size": 1024}, "created_at": 1699600000, "updated_at": 1699600000}
+                },
+                {
+                  "record": {"id": "question-2", "task_id": "question-task-1", "position": 1, "prompt": "Complete: Public ___", "question_type": "FILL_BLANKS", "max_score": 1.0, "created_at": 1699600000000000000, "updated_at": 1699600000000000000},
+                  "choices": [],
+                  "blanks": [{"record": {"id": "blank-1", "question_id": "question-2", "position": 0}, "accepted_answers": [{"id": "accepted-1", "blank_id": "blank-1", "position": 0, "answer": "transport"}]}],
+                  "free_text_config": {"question_id": "question-2", "grading_mode": "EXACT", "case_sensitive": false},
+                  "image": null
+                }
+              ]
+            },
+            "survey_task": null
+          },
+          {
+            "record": {"id": "item-survey", "plan_id": "plan-1", "position": 2, "task_type": "SURVEY", "title": "Experience survey", "survey_task_id": "survey-task-1", "survey_required": true, "enabled": true},
+            "topic": null,
+            "topic_pool": [],
+            "question_task": null,
+            "survey_task": {
+              "record": {"id": "survey-task-1", "family_id": "survey-family-1", "version": 1, "title": "Experience", "description": "Task feedback", "status": "PUBLISHED", "created_at": 1699700000000000000, "updated_at": 1699700000000000000},
+              "questions": [
+                {"record": {"id": "survey-question-1", "task_id": "survey-task-1", "prompt": "How useful was the assistant?", "question_type": "SCALE", "position": 0, "required": true, "enabled": true, "scale_low_label": "Not useful", "scale_high_label": "Very useful", "created_at": 1699700000000000000, "updated_at": 1699700000000000000}, "choices": []},
+                {"record": {"id": "survey-question-2", "task_id": "survey-task-1", "prompt": "Which feature helped most?", "question_type": "SINGLE_CHOICE", "position": 1, "required": true, "enabled": true, "created_at": 1699700000000000000, "updated_at": 1699700000000000000}, "choices": [{"id": "survey-choice-structure", "question_id": "survey-question-2", "text": "Structure suggestions", "position": 0}, {"id": "survey-choice-wording", "question_id": "survey-question-2", "text": "Wording suggestions", "position": 1}]}
+              ]
+            }
+          }
+        ],
+        "conditions": [
+          {
+            "record": {"id": "condition-control", "plan_id": "plan-1", "position": 0, "name": "Control", "weight": 1.0, "created_at": 1699800000000000000, "updated_at": 1699800000000000000},
+            "assigned_to_session": false,
+            "prompt_injection": {"condition_id": "condition-control", "enabled": false, "prompt": null, "created_at": 1699800000000000000, "updated_at": 1699800000000000000},
+            "warning_modal": {"condition_id": "condition-control", "enabled": false, "title": null, "message": null, "created_at": 1699800000000000000, "updated_at": 1699800000000000000},
+            "response_timing": {"condition_id": "condition-control", "mode": "NORMAL", "parameters": {}, "created_at": 1699800000000000000, "updated_at": 1699800000000000000},
+            "task_scopes": []
+          },
+          {
+            "record": {"id": "condition-treatment", "plan_id": "plan-1", "position": 1, "name": "Delayed warning", "weight": 1.0, "created_at": 1699800000000000000, "updated_at": 1699800000000000000},
+            "assigned_to_session": true,
+            "prompt_injection": {"condition_id": "condition-treatment", "enabled": true, "prompt": "Ask the participant to reflect.", "created_at": 1699800000000000000, "updated_at": 1699800000000000000},
+            "warning_modal": {"condition_id": "condition-treatment", "enabled": true, "title": "Reflection", "message": "Please verify the response.", "created_at": 1699800000000000000, "updated_at": 1699800000000000000},
+            "response_timing": {"condition_id": "condition-treatment", "mode": "FIXED_DELAY", "parameters": {"delay_ms": 500}, "created_at": 1699800000000000000, "updated_at": 1699800000000000000},
+            "task_scopes": [{"record": {"condition_id": "condition-treatment", "perturbation_type": "PROMPT_INJECTION", "plan_item_id": "item-essay"}, "plan_item": {"record": {"id": "item-essay", "plan_id": "plan-1", "position": 0, "task_type": "ESSAY", "title": "Write an essay", "essay_topic_mode": "SPECIFIC", "essay_topic_id": "topic-1", "survey_required": false, "enabled": true}, "topic": {"id": "topic-1", "title": "Public transport", "question": "Should cities make public transport free?", "workflow_managed": false, "created_at": 1699500000000000000, "updated_at": 1699500000000000000}, "topic_pool": [], "question_task": null, "survey_task": null}}]
+          }
+        ]
+      },
+      "tasks": [
+        {
+          "record": {"id": "task-essay", "experiment_session_id": "session-complete", "plan_item_id": "item-essay", "position": 0, "task_type": "ESSAY", "title": "Write an essay", "status": "COMPLETED", "essay_topic_id": "topic-1", "essay_id": "essay-1", "essay_draft": "A saved draft.", "started_at": 1700000010000000000, "completed_at": 1700000040000000000, "finalized_at": 1700000040000000000, "created_at": 1700000000000000000, "updated_at": 1700000040000000000},
+          "plan_item": null,
+          "topic": {"id": "topic-1", "title": "Public transport", "question": "Should cities make public transport free?", "workflow_managed": false, "created_at": 1699500000000000000, "updated_at": 1699500000000000000},
+          "question_task": null,
+          "survey_task": null,
+          "essay": {"id": "essay-1", "user_id": "P-ALPHA", "content": "Free public transport can improve urban accessibility significantly.", "topic_id": "topic-1", "topic_title": "Public transport", "topic_question": "Should cities make public transport free?", "word_count": 8, "character_count": 61, "experiment_session_task_id": "task-essay", "created_at": 1700000030000000000, "updated_at": 1700000040000000000},
+          "question_submission": null,
+          "survey_submission": null
+        },
+        {
+          "record": {"id": "task-question", "experiment_session_id": "session-complete", "plan_item_id": "item-question", "position": 1, "task_type": "QUESTION", "title": "Knowledge check", "status": "FINALIZED", "question_task_id": "question-task-1", "started_at": 1700000041000000000, "completed_at": 1700000045000000000, "finalized_at": 1700000045000000000, "created_at": 1700000000000000000, "updated_at": 1700000045000000000},
+          "plan_item": null,
+          "topic": null,
+          "question_task": null,
+          "survey_task": null,
+          "essay": null,
+          "question_submission": {
+            "record": {"id": "question-submission-1", "session_task_id": "task-question", "user_id": "P-ALPHA", "status": "FINALIZED", "grading_status": "COMPLETED", "current_score": 2.0, "provisional_score": 1.5, "maximum_score": 2.0, "submitted_at": 1700000045000000000, "created_at": 1700000041000000000, "updated_at": 1700000045000000000},
+            "responses": [
+              {
+                "record": {"id": "question-response-1", "submission_id": "question-submission-1", "question_id": "question-1", "is_answered": true, "grading_status": "COMPLETED", "generated_score": 1.0, "effective_score": 1.0, "grading_method": "DETERMINISTIC", "created_at": 1700000041000000000, "updated_at": 1700000045000000000},
+                "question": {"record": {"id": "question-1", "task_id": "question-task-1", "position": 0, "prompt": "Choose the sustainable mode", "question_type": "SINGLE_CHOICE", "max_score": 1.0, "created_at": 1699600000000000000, "updated_at": 1699600000000000000}, "choices": [{"id": "choice-bike", "question_id": "question-1", "position": 0, "text": "Bicycle", "is_correct": true}, {"id": "choice-car", "question_id": "question-1", "position": 1, "text": "Private car", "is_correct": false}], "blanks": [], "free_text_config": null, "image": null},
+                "selected_choices": [{"record": {"response_id": "question-response-1", "choice_id": "choice-bike"}, "choice": {"id": "choice-bike", "question_id": "question-1", "position": 0, "text": "Bicycle", "is_correct": true}}],
+                "blank_answers": [],
+                "grading_attempts": [{"id": "grading-attempt-1", "response_id": "question-response-1", "method": "DETERMINISTIC", "status": "COMPLETED", "awarded_score": 1.0, "started_at": 1700000044000000000, "completed_at": 1700000044100000000, "created_at": 1700000044000000000}],
+                "score_overrides": [{"id": "score-override-1", "response_id": "question-response-1", "admin_id": "P-ADMIN", "previous_score": 0.5, "new_score": 1.0, "note": "Synthetic correction", "created_at": 1700000044500000000}]
+              },
+              {
+                "record": {"id": "question-response-2", "submission_id": "question-submission-1", "question_id": "question-2", "is_answered": true, "grading_status": "COMPLETED", "generated_score": 1.0, "effective_score": 1.0, "grading_method": "EXACT", "created_at": 1700000041000000000, "updated_at": 1700000045000000000},
+                "question": null,
+                "selected_choices": [],
+                "blank_answers": [{"record": {"response_id": "question-response-2", "blank_id": "blank-1", "answer": "transport"}, "blank": {"record": {"id": "blank-1", "question_id": "question-2", "position": 0}, "accepted_answers": [{"id": "accepted-1", "blank_id": "blank-1", "position": 0, "answer": "transport"}]}}],
+                "grading_attempts": [],
+                "score_overrides": []
+              }
+            ]
+          },
+          "survey_submission": null
+        },
+        {
+          "record": {"id": "task-survey", "experiment_session_id": "session-complete", "plan_item_id": "item-survey", "position": 2, "task_type": "SURVEY", "title": "Experience survey", "status": "FINALIZED", "survey_task_id": "survey-task-1", "started_at": 1700000050000000000, "completed_at": 1700000055000000000, "finalized_at": 1700000055000000000, "created_at": 1700000000000000000, "updated_at": 1700000055000000000},
+          "plan_item": null,
+          "topic": null,
+          "question_task": null,
+          "survey_task": null,
+          "essay": null,
+          "question_submission": null,
+          "survey_submission": {
+            "record": {"id": "survey-submission-1", "session_task_id": "task-survey", "user_id": "P-ALPHA", "status": "FINALIZED", "submitted_at": 1700000055000000000, "created_at": 1700000050000000000, "updated_at": 1700000055000000000},
+            "responses": [
+              {"record": {"id": "survey-response-1", "submission_id": "survey-submission-1", "question_id": "survey-question-1", "scale_answer": 4, "is_answered": true, "created_at": 1700000050000000000, "updated_at": 1700000055000000000}, "question": {"record": {"id": "survey-question-1", "task_id": "survey-task-1", "prompt": "How useful was the assistant?", "question_type": "SCALE", "position": 0, "required": true, "enabled": true, "scale_low_label": "Not useful", "scale_high_label": "Very useful", "created_at": 1699700000000000000, "updated_at": 1699700000000000000}, "choices": []}, "selected_choices": []},
+              {"record": {"id": "survey-response-2", "submission_id": "survey-submission-1", "question_id": "survey-question-2", "is_answered": true, "created_at": 1700000050000000000, "updated_at": 1700000055000000000}, "question": {"record": {"id": "survey-question-2", "task_id": "survey-task-1", "prompt": "Which feature helped most?", "question_type": "SINGLE_CHOICE", "position": 1, "required": true, "enabled": true, "created_at": 1699700000000000000, "updated_at": 1699700000000000000}, "choices": [{"id": "survey-choice-structure", "question_id": "survey-question-2", "text": "Structure suggestions", "position": 0}, {"id": "survey-choice-wording", "question_id": "survey-question-2", "text": "Wording suggestions", "position": 1}]}, "selected_choices": [{"record": {"response_id": "survey-response-2", "choice_id": "survey-choice-structure"}, "choice": {"id": "survey-choice-structure", "question_id": "survey-question-2", "text": "Structure suggestions", "position": 0}}]}
+            ]
+          }
+        }
+      ],
+      "chats": [{
+        "record": {"id": "chat-1", "user_id": "P-ALPHA", "title": "Essay help", "experiment_session_id": "session-complete", "experiment_session_task_id": "task-essay", "created_at": 1700000010, "updated_at": 1700000030},
+        "messages": [
+          {"id": "message-user-1", "chat_id": "chat-1", "user_id": "P-ALPHA", "role": "user", "content": "Help me organize the argument.", "files": [{"id": "file-notes"}], "created_at": 1700000015, "updated_at": 1700000015},
+          {"id": "message-assistant-1", "chat_id": "chat-1", "user_id": "P-ALPHA", "role": "assistant", "content": "Start with accessibility, then discuss cost.", "model_id": "research-model", "usage": {"input_tokens": 20, "output_tokens": 30}, "created_at": 1700000017, "updated_at": 1700000018}
+        ],
+        "attachments": [{"record": {"id": "chat-file-1", "chat_id": "chat-1", "file_id": "file-notes", "user_id": "P-ALPHA", "created_at": 1700000014}, "file": {"id": "file-notes", "filename": "notes.txt", "hash": "sha256-notes", "content_type": "text/plain", "size": 42, "meta": {"content_type": "text/plain", "size": 42}, "created_at": 1700000014, "updated_at": 1700000014}}],
+        "embedded_file_metadata": [{"id": "file-notes", "filename": "notes.txt", "hash": "sha256-notes", "content_type": "text/plain", "size": 42, "meta": {"content_type": "text/plain", "size": 42}, "created_at": 1700000014, "updated_at": 1700000014}],
+        "feedback": [{"id": "feedback-1", "user_id": "P-ALPHA", "type": "thumbs_up", "data": {"reason": "useful"}, "meta": {"chat_id": "chat-1"}, "created_at": 1700000020, "updated_at": 1700000020}]
+      }],
+      "telemetry": {
+        "summary": {"experiment_session_id": "session-complete", "total_keystrokes": 120, "total_time_away_ms": 1500, "created_at": 1700000010000000000, "updated_at": 1700000060000000000},
+        "extension_presence": {"experiment_session_id": "session-complete", "installed": true, "version": "1.2.3", "last_seen_at": 1700000059000000000, "created_at": 1700000000000000000, "updated_at": 1700000059000000000},
+        "events": [
+          {"id": "telemetry-1", "experiment_session_id": "session-complete", "user_id": "P-ALPHA", "event_type": "keystroke_batch", "event_time": 1700000012000000000, "schema_version": 2, "payload_json": {"count": 12, "input": {"kind": "textarea"}}, "created_at": 1700000012000000000},
+          {"id": "telemetry-2", "experiment_session_id": "session-complete", "user_id": "P-ALPHA", "event_type": "tab_updated", "event_time": 1700000020000000000, "schema_version": 2, "payload_json": {"browser_session_id": "browser-1", "sequence": 2, "tab": {"tab_id": 5, "title": "Transit research", "url": "https://example.test/transit"}}, "created_at": 1700000020000000000}
+        ]
+      },
+      "perturbations": {
+        "llm_requests": [{"id": "llm-request-1", "experiment_session_id": "session-complete", "condition_id": "condition-treatment", "plan_id": "plan-1", "plan_version": 3, "session_task_id": "task-essay", "chat_id": "chat-1", "user_message_id": "message-user-1", "assistant_message_id": "message-assistant-1", "request_sequence": 1, "prompt_number": 1, "assignment_identifier": "synthetic", "prompt_active": true, "prompt_draw": 0.2, "prompt_randomization_id": "draw-1", "timing_mode": "FIXED_DELAY", "timing_parameters": {"delay_ms": 500}, "request_at": 1700000015000000000, "provider_started_at": 1700000015100000000, "provider_first_token_at": 1700000015500000000, "provider_completed_at": 1700000016000000000, "artificial_delay_started_at": 1700000016000000000, "artificial_delay_ended_at": 1700000016500000000, "server_first_emit_at": 1700000016500000000, "server_completed_emit_at": 1700000017000000000, "client_first_visible_at": 1700000016600000000, "client_completed_visible_at": 1700000017100000000, "buffered": true, "streaming_completed_normally": true, "navigated_away": false, "status": "COMPLETED", "buffered_output": {"characters": 42}, "reveal_cursor": 42, "created_at": 1700000015000000000, "updated_at": 1700000017100000000}],
+        "warning_states": [{"id": "warning-state-1", "experiment_session_id": "session-complete", "condition_id": "condition-treatment", "plan_id": "plan-1", "active_elapsed_ms": 12000, "last_trigger_key": "prompt-1", "displayed_at": 1700000025000000000, "acknowledged_at": 1700000027000000000, "created_at": 1700000000000000000, "updated_at": 1700000027000000000}]
+      }
+    },
+    {
+      "session": {"id": "session-incomplete", "user_id": "P-BETA", "group_id": "group-1", "state": "TASK_REQUIRED", "created_at": 1700100000000000000, "updated_at": 1700100010000000000, "plan_id": null, "condition_id": null},
+      "derived_summary": {"session_id": "session-incomplete", "participant_id": "P-BETA", "group_id": "group-1", "group_name": "Synthetic research group", "condition_id": null, "state": "TASK_REQUIRED", "session_start_time": 1700100000, "session_completion_time": null, "session_duration": null, "prompts": 0, "responses": 0, "total_tokens": 0, "essay_word_count": null, "total_keystrokes": 0, "total_time_away_ms": 0, "telemetry_summary": {}},
+      "participant": {"id": "P-BETA", "participant_id": "P-BETA", "role": "user", "last_active_at": 1700100010, "created_at": 1699000100, "updated_at": 1700100010},
+      "group": {"id": "group-1", "name": "Synthetic research group", "description": "An anonymized demonstration group", "data": {"config": {"experiment_mode_enabled": true}}, "meta": {}, "permissions": {"chat": true}, "created_at": 1699000000, "updated_at": 1700000000},
+      "membership": {"id": "membership-2", "group_id": "group-1", "user_id": "P-BETA", "created_at": 1699000100, "updated_at": 1699000100},
+      "topic": null,
+      "topic_assignment": null,
+      "legacy_essay": null,
+      "plan": null,
+      "tasks": [{"record": {"id": "task-incomplete", "experiment_session_id": "session-incomplete", "position": 0, "task_type": "ESSAY", "title": "Unfinished essay", "status": "ACTIVE", "essay_draft": "Only a draft", "started_at": 1700100010000000000, "completed_at": null, "created_at": 1700100000000000000, "updated_at": 1700100010000000000}, "plan_item": null, "topic": null, "question_task": null, "survey_task": null, "essay": null, "question_submission": null, "survey_submission": null}],
+      "chats": [],
+      "telemetry": {"summary": null, "extension_presence": null, "events": []},
+      "perturbations": {"llm_requests": [], "warning_states": []}
+    }
+  ]
+}

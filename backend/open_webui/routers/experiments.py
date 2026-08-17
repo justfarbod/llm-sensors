@@ -2,6 +2,7 @@ import time
 import uuid
 from datetime import datetime
 from typing import Literal, Optional
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -9,7 +10,16 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from open_webui.config import EXPERIMENT_AGREEMENT_TEXT
+from open_webui.config import (
+    EXPERIMENT_AGREEMENT_TEXT,
+    EXPERIMENT_TELEMETRY_EXTENSION_ENABLED,
+    EXPERIMENT_TELEMETRY_EXTENSION_ID,
+    EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION,
+    EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN,
+    EXPERIMENT_TELEMETRY_EXTENSION_STALE_SECONDS,
+    EXPERIMENT_TELEMETRY_EXTENSION_STORE_URL,
+    EXPERIMENT_TELEMETRY_SCHEMA_VERSION,
+)
 from open_webui.internal.db import get_async_session
 from open_webui.models.experiment_plans import (
     ExperimentPlans,
@@ -45,7 +55,10 @@ from open_webui.models.experiment_perturbations import (
     WarningCadence,
     new_warning_state,
 )
-from open_webui.models.experiment_telemetry import ExperimentTelemetryEvent
+from open_webui.models.experiment_telemetry import (
+    ExperimentTelemetryEvent,
+    ExperimentTelemetryExtensionPresence,
+)
 
 router = APIRouter()
 
@@ -67,6 +80,18 @@ class ExperimentTaskSummary(BaseModel):
     survey_required: Optional[bool] = None
 
 
+class ExperimentTelemetryExtensionResponse(BaseModel):
+    required: bool
+    ready: bool
+    store_url: Optional[str] = None
+    extension_id: Optional[str] = None
+    minimum_version: str
+    schema_version: int
+    detected_version: Optional[str] = None
+    last_seen_at: Optional[int] = None
+    configuration_error: Optional[str] = None
+
+
 class ExperimentCurrentResponse(BaseModel):
     state: ExperimentState
     session_id: Optional[str] = None
@@ -79,6 +104,7 @@ class ExperimentCurrentResponse(BaseModel):
     topic: Optional[ExperimentTopicResponse] = None
     agreement_text: Optional[str] = None
     error: Optional[str] = None
+    telemetry_extension: Optional[ExperimentTelemetryExtensionResponse] = None
 
 
 class EssayDraftForm(BaseModel):
@@ -327,6 +353,76 @@ async def required_warning_pending(user, db: AsyncSession) -> bool:
     return bool((payload.get('warning') or {}).get('must_acknowledge'))
 
 
+def _version_tuple(value: str):
+    try:
+        parts = [int(part) for part in value.split('.')]
+    except ValueError:
+        return ()
+    if not 1 <= len(parts) <= 4 or any(part < 0 or part > 65_535 for part in parts):
+        return ()
+    return tuple(parts + [0] * (4 - len(parts)))
+
+
+def _extension_configuration_error() -> Optional[str]:
+    if not EXPERIMENT_TELEMETRY_EXTENSION_ENABLED:
+        return None
+    origin_parts = urlsplit(EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN)
+    normalized_origin = f'{origin_parts.scheme}://{origin_parts.netloc}'.rstrip('/')
+    loopback = origin_parts.hostname in {'localhost', '127.0.0.1', '::1'}
+    if (
+        (origin_parts.scheme != 'https' and not (origin_parts.scheme == 'http' and loopback))
+        or not origin_parts.netloc
+        or normalized_origin != EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN
+    ):
+        return 'Extension origin must be fixed HTTPS, or HTTP loopback for development.'
+    if not loopback and (
+        not EXPERIMENT_TELEMETRY_EXTENSION_ID or not EXPERIMENT_TELEMETRY_EXTENSION_STORE_URL
+    ):
+        return 'Chrome telemetry extension ID and store URL must be configured.'
+    if (
+        EXPERIMENT_TELEMETRY_EXTENSION_STORE_URL
+        and not EXPERIMENT_TELEMETRY_EXTENSION_STORE_URL.startswith('https://')
+    ):
+        return 'EXPERIMENT_TELEMETRY_EXTENSION_STORE_URL must be HTTPS.'
+    if not _version_tuple(EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION):
+        return 'EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION must be a Chrome extension version.'
+    return None
+
+
+def _extension_ready(presence: Optional[ExperimentTelemetryExtensionPresence]) -> bool:
+    if not EXPERIMENT_TELEMETRY_EXTENSION_ENABLED:
+        return True
+    if _extension_configuration_error() or presence is None:
+        return False
+    return (
+        time.time_ns() - presence.last_seen_at
+        <= EXPERIMENT_TELEMETRY_EXTENSION_STALE_SECONDS * 1_000_000_000
+        and presence.tabs_permission
+        and not presence.incognito_allowed
+        and presence.schema_version == EXPERIMENT_TELEMETRY_SCHEMA_VERSION
+        and presence.origin.rstrip('/') == EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN
+        and bool(_version_tuple(presence.extension_version))
+        and _version_tuple(presence.extension_version) >= _version_tuple(EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION)
+    )
+
+
+async def _extension_response(session, db: AsyncSession):
+    if session is None:
+        return None
+    presence = await db.get(ExperimentTelemetryExtensionPresence, session.id)
+    return ExperimentTelemetryExtensionResponse(
+        required=EXPERIMENT_TELEMETRY_EXTENSION_ENABLED,
+        ready=_extension_ready(presence),
+        store_url=EXPERIMENT_TELEMETRY_EXTENSION_STORE_URL or None,
+        extension_id=EXPERIMENT_TELEMETRY_EXTENSION_ID or None,
+        minimum_version=EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION,
+        schema_version=EXPERIMENT_TELEMETRY_SCHEMA_VERSION,
+        detected_version=presence.extension_version if presence else None,
+        last_seen_at=presence.last_seen_at if presence else None,
+        configuration_error=_extension_configuration_error(),
+    )
+
+
 @router.post('/current/runtime/visible-timing')
 async def visible_timing(
     form: ExperimentVisibleTimingForm,
@@ -428,6 +524,7 @@ async def response_for(user, db: AsyncSession):
         ),
         agreement_text=EXPERIMENT_AGREEMENT_TEXT if state == ExperimentState.CONSENT_REQUIRED else None,
         error=error,
+        telemetry_extension=await _extension_response(session, db),
     )
 
 
@@ -493,6 +590,16 @@ async def pre_survey(
 
 @router.post('/current/start', response_model=ExperimentCurrentResponse)
 async def start(user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)):
+    state, session, _ = await Experiments.get_current(user, db=db)
+    if EXPERIMENT_TELEMETRY_EXTENSION_ENABLED:
+        if state not in {ExperimentState.TOPIC_REQUIRED, ExperimentState.TASK_REQUIRED} or session is None:
+            raise HTTPException(status_code=409, detail='Experiment task is not ready to start.')
+        presence = await db.get(ExperimentTelemetryExtensionPresence, session.id)
+        if not _extension_ready(presence):
+            raise HTTPException(
+                status_code=412,
+                detail='The required Chrome telemetry extension is not connected and ready.',
+            )
     await Experiments.start(user, db)
     return await response_for(user, db)
 

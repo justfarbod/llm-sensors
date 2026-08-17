@@ -2,7 +2,7 @@ import time
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import BigInteger, Column, Float, Index, Integer, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, Column, Float, Index, Integer, Text, UniqueConstraint
 
 from open_webui.internal.db import Base, JSONField
 
@@ -26,12 +26,38 @@ class ExperimentTelemetryEvent(Base):
     request_id = Column(Text, nullable=True)
     chat_id = Column(Text, nullable=True)
     message_id = Column(Text, nullable=True)
+    schema_version = Column(Integer, nullable=False, default=1)
 
     __table_args__ = (
         Index('ix_experiment_telemetry_event_session_time', 'experiment_session_id', 'event_time'),
         Index('ix_experiment_telemetry_event_user_session', 'user_id', 'experiment_session_id'),
         Index('ix_experiment_telemetry_event_request', 'request_id'),
         Index('ix_experiment_telemetry_event_condition_plan', 'condition_id', 'plan_id'),
+        Index('ix_experiment_telemetry_event_task_question', 'session_task_id', 'question_id'),
+        Index(
+            'ix_experiment_telemetry_event_session_type_time',
+            'experiment_session_id',
+            'event_type',
+            'event_time',
+        ),
+    )
+
+
+class ExperimentTelemetryExtensionPresence(Base):
+    __tablename__ = 'experiment_telemetry_extension_presence'
+
+    experiment_session_id = Column(Text, primary_key=True)
+    user_id = Column(Text, nullable=False)
+    extension_version = Column(Text, nullable=False)
+    schema_version = Column(Integer, nullable=False)
+    tabs_permission = Column(Boolean, nullable=False)
+    incognito_allowed = Column(Boolean, nullable=False)
+    origin = Column(Text, nullable=False)
+    connected_at = Column(BigInteger, nullable=False)
+    last_seen_at = Column(BigInteger, nullable=False)
+
+    __table_args__ = (
+        Index('ix_experiment_telemetry_presence_user_seen', 'user_id', 'last_seen_at'),
     )
 
 

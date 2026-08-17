@@ -1,28 +1,45 @@
 # Open WebUI Experiment Telemetry Extension
 
-## Local installation
+This Manifest V3 Chrome extension records privacy-bounded writing interaction metadata and the full lifecycle metadata of every non-incognito tab in normal browser windows while an authenticated Open WebUI experiment is `IN_PROGRESS`.
 
-1. Run Open WebUI and apply the backend database migration.
-2. Open `chrome://extensions` or `edge://extensions`.
-3. Enable Developer mode and choose **Load unpacked**.
-4. Select `browser-extension/experiment-telemetry`.
-5. Open the extension options and save the exact Open WebUI origin, such as `http://localhost:8080`.
-6. Reload the Open WebUI tab.
+It does **not** record typed text, answer text, clipboard contents, screenshots, cookies, request bodies, historical browsing history, or incognito tabs. It does record complete current-tab URLs (including paths, queries, and fragments), titles, favicon URLs, tab state, and tab lifecycle events. Chrome therefore displays its **Read your browsing history** permission warning.
 
-The extension requests access only to the configured origin. It has no tabs or browsing-history permission.
+## Fixed-origin build
 
-## Verify the correct session
+The Chrome Web Store artifact must be built for one exact HTTPS Open WebUI origin:
 
-Sign in as a non-admin participant whose Experiment Mode state is `IN_PROGRESS`. In browser developer tools, confirm:
+```bash
+EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN=https://research.example.edu npm run build:experiment-extension
+```
 
-- `GET /api/v1/experiments/telemetry/status` returns `enabled: true` and the expected session ID.
-- Batched `POST /api/v1/experiments/telemetry/events` requests contain that same session ID.
-- The `experiment_telemetry_event` and `experiment_telemetry_summary` rows use the authenticated user's ID and expected session ID.
+For an unpacked local-development build only, HTTP loopback origins are accepted:
 
-Admins, logged-out users, ordinary users, and participants outside `IN_PROGRESS` should receive no event requests.
+```bash
+EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN=http://localhost:8080 npm run build:experiment-extension
+```
 
-## Privacy audit
+Load `browser-extension/experiment-telemetry/dist` for local verification, then zip that directory for an unlisted Chrome Web Store submission. Do not submit the source directory because its manifest contains an intentional origin placeholder.
 
-Inspect event request bodies and `experiment_telemetry_event.payload_json`. They must contain only classified key metadata, numeric clipboard metadata, visibility/focus metadata, and modifier booleans.
+After the store assigns an extension ID and URL, configure the server:
 
-Search stored payloads for the forbidden keys `text`, `content`, `raw`, `key`, `clipboard`, `clipboard_text`, and `password`. The backend rejects any batch containing them. Clipboard text is read only transiently to calculate length and line count and is never queued, logged, transmitted, or stored.
+```text
+EXPERIMENT_TELEMETRY_EXTENSION_ENABLED=true
+EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN=https://research.example.edu
+EXPERIMENT_TELEMETRY_EXTENSION_ID=<chrome-store-extension-id>
+EXPERIMENT_TELEMETRY_EXTENSION_STORE_URL=<unlisted-chrome-store-url>
+EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION=2.0.0
+```
+
+The website blocks experiment Start until a current heartbeat confirms version 2, schema 2, the `tabs` permission, and disabled incognito access. A normal website cannot silently install an extension; participants must confirm installation on the Chrome Web Store page.
+
+## Verification
+
+1. Apply the backend migration and configure the server values above.
+2. Build and load the fixed-origin extension.
+3. Sign in as a non-admin participant and complete consent and the pre-survey.
+4. Confirm the Start gate reports the extension as ready.
+5. Start the experiment and create, navigate, activate, move, and close several normal tabs.
+6. Verify schema-version-2 events at `/api/v1/analytics/experiments/sessions/{session_id}/tab-activity`.
+7. Open an incognito window and verify that no event with `incognito: true` is accepted or stored.
+
+Raw tab URLs and titles are sensitive and are retained indefinitely by this implementation. The participant disclosure and institutional data-handling policy must reflect that fact.

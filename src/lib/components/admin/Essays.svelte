@@ -14,6 +14,8 @@
 	import Pencil from '$lib/components/icons/Pencil.svelte';
 	import Plus from '$lib/components/icons/Plus.svelte';
 	import XMark from '$lib/components/icons/XMark.svelte';
+	import MarkdownEditor from '$lib/components/common/MarkdownEditor.svelte';
+	import { markdownVisibleText } from '$lib/utils/markdownEditor';
 	import QuestionTasks from './QuestionTasks.svelte';
 	import ExperimentWorkflows from './ExperimentWorkflows.svelte';
 	import SurveyTasks from './SurveyTasks.svelte';
@@ -166,11 +168,16 @@
 							{$i18n.t('Topic title')}
 							<input class="experiment-input" bind:value={title} required />
 						</label>
-						<label class="experiment-label">
-							{$i18n.t('Essay question')}
-							<textarea class="experiment-input min-h-32 resize-y" bind:value={question} required
-							></textarea>
-						</label>
+						<div class="experiment-label">
+							<span>{$i18n.t('Essay question')}</span>
+							<MarkdownEditor
+								bind:value={question}
+								required
+								ariaLabel={$i18n.t('Essay question')}
+								className="min-h-40"
+								textareaClass="min-h-32 resize-y"
+							/>
+						</div>
 					</div>
 					<div class="mt-4 flex justify-end gap-2">
 						{#if editingId}
@@ -202,7 +209,7 @@
 							<button class="w-full min-w-0 text-left" on:click={() => editTopic(topic)}>
 								<div class="truncate text-sm font-medium">{topic.title}</div>
 								<div class="mt-1 line-clamp-3 whitespace-pre-wrap text-xs leading-5 text-gray-500">
-									{topic.question}
+									{markdownVisibleText(topic.question)}
 								</div>
 							</button>
 							<div class="mt-2 flex flex-wrap gap-1">

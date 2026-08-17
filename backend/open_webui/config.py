@@ -1666,6 +1666,18 @@ Please do not enter sensitive personal information into the chat or essay fields
 By continuing, you confirm that you understand that your data may be collected for research purposes, that your essay will not affect your grades, and that you agree to participate in this experimental session.''',
 )
 
+EXPERIMENT_TELEMETRY_EXTENSION_ENABLED = (
+    os.environ.get('EXPERIMENT_TELEMETRY_EXTENSION_ENABLED', 'False').lower() == 'true'
+)
+EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN = os.environ.get('EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN', '').rstrip('/')
+EXPERIMENT_TELEMETRY_EXTENSION_ID = os.environ.get('EXPERIMENT_TELEMETRY_EXTENSION_ID', '')
+EXPERIMENT_TELEMETRY_EXTENSION_STORE_URL = os.environ.get('EXPERIMENT_TELEMETRY_EXTENSION_STORE_URL', '')
+EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION = os.environ.get(
+    'EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION', '2.0.0'
+)
+EXPERIMENT_TELEMETRY_SCHEMA_VERSION = 2
+EXPERIMENT_TELEMETRY_EXTENSION_STALE_SECONDS = 45
+
 ENABLE_FOLDERS = PersistentConfig(
     'ENABLE_FOLDERS',
     'folders.enable',

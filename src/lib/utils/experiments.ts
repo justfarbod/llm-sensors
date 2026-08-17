@@ -58,6 +58,8 @@ export const sameExperimentState = (
 	JSON.stringify(left?.tasks ?? []) === JSON.stringify(right?.tasks ?? []) &&
 	left?.agreement_text === right?.agreement_text &&
 	left?.error === right?.error &&
+	JSON.stringify(left?.telemetry_extension ?? null) ===
+		JSON.stringify(right?.telemetry_extension ?? null) &&
 	left?.topic?.id === right?.topic?.id &&
 	left?.topic?.title === right?.topic?.title &&
 	left?.topic?.question === right?.topic?.question;

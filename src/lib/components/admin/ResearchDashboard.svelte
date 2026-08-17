@@ -7,11 +7,12 @@
 	import { toast } from 'svelte-sonner';
 
 	import {
-		exportResearchData,
+		exportFullResearchSessions,
 		getQuestionSubmission,
 		getResearchFilters,
 		getResearchSection,
 		getResearchSession,
+		getResearchTabActivity,
 		overrideQuestionScore,
 		retryQuestionGrading
 	} from '$lib/apis/experiment-analytics';
@@ -79,6 +80,16 @@
 	let anonymized = true;
 	let detail: any = null;
 	let detailLoading = false;
+	let detailSessionId = '';
+	let detailPollTimer: ReturnType<typeof setTimeout>;
+	let tabActivity: any = null;
+	let tabActivityLoading = false;
+	let tabEventType = '';
+	let tabBrowserId = '';
+	let tabWindowId = '';
+	let tabDateFrom = '';
+	let tabDateTo = '';
+	let tabActivityPage = 1;
 	let questionDetail: any = null;
 	let questionDetailLoading = false;
 	let scoreDrafts: Record<string, number> = {};
@@ -176,15 +187,59 @@
 		selected = next;
 	};
 
-	const openDetail = async (sessionId: string) => {
-		detail = null;
-		detailLoading = true;
+	const refreshDetail = async (sessionId: string, initial = false) => {
+		clearTimeout(detailPollTimer);
+		if (initial) detailLoading = true;
 		try {
-			detail = await getResearchSession(localStorage.token, sessionId);
+			const next = await getResearchSession(localStorage.token, sessionId);
+			if (detailSessionId !== sessionId) return;
+			detail = next;
+			if (next.state === 'IN_PROGRESS')
+				detailPollTimer = setTimeout(() => refreshDetail(sessionId), 3000);
+		} catch (message) {
+			if (initial) toast.error(String(message));
+		} finally {
+			if (initial) detailLoading = false;
+		}
+	};
+
+	const openDetail = async (sessionId: string) => {
+		clearTimeout(detailPollTimer);
+		detailSessionId = sessionId;
+		detail = null;
+		tabActivity = null;
+		tabActivityPage = 1;
+		tabEventType = '';
+		tabBrowserId = '';
+		tabWindowId = '';
+		tabDateFrom = '';
+		tabDateTo = '';
+		await refreshDetail(sessionId, true);
+	};
+
+	const closeDetail = () => {
+		clearTimeout(detailPollTimer);
+		detailSessionId = '';
+		detail = null;
+	};
+
+	const loadTabActivity = async (sessionId: string, pageValue = tabActivityPage) => {
+		tabActivityLoading = true;
+		try {
+			tabActivity = await getResearchTabActivity(localStorage.token, sessionId, {
+				page: pageValue,
+				limit: 100,
+				event_type: tabEventType,
+				browser_tab_id: tabBrowserId,
+				browser_window_id: tabWindowId,
+				date_from: tabDateFrom ? Math.floor(new Date(tabDateFrom).getTime() / 1000) : '',
+				date_to: tabDateTo ? Math.floor(new Date(tabDateTo).getTime() / 1000) : ''
+			});
+			tabActivityPage = pageValue;
 		} catch (message) {
 			toast.error(String(message));
 		} finally {
-			detailLoading = false;
+			tabActivityLoading = false;
 		}
 	};
 
@@ -306,18 +361,18 @@
 		}
 	};
 
-	const runExport = async (
-		section: 'participants' | 'essays' | 'surveys' | 'perturbations',
-		ids: string[],
-		format: 'csv' | 'json'
-	) => {
-		if (!ids.length) return toast.info('Select at least one record to export.');
+	const runFullSessionExport = async (ids: string[]) => {
+		if (!ids.length) return toast.info('Select at least one session to export.');
 		try {
-			const blob = await exportResearchData(localStorage.token, section, ids, format, anonymized);
+			const { blob, filename } = await exportFullResearchSessions(
+				localStorage.token,
+				ids,
+				anonymized
+			);
 			const url = URL.createObjectURL(blob);
 			const link = document.createElement('a');
 			link.href = url;
-			link.download = `experiment-${section}.${format}`;
+			link.download = filename;
 			document.body.appendChild(link);
 			link.click();
 			link.remove();
@@ -326,12 +381,6 @@
 			toast.error(String(message));
 		}
 	};
-	const exportSelected = (format: 'csv' | 'json') =>
-		runExport(
-			activeTab === 'essays' ? 'essays' : activeTab === 'surveys' ? 'surveys' : 'participants',
-			[...selected],
-			format
-		);
 
 	const fmtDate = (value: any) =>
 		value ? new Date(value * 1000).toLocaleString() : 'Not available';
@@ -356,6 +405,7 @@
 
 	onDestroy(() => {
 		clearTimeout(loadTimer);
+		clearTimeout(detailPollTimer);
 		clearTimeout(gradingPollTimer);
 		controller?.abort();
 		gradingPollController?.abort();
@@ -477,12 +527,21 @@
 	{:else if activeTab === 'participants'}
 		<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
 			<p class="text-sm text-gray-500">{data?.total ?? 0} assigned participant records</p>
-			<div class="flex items-center gap-2">
-				<label class="text-xs text-gray-500"
-					><input type="checkbox" bind:checked={anonymized} /> Anonymized export</label
+			<div class="flex flex-wrap items-center justify-end gap-2">
+				<label
+					class="text-xs text-gray-500"
+					title="Free-form text, chat content, and telemetry URLs are not redacted."
+					><input type="checkbox" bind:checked={anonymized} /> Anonymize account identifiers</label
 				>
-				<button class="research-button" on:click={() => exportSelected('csv')}>Export CSV</button>
-				<button class="research-button" on:click={() => exportSelected('json')}>Export JSON</button>
+				<button
+					class="research-button"
+					disabled={selected.size === 0}
+					on:click={() => runFullSessionExport([...selected])}
+					>Export full sessions (JSON){selected.size ? ` (${selected.size})` : ''}</button
+				>
+				<p class="w-full text-right text-xs text-amber-700 dark:text-amber-300">
+					Essays, chats, survey text, tab titles, and URLs remain unchanged.
+				</p>
 			</div>
 		</div>
 		<div class="research-table-wrap">
@@ -559,36 +618,23 @@
 	{:else if activeTab === 'essays'}
 		<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
 			<p class="text-sm text-gray-500">{data?.total ?? 0} submitted essays</p>
-			<div class="flex items-center gap-2">
-				<label class="text-xs text-gray-500"
-					><input type="checkbox" bind:checked={anonymized} /> Anonymized export</label
-				><button class="research-button" on:click={() => exportSelected('csv')}>Export CSV</button
-				><button class="research-button" on:click={() => exportSelected('json')}>Export JSON</button
-				>
-			</div>
 		</div>
 		<div class="research-table-wrap">
 			<table class="research-table">
 				<thead
 					><tr
-						><th>Select</th><th
-							><button on:click={() => sortBy('participant_id')}>Participant</button></th
-						><th><button on:click={() => sortBy('name')}>Identity</button></th><th
-							><button on:click={() => sortBy('group_name')}>Group</button></th
-						><th><button on:click={() => sortBy('topic_title')}>Topic</button></th><th
-							><button on:click={() => sortBy('state')}>State</button></th
-						><th><button on:click={() => sortBy('word_count')}>Words</button></th><th
-							><button on:click={() => sortBy('character_count')}>Characters</button></th
-						><th><button on:click={() => sortBy('submitted_at')}>Submitted</button></th></tr
+						><th><button on:click={() => sortBy('participant_id')}>Participant</button></th><th
+							><button on:click={() => sortBy('name')}>Identity</button></th
+						><th><button on:click={() => sortBy('group_name')}>Group</button></th><th
+							><button on:click={() => sortBy('topic_title')}>Topic</button></th
+						><th><button on:click={() => sortBy('state')}>State</button></th><th
+							><button on:click={() => sortBy('word_count')}>Words</button></th
+						><th><button on:click={() => sortBy('character_count')}>Characters</button></th><th
+							><button on:click={() => sortBy('submitted_at')}>Submitted</button></th
+						></tr
 					></thead
 				><tbody>
 					{#each data?.items ?? [] as row}<tr
-							><td
-								><input
-									type="checkbox"
-									checked={selected.has(row.essay_id)}
-									on:change={() => toggleSelected(row.essay_id)}
-								/></td
 							><td>{row.participant_id}</td><td>{row.name ?? row.username ?? 'Not available'}</td
 							><td>{row.group_name ?? 'Not available'}</td><td
 								>{row.topic_title ?? 'Not available'}</td
@@ -597,7 +643,7 @@
 							><td>{fmtDate(row.submitted_at)}</td></tr
 						>
 					{:else}<tr
-							><td colspan="9" class="py-12 text-center text-gray-400"
+							><td colspan="8" class="py-12 text-center text-gray-400"
 								>No submitted essays match these filters.</td
 							></tr
 						>{/each}
@@ -775,17 +821,12 @@
 			<table class="research-table">
 				<thead
 					><tr
-						><th>Select</th><th>Participant</th><th>State</th><th>Pre-survey</th><th>Post-survey</th
-						><th>{$i18n.t('Pipeline surveys')}</th><th>Optional comment</th></tr
+						><th>Participant</th><th>State</th><th>Pre-survey</th><th>Post-survey</th><th
+							>{$i18n.t('Pipeline surveys')}</th
+						><th>Optional comment</th></tr
 					></thead
 				><tbody
 					>{#each data?.responses?.items ?? [] as row}<tr
-							><td
-								><input
-									type="checkbox"
-									checked={selected.has(row.session_id)}
-									on:change={() => toggleSelected(row.session_id)}
-								/></td
 							><td>{row.participant_id}</td><td>{row.state}</td><td
 								>{yesNo(row.pre_survey_completed)}</td
 							><td>{yesNo(row.post_survey_completed)}</td><td class="max-w-3xl whitespace-normal"
@@ -794,7 +835,7 @@
 									</div>{:else}—{/each}</td
 							><td class="max-w-3xl whitespace-normal">{row.comments ?? 'Not available'}</td></tr
 						>{:else}<tr
-							><td colspan="7" class="py-12 text-center text-gray-400"
+							><td colspan="6" class="py-12 text-center text-gray-400"
 								>No survey responses match these filters.</td
 							></tr
 						>{/each}</tbody
@@ -808,15 +849,6 @@
 			{limit}
 			onPage={changePage}
 		/>
-		<div class="mt-3 flex justify-end gap-2">
-			<label class="text-xs text-gray-500"
-				><input type="checkbox" bind:checked={anonymized} /> Anonymized export</label
-			><button class="research-button" on:click={() => exportSelected('csv')}
-				>Export selected CSV</button
-			><button class="research-button" on:click={() => exportSelected('json')}
-				>Export selected JSON</button
-			>
-		</div>
 	{/if}
 </div>
 
@@ -825,7 +857,7 @@
 		<button
 			class="absolute inset-0 bg-black/30"
 			aria-label="Close session detail"
-			on:click={() => (detail = null)}
+			on:click={closeDetail}
 		></button>
 		<aside
 			class="relative h-full w-full max-w-2xl overflow-y-auto bg-white p-6 shadow-2xl dark:bg-gray-900"
@@ -833,31 +865,25 @@
 		>
 			<div class="flex items-center justify-between">
 				<h2 class="text-xl font-semibold">Session detail</h2>
-				<button class="research-button" on:click={() => (detail = null)}>Close</button>
+				<button class="research-button" on:click={closeDetail}>Close</button>
 			</div>
 			{#if detailLoading}<div class="flex h-64 items-center justify-center"><Spinner /></div>
 			{:else}
 				<p class="mt-2 text-sm text-gray-500">
 					{detail.participant_id} · {detail.name ?? 'Not available'} · {detail.state}
 				</p>
-				<div class="mt-3 flex flex-wrap gap-2">
-					<button
-						class="research-button"
-						on:click={() => runExport('participants', [detail.session_id], 'csv')}
-						>Export session CSV</button
-					><button
-						class="research-button"
-						on:click={() => runExport('participants', [detail.session_id], 'json')}
-						>Export session JSON</button
-					><button
-						class="research-button"
-						on:click={() => runExport('perturbations', [detail.session_id], 'csv')}
-						>Export perturbations CSV</button
-					><button
-						class="research-button"
-						on:click={() => runExport('perturbations', [detail.session_id], 'json')}
-						>Export perturbations JSON</button
+				<div class="mt-3 flex flex-wrap items-center gap-2">
+					<label
+						class="text-xs text-gray-500"
+						title="Free-form text, chat content, and telemetry URLs are not redacted."
+						><input type="checkbox" bind:checked={anonymized} /> Anonymize account identifiers</label
 					>
+					<button class="research-button" on:click={() => runFullSessionExport([detail.session_id])}
+						>Export full session (JSON)</button
+					>
+					<p class="w-full text-xs text-amber-700 dark:text-amber-300">
+						Essays, chats, survey text, tab titles, and URLs remain unchanged.
+					</p>
 				</div>
 				<h3 class="mb-2 mt-6 font-semibold">Timeline</h3>
 				<div class="grid gap-2 sm:grid-cols-2">
@@ -869,14 +895,49 @@
 						</div>{/each}
 				</div>
 				<h3 class="mb-2 mt-6 font-semibold">Topic and essay</h3>
-				<p class="text-sm">
-					<strong>{detail.topic_title ?? 'Not available'}</strong><br />{detail.topic_question ??
-						'Not available'}
-				</p>
-				<p class="mt-3 text-sm">
-					Words: {detail.essay?.word_count ?? 'Not available'} · Characters: {detail.essay
-						?.character_count ?? 'Not available'} · Submitted: {fmtDate(detail.essay?.submitted_at)}
-				</p>
+				{#if detail.essay_tasks?.length}
+					<div class="space-y-3">
+						{#each detail.essay_tasks as essayTask}
+							<div class="rounded-xl border border-gray-100 p-4 dark:border-gray-800">
+								<div class="flex flex-wrap items-center justify-between gap-2">
+									<strong>{essayTask.title}</strong>
+									<span class="text-xs text-gray-500">{essayTask.status}</span>
+								</div>
+								<p class="mt-2 text-sm">
+									<strong>{essayTask.topic_title ?? 'Topic not available'}</strong><br
+									/>{essayTask.topic_question ?? 'Topic question not available'}
+								</p>
+								<p class="mt-3 text-xs text-gray-500">
+									{essayTask.is_draft ? 'Current draft' : 'Submitted essay'} · Words: {essayTask.word_count}
+									· Characters: {essayTask.character_count} · Updated: {fmtDate(
+										essayTask.updated_at
+									)}
+								</p>
+								<div
+									class="mt-3 max-h-80 overflow-y-auto whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-sm leading-6 dark:bg-gray-850"
+								>
+									{essayTask.content || 'No essay text has been entered yet.'}
+								</div>
+							</div>
+						{/each}
+					</div>
+				{:else}
+					<p class="text-sm">
+						<strong>{detail.topic_title ?? 'Not available'}</strong><br />{detail.topic_question ??
+							'Not available'}
+					</p>
+					<p class="mt-3 text-sm">
+						Words: {detail.essay?.word_count ?? 'Not available'} · Characters: {detail.essay
+							?.character_count ?? 'Not available'} · Submitted: {fmtDate(
+							detail.essay?.submitted_at
+						)}
+					</p>
+					<div
+						class="mt-3 max-h-80 overflow-y-auto whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-sm leading-6 dark:bg-gray-850"
+					>
+						{detail.essay?.content || 'No essay text has been entered yet.'}
+					</div>
+				{/if}
 				<h3 class="mb-2 mt-6 font-semibold">LLM usage and durations</h3>
 				<p class="text-sm">
 					Prompts: {detail.prompts} · Responses: {detail.responses} · Input tokens: {detail.input_tokens}
@@ -895,6 +956,94 @@
 							<div class="text-xs text-gray-400">{name.replaceAll('_', ' ')}</div>
 							<div class="mt-1 text-sm">{value ?? 'Not available'}</div>
 						</div>{/each}
+				</div>
+				<div class="mt-6 rounded-2xl border border-amber-300 p-4 dark:border-amber-700">
+					<div class="flex flex-wrap items-center justify-between gap-2">
+						<div>
+							<h3 class="font-semibold">Sensitive tab activity</h3>
+							<p class="mt-1 text-xs text-amber-700 dark:text-amber-300">
+								Contains complete URLs and titles. Anonymized exports do not redact them.
+							</p>
+						</div>
+						<div class="flex flex-wrap gap-2">
+							<button class="research-button" on:click={() => loadTabActivity(detail.session_id, 1)}
+								>{tabActivity ? 'Refresh timeline' : 'Load timeline'}</button
+							>
+						</div>
+					</div>
+					{#if tabActivity}
+						<div class="mt-3 flex flex-wrap items-end gap-2">
+							<label class="text-xs" for="tab-event-filter">Event</label>
+							<select
+								id="tab-event-filter"
+								class="rounded-lg bg-gray-100 px-2 py-1 text-xs dark:bg-gray-800"
+								bind:value={tabEventType}
+								on:change={() => loadTabActivity(detail.session_id, 1)}
+							>
+								<option value="">All events</option>
+								{#each ['tab_snapshot', 'tab_created', 'tab_updated', 'tab_activated', 'tab_highlighted', 'tab_moved', 'tab_attached', 'tab_detached', 'tab_replaced', 'tab_removed', 'window_focus_changed', 'telemetry_loss'] as eventName}<option
+										value={eventName}>{eventName.replaceAll('_', ' ')}</option
+									>{/each}
+							</select>
+							<label class="text-xs" for="tab-id-filter">Tab ID</label>
+							<input
+								id="tab-id-filter"
+								type="number"
+								class="w-24 rounded-lg bg-gray-100 px-2 py-1 text-xs dark:bg-gray-800"
+								bind:value={tabBrowserId}
+							/>
+							<label class="text-xs" for="window-id-filter">Window ID</label>
+							<input
+								id="window-id-filter"
+								type="number"
+								class="w-24 rounded-lg bg-gray-100 px-2 py-1 text-xs dark:bg-gray-800"
+								bind:value={tabWindowId}
+							/>
+							<label class="text-xs" for="tab-from-filter">From</label>
+							<input
+								id="tab-from-filter"
+								type="datetime-local"
+								class="rounded-lg bg-gray-100 px-2 py-1 text-xs dark:bg-gray-800"
+								bind:value={tabDateFrom}
+							/>
+							<label class="text-xs" for="tab-to-filter">To</label>
+							<input
+								id="tab-to-filter"
+								type="datetime-local"
+								class="rounded-lg bg-gray-100 px-2 py-1 text-xs dark:bg-gray-800"
+								bind:value={tabDateTo}
+							/>
+							<button class="research-button" on:click={() => loadTabActivity(detail.session_id, 1)}
+								>Apply filters</button
+							>
+						</div>
+						{#if tabActivityLoading}<div class="flex h-24 items-center justify-center">
+								<Spinner />
+							</div>
+						{:else}<div class="mt-3 max-h-96 space-y-2 overflow-y-auto">
+								{#each tabActivity.items ?? [] as event}<details
+										class="rounded-lg bg-gray-50 p-3 text-xs dark:bg-gray-850"
+									>
+										<summary class="cursor-pointer break-all font-medium">
+											{fmtDate(event.event_time)} · {event.event_type} · tab {event.tab_id ?? '—'} ·
+											{event.title ?? event.url ?? 'No title'}
+										</summary>
+										{#if event.url}<p class="mt-2 break-all text-blue-700 dark:text-blue-300">
+												{event.url}
+											</p>{/if}
+										<pre class="research-json mt-2">{JSON.stringify(event.payload, null, 2)}</pre>
+									</details>{:else}<p class="py-6 text-center text-xs text-gray-500">
+										No matching tab events.
+									</p>{/each}
+							</div>
+							<Pagination
+								total={tabActivity.total ?? 0}
+								page={tabActivityPage}
+								limit={100}
+								onPage={(next) => loadTabActivity(detail.session_id, next)}
+							/>
+						{/if}
+					{/if}
 				</div>
 				<h3 class="mb-2 mt-6 font-semibold">Experiment condition and LLM perturbations</h3>
 				<p class="text-sm">
@@ -1158,6 +1307,10 @@
 	}
 	:global(.dark .research-button) {
 		background: rgb(31 41 55);
+	}
+	:global(.research-button:disabled) {
+		cursor: not-allowed;
+		opacity: 0.5;
 	}
 	.research-table-wrap {
 		overflow-x: auto;
