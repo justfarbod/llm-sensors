@@ -1,7 +1,11 @@
 .github
+.git
+.gitlab-ci.yml
 .DS_Store
 docs
 kubernetes
+browser-extension
+research-toolbox
 node_modules
 /.svelte-kit
 /package
@@ -17,4 +21,9 @@ uploads
 .ipynb_checkpoints
 **/*.db
 _test
+test
+tests
+backend/open_webui/test
+cypress
+playwright
 backend/data/*

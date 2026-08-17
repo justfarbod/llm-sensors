@@ -15,10 +15,25 @@ EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN=https://research.example.edu npm run build
 For an unpacked local-development build only, HTTP loopback origins are accepted:
 
 ```bash
-EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN=http://localhost:8080 npm run build:experiment-extension
+EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN=http://localhost:3000 npm run build:experiment-extension
 ```
 
 Load `browser-extension/experiment-telemetry/dist` for local verification, then zip that directory for an unlisted Chrome Web Store submission. Do not submit the source directory because its manifest contains an intentional origin placeholder.
+
+For this repository's local university deployment, leave the store ID and URL empty and configure
+`.env.university` as follows:
+
+```text
+EXPERIMENT_TELEMETRY_EXTENSION_ENABLED=true
+EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN=http://localhost:3000
+EXPERIMENT_TELEMETRY_EXTENSION_ID=
+EXPERIMENT_TELEMETRY_EXTENSION_STORE_URL=
+EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION=2.0.0
+```
+
+Restart `docker-compose.university.yaml`, open `chrome://extensions`, enable Developer mode, and load the unpacked
+`browser-extension/experiment-telemetry/dist` directory. HTTP is accepted only for loopback development; use the
+Chrome Web Store workflow below for any non-loopback deployment.
 
 After the store assigns an extension ID and URL, configure the server:
 
@@ -34,7 +49,7 @@ The website blocks experiment Start until a current heartbeat confirms version 2
 
 ## Verification
 
-1. Apply the backend migration and configure the server values above.
+1. Apply the backend migration and configure the matching local or store server values above.
 2. Build and load the fixed-origin extension.
 3. Sign in as a non-admin participant and complete consent and the pre-survey.
 4. Confirm the Start gate reports the extension as ready.

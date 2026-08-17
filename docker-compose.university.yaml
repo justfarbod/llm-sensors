@@ -1,0 +1,31 @@
+name: practical-2026-llm-sensors
+
+services:
+  open-webui:
+    image: ${OPEN_WEBUI_IMAGE:-gitlab.uni-marburg.de:5050/fb12/ag-becker/theses/practical_2026_llm-sensors:latest}
+    container_name: practical-2026-llm-sensors
+    pull_policy: always
+    ports:
+      - '${OPEN_WEBUI_PORT:-3000}:8080'
+    volumes:
+      - open-webui-data:/app/backend/data
+    environment:
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:?Set WEBUI_SECRET_KEY in .env.university or run ./setup-university.sh}
+      EXPERIMENT_TELEMETRY_EXTENSION_ENABLED: ${EXPERIMENT_TELEMETRY_EXTENSION_ENABLED:-false}
+      EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN: ${EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN:-http://localhost:3000}
+      EXPERIMENT_TELEMETRY_EXTENSION_ID: ${EXPERIMENT_TELEMETRY_EXTENSION_ID:-}
+      EXPERIMENT_TELEMETRY_EXTENSION_STORE_URL: ${EXPERIMENT_TELEMETRY_EXTENSION_STORE_URL:-}
+      EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION: ${EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION:-2.0.0}
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    healthcheck:
+      test: ['CMD-SHELL', 'curl --silent --fail http://localhost:8080/health >/dev/null || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+    restart: unless-stopped
+
+volumes:
+  open-webui-data: {}

@@ -1,3 +1,126 @@
+# Practical 2026 LLM Sensors — University Setup
+
+This repository publishes a private Open WebUI image to the Philipps-Universität Marburg GitLab Container Registry.
+The experiment telemetry browser extension and research toolbox remain separate source components: neither is copied
+into the Docker build context or installed in the application image.
+
+## Quick start
+
+You need Git, Docker with the Compose plugin, access to the private GitLab project, and an Ollama server running on the
+host. Log in to the registry with your GitLab username and a personal or deploy token that has `read_registry` access:
+
+```bash
+docker login gitlab.uni-marburg.de:5050
+git clone git@gitlab.uni-marburg.de:fb12/ag-becker/theses/practical_2026_llm-sensors.git
+cd practical_2026_llm-sensors
+./setup-university.sh
+```
+
+The setup script creates `.env.university` without overwriting an existing file, generates a persistent
+`WEBUI_SECRET_KEY`, pulls the image, and starts Open WebUI at
+[http://localhost:3000](http://localhost:3000). Application data is kept in the
+`practical-2026-llm-sensors_open-webui-data` Docker volume.
+
+If the registry login fails, confirm that the project Container Registry is enabled and that the token has
+`read_registry`. If no image exists yet, a project maintainer must complete the [first GitLab push](#gitlab-image-publishing)
+and allow its pipeline to finish.
+
+## Connect the external Ollama server
+
+The deployment connects to `http://host.docker.internal:11434` by default. Pull at least one model before opening the
+WebUI:
+
+```bash
+ollama pull <model-name>
+curl http://localhost:11434/api/tags
+```
+
+Docker Desktop normally exposes `host.docker.internal` automatically. The Compose file adds the equivalent
+`host-gateway` mapping on Linux. Because Ollama binds to `127.0.0.1` by default, Linux installations may also need to
+set `OLLAMA_HOST=0.0.0.0:11434` in the Ollama service environment and restart Ollama. Do not expose port `11434` to an
+untrusted network. To use another Ollama server, change `OLLAMA_BASE_URL` in `.env.university` and restart the stack.
+
+## Common operations
+
+```bash
+# Pull the newest main-branch image and recreate the service
+docker compose --env-file .env.university -f docker-compose.university.yaml pull
+docker compose --env-file .env.university -f docker-compose.university.yaml up -d
+
+# View status and logs
+docker compose --env-file .env.university -f docker-compose.university.yaml ps
+docker compose --env-file .env.university -f docker-compose.university.yaml logs -f open-webui
+
+# Stop the service without deleting its data volume
+docker compose --env-file .env.university -f docker-compose.university.yaml down
+```
+
+Never run `docker compose down -v` unless the persistent Open WebUI database and uploaded data should be deleted.
+
+## Browser extension (separate, unpacked)
+
+The Chrome extension records full normal-window tab URLs, titles, and lifecycle events during an active experiment.
+Review the privacy disclosure in
+[`browser-extension/experiment-telemetry/README.md`](browser-extension/experiment-telemetry/README.md) before enabling
+it. It remains disabled by default.
+
+For the local Docker deployment, install Node.js 22 and build the fixed-origin extension directly from its source:
+
+```bash
+EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN=http://localhost:3000 \
+  node browser-extension/experiment-telemetry/build.mjs
+```
+
+Then:
+
+1. Open `chrome://extensions`.
+2. Enable **Developer mode**.
+3. Choose **Load unpacked** and select `browser-extension/experiment-telemetry/dist`.
+4. Set `EXPERIMENT_TELEMETRY_EXTENSION_ENABLED=true` in `.env.university`.
+5. Restart with `docker compose --env-file .env.university -f docker-compose.university.yaml up -d`.
+6. Sign in as a non-admin participant and confirm that the experiment Start gate reports the extension as ready.
+
+The unpacked workflow is intentionally limited to loopback deployments. A future HTTPS deployment must use the
+Chrome Web Store identity and store URL described in the extension README.
+
+## Research toolbox (separate Python environment)
+
+The toolbox processes the admin dashboard's **Full research session JSON export**. It is not installed in the Docker
+image and does not anonymize exported data.
+
+```bash
+python3 -m venv .venv-research
+. .venv-research/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e './research-toolbox[notebook,test]'
+jupyter lab research-toolbox/notebooks/full_session_analysis.ipynb
+```
+
+See [`research-toolbox/README.md`](research-toolbox/README.md) for the table model, analysis helpers, and privacy notes.
+Python 3.11 or newer is required.
+
+## GitLab image publishing
+
+The GitLab pipeline uses rootless BuildKit and only GitLab's predefined registry credentials. Every pipeline publishes
+an immutable commit-SHA tag. Branches also receive their branch-slug tag, `main` publishes `latest`, and Git tags
+publish a matching version tag. Build layers are cached in the project registry.
+
+Before the first push, confirm under the GitLab project settings that the Container Registry is enabled and an active
+runner is available. Then preserve the upstream GitHub remote and add the university repository separately:
+
+```bash
+git remote add university git@gitlab.uni-marburg.de:fb12/ag-becker/theses/practical_2026_llm-sensors.git
+git push -u university main
+```
+
+If the build remains pending, the project has no eligible runner. If it fails with a rootless user-namespace or mount
+permission error, ask the university GitLab administrator to enable the system calls required by rootless BuildKit;
+do not switch the project to privileged Docker-in-Docker merely to bypass that policy.
+
+---
+
+# Upstream Open WebUI README
+
 # Open WebUI 👋
 
 ![GitHub stars](https://img.shields.io/github/stars/open-webui/open-webui?style=social)

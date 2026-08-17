@@ -5,12 +5,23 @@ analysis-ready pandas tables. It retains the original document, preserves open-e
 dictionaries/lists, and adds explicit lineage columns so records can be joined without reconstructing database
 relationships from reference IDs.
 
+The toolbox is a standalone source package. It is deliberately excluded from the Open WebUI Docker image and should
+be installed in its own Python 3.11-or-newer environment.
+
 ## Install
 
 From this directory:
 
 ```bash
 python3 -m pip install -e .
+```
+
+From the repository root, the equivalent isolated setup is:
+
+```bash
+python3 -m venv .venv-research
+. .venv-research/bin/activate
+python -m pip install -e './research-toolbox[notebook,test]'
 ```
 
 For the tutorial notebook and development tools:
