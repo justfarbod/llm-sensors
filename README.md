@@ -1,58 +1,138 @@
-# Practical 2026 LLM Sensors — University Setup
+# LLM Research and Experiment Platform
 
-This repository publishes a private Open WebUI image to the Philipps-Universität Marburg GitLab Container Registry.
-The experiment telemetry browser extension and research toolbox remain separate source components: neither is copied
-into the Docker build context or installed in the application image.
+This project is a self-hosted environment for conducting structured studies with large language models. It supports
+participant accounts, controlled research tasks, surveys, essays, chats, experiment telemetry, full-session exports,
+and reproducible analysis without coupling the analysis tools to the running application.
 
-## Quick start
+It extends Open WebUI and can use either lightweight local models or larger cloud-backed models through Ollama. The
+repository contains three deliberately separate parts:
 
-You need Git, Docker with the Compose plugin, access to the private GitLab project, and an Ollama server running on the
-host. Log in to the registry with your GitLab username and a personal or deploy token that has `read_registry` access:
+- **Web application:** the participant and administrator interface.
+- **Browser extension:** optional experiment telemetry for consenting participants.
+- **Research toolbox:** Python utilities and a notebook for analyzing exported sessions.
+
+The extension and toolbox remain standalone source components. Neither is copied into the application image.
+
+## 1. Install Docker
+
+Docker runs the web application and preserves its data in a named volume.
+
+### Windows or macOS
+
+1. Install [Docker Desktop](https://docs.docker.com/desktop/). It includes Docker Engine and Docker Compose.
+2. On Windows, enable the WSL 2 backend and this distribution under Docker Desktop's WSL integration settings.
+3. Start Docker Desktop and verify the installation:
+
+   ```bash
+   docker version
+   docker compose version
+   ```
+
+### Ubuntu or Debian Linux
+
+1. Follow Docker's official instructions to [configure its package repository](https://docs.docker.com/engine/install/ubuntu/).
+2. Install Docker Engine and the Compose plugin:
+
+   ```bash
+   sudo apt update
+   sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+   sudo docker run hello-world
+   ```
+
+For other Linux distributions, use the matching [Docker Engine installation guide](https://docs.docker.com/engine/install/).
+
+## 2. Install Ollama and choose a model
+
+Install Ollama on the same computer that will run Docker:
+
+- **Windows:** use `OllamaSetup.exe` from the [Ollama download page](https://ollama.com/download/windows).
+- **macOS:** install the application from the [Ollama download page](https://ollama.com/download/mac).
+- **Linux:** run the official installer:
+
+  ```bash
+  curl -fsSL https://ollama.com/install.sh | sh
+  ```
+
+Verify that its local API is running:
 
 ```bash
-docker login gitlab.uni-marburg.de:5050
-git clone git@gitlab.uni-marburg.de:fb12/ag-becker/theses/practical_2026_llm-sensors.git
-cd practical_2026_llm-sensors
-./setup-university.sh
-```
-
-The setup script creates `.env.university` without overwriting an existing file, generates a persistent
-`WEBUI_SECRET_KEY`, pulls the image, and starts Open WebUI at
-[http://localhost:3000](http://localhost:3000). Application data is kept in the
-`practical-2026-llm-sensors_open-webui-data` Docker volume.
-
-If the registry login fails, confirm that the project Container Registry is enabled and that the token has
-`read_registry`. If no image exists yet, a project maintainer must complete the [first GitLab push](#gitlab-image-publishing)
-and allow its pipeline to finish.
-
-## Connect the external Ollama server
-
-The deployment connects to `http://host.docker.internal:11434` by default. Pull at least one model before opening the
-WebUI:
-
-```bash
-ollama pull <model-name>
+ollama --version
 curl http://localhost:11434/api/tags
 ```
 
-Docker Desktop normally exposes `host.docker.internal` automatically. The Compose file adds the equivalent
-`host-gateway` mapping on Linux. Because Ollama binds to `127.0.0.1` by default, Linux installations may also need to
-set `OLLAMA_HOST=0.0.0.0:11434` in the Ollama service environment and restart Ollama. Do not expose port `11434` to an
-untrusted network. To use another Ollama server, change `OLLAMA_BASE_URL` in `.env.university` and restart the stack.
+Choose one of these starting models:
+
+```bash
+# Small local model (about 1B parameters; suitable for modest hardware)
+ollama run llama3.2:1b
+
+# Larger cloud model (requires an Ollama account and sends prompts to Ollama Cloud)
+ollama signin
+ollama run gpt-oss:120b-cloud
+```
+
+The small model is convenient for testing but has limited answer quality. Before using a cloud model with research
+data, confirm that external processing is allowed by the study's consent and data-handling policy and review the
+[current Ollama pricing](https://ollama.com/pricing).
+
+After the application starts, sign in and select the downloaded local or cloud model from the model menu at the top
+of a new chat. Models exposed by the configured Ollama server appear there automatically.
+
+### Make Ollama reachable from Docker
+
+The application connects to `http://host.docker.internal:11434`. Docker Desktop normally provides that hostname, and
+the deployment file adds the equivalent host-gateway mapping on Linux. Ollama binds to `127.0.0.1` by default, so a
+native Linux installation may also need this systemd override:
+
+```ini
+# sudo systemctl edit ollama.service
+[Service]
+Environment="OLLAMA_HOST=0.0.0.0:11434"
+```
+
+Then restart and verify Ollama:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart ollama
+curl http://localhost:11434/api/tags
+```
+
+Do not expose port `11434` to an untrusted network. To use another Ollama server, change `OLLAMA_BASE_URL` in
+`.env.deploy`.
+
+## 3. Start the application
+
+Clone the project, authenticate to its private image registry with a token that has `read_registry`, and run setup:
+
+```bash
+git clone git@gitlab.uni-marburg.de:fb12/ag-becker/theses/practical_2026_llm-sensors.git
+cd practical_2026_llm-sensors
+docker login gitlab.uni-marburg.de:5050
+./setup.sh
+```
+
+The setup script creates `.env.deploy` without overwriting an existing file, generates a persistent
+`WEBUI_SECRET_KEY`, pulls the image, and starts the application at
+[http://localhost:3000](http://localhost:3000). Application data is kept in the
+`practical-2026-llm-sensors_open-webui-data` Docker volume.
+
+If the image does not exist yet, a maintainer must complete the [first GitLab push](#image-publishing) and allow its
+pipeline to finish.
 
 ## Common operations
 
 ```bash
 # Pull the newest main-branch image and recreate the service
-docker compose --env-file .env.university -f docker-compose.university.yaml pull
-docker compose --env-file .env.university -f docker-compose.university.yaml up -d
+docker compose --env-file .env.deploy -f compose.deploy.yaml pull
+docker compose --env-file .env.deploy -f compose.deploy.yaml up -d
 
 # View status and logs
-docker compose --env-file .env.university -f docker-compose.university.yaml ps
-docker compose --env-file .env.university -f docker-compose.university.yaml logs -f open-webui
+docker compose --env-file .env.deploy -f compose.deploy.yaml ps
+docker compose --env-file .env.deploy -f compose.deploy.yaml logs -f open-webui
 
 # Stop the service without deleting its data volume
-docker compose --env-file .env.university -f docker-compose.university.yaml down
+docker compose --env-file .env.deploy -f compose.deploy.yaml down
 ```
 
 Never run `docker compose down -v` unless the persistent Open WebUI database and uploaded data should be deleted.
@@ -76,8 +156,8 @@ Then:
 1. Open `chrome://extensions`.
 2. Enable **Developer mode**.
 3. Choose **Load unpacked** and select `browser-extension/experiment-telemetry/dist`.
-4. Set `EXPERIMENT_TELEMETRY_EXTENSION_ENABLED=true` in `.env.university`.
-5. Restart with `docker compose --env-file .env.university -f docker-compose.university.yaml up -d`.
+4. Set `EXPERIMENT_TELEMETRY_EXTENSION_ENABLED=true` in `.env.deploy`.
+5. Restart with `docker compose --env-file .env.deploy -f compose.deploy.yaml up -d`.
 6. Sign in as a non-admin participant and confirm that the experiment Start gate reports the extension as ready.
 
 The unpacked workflow is intentionally limited to loopback deployments. A future HTTPS deployment must use the
@@ -99,22 +179,22 @@ jupyter lab research-toolbox/notebooks/full_session_analysis.ipynb
 See [`research-toolbox/README.md`](research-toolbox/README.md) for the table model, analysis helpers, and privacy notes.
 Python 3.11 or newer is required.
 
-## GitLab image publishing
+## Image publishing
 
 The GitLab pipeline uses rootless BuildKit and only GitLab's predefined registry credentials. Every pipeline publishes
 an immutable commit-SHA tag. Branches also receive their branch-slug tag, `main` publishes `latest`, and Git tags
 publish a matching version tag. Build layers are cached in the project registry.
 
 Before the first push, confirm under the GitLab project settings that the Container Registry is enabled and an active
-runner is available. Then preserve the upstream GitHub remote and add the university repository separately:
+runner is available. Then preserve the upstream GitHub remote and add this project as a separate remote:
 
 ```bash
-git remote add university git@gitlab.uni-marburg.de:fb12/ag-becker/theses/practical_2026_llm-sensors.git
-git push -u university main
+git remote add gitlab git@gitlab.uni-marburg.de:fb12/ag-becker/theses/practical_2026_llm-sensors.git
+git push -u gitlab main
 ```
 
 If the build remains pending, the project has no eligible runner. If it fails with a rootless user-namespace or mount
-permission error, ask the university GitLab administrator to enable the system calls required by rootless BuildKit;
+permission error, ask the GitLab administrator to enable the system calls required by rootless BuildKit;
 do not switch the project to privileged Docker-in-Docker merely to bypass that policy.
 
 ---

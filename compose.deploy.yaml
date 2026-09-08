@@ -11,7 +11,7 @@ services:
       - open-webui-data:/app/backend/data
     environment:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:?Set WEBUI_SECRET_KEY in .env.university or run ./setup-university.sh}
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:?Set WEBUI_SECRET_KEY in .env.deploy or run ./setup.sh}
       EXPERIMENT_TELEMETRY_EXTENSION_ENABLED: ${EXPERIMENT_TELEMETRY_EXTENSION_ENABLED:-false}
       EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN: ${EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN:-http://localhost:3000}
       EXPERIMENT_TELEMETRY_EXTENSION_ID: ${EXPERIMENT_TELEMETRY_EXTENSION_ID:-}

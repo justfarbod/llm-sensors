@@ -20,8 +20,7 @@ EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN=http://localhost:3000 npm run build:experi
 
 Load `browser-extension/experiment-telemetry/dist` for local verification, then zip that directory for an unlisted Chrome Web Store submission. Do not submit the source directory because its manifest contains an intentional origin placeholder.
 
-For this repository's local university deployment, leave the store ID and URL empty and configure
-`.env.university` as follows:
+For this repository's local deployment, leave the store ID and URL empty and configure `.env.deploy` as follows:
 
 ```text
 EXPERIMENT_TELEMETRY_EXTENSION_ENABLED=true
@@ -31,7 +30,7 @@ EXPERIMENT_TELEMETRY_EXTENSION_STORE_URL=
 EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION=2.0.0
 ```
 
-Restart `docker-compose.university.yaml`, open `chrome://extensions`, enable Developer mode, and load the unpacked
+Restart `compose.deploy.yaml`, open `chrome://extensions`, enable Developer mode, and load the unpacked
 `browser-extension/experiment-telemetry/dist` directory. HTTP is accepted only for loopback development; use the
 Chrome Web Store workflow below for any non-loopback deployment.
 

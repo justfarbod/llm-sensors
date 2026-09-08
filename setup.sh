@@ -4,9 +4,9 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$SCRIPT_DIR"
 
-ENV_FILE=.env.university
+ENV_FILE=.env.deploy
 ENV_TEMPLATE=deployment.env.example
-COMPOSE_FILE=docker-compose.university.yaml
+COMPOSE_FILE=compose.deploy.yaml
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker is required. Install Docker with the Compose plugin and try again." >&2
