@@ -20,6 +20,16 @@ export default defineConfig({
 		APP_VERSION: JSON.stringify(process.env.npm_package_version),
 		APP_BUILD_HASH: JSON.stringify(process.env.APP_BUILD_HASH || 'dev-build')
 	},
+	server: {
+		proxy: {
+			// The fixed-origin telemetry extension calls same-origin /api routes.
+			// In source development those requests must reach the backend on port 8080.
+			'/api': {
+				target: 'http://localhost:8080',
+				changeOrigin: true
+			}
+		}
+	},
 	build: {
 		sourcemap: true
 	},

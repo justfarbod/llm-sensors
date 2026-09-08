@@ -5,8 +5,8 @@ analysis-ready pandas tables. It retains the original document, preserves open-e
 dictionaries/lists, and adds explicit lineage columns so records can be joined without reconstructing database
 relationships from reference IDs.
 
-The toolbox is a standalone source package. It is deliberately excluded from the Open WebUI Docker image and should
-be installed in its own Python 3.11-or-newer environment.
+The toolbox is a standalone source package. It runs separately from the Open WebUI development servers and should be
+installed in its own Python 3.11-or-newer environment.
 
 ## Install
 

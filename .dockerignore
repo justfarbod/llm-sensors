@@ -1,9 +1,5 @@
 .github
 .git
-.gitlab-ci.yml
-compose.deploy.yaml
-deployment.env.example
-setup.sh
 .DS_Store
 docs
 kubernetes

@@ -11,39 +11,38 @@ repository contains three deliberately separate parts:
 - **Browser extension:** optional experiment telemetry for consenting participants.
 - **Research toolbox:** Python utilities and a notebook for analyzing exported sessions.
 
-The extension and toolbox remain standalone source components. Neither is copied into the application image.
+The extension and toolbox remain standalone source components with their own setup instructions. GitLab is used for
+source control only: this repository does not build or publish a container image. Its CI workflow is explicitly
+disabled so group-level GitLab Auto DevOps cannot infer the upstream Dockerfile and start an image build.
 
-## 1. Install Docker
+## Development quick start
 
-Docker runs the web application and preserves its data in a named volume.
+The application runs directly from source with the SvelteKit frontend and FastAPI backend in two terminals. Both
+processes use hot reload, so frontend and backend changes appear without rebuilding a container.
 
-### Windows or macOS
+This workflow follows the upstream
+[Open WebUI development guide](https://docs.openwebui.com/getting-started/advanced-topics/development/).
 
-1. Install [Docker Desktop](https://docs.docker.com/desktop/). It includes Docker Engine and Docker Compose.
-2. On Windows, enable the WSL 2 backend and this distribution under Docker Desktop's WSL integration settings.
-3. Start Docker Desktop and verify the installation:
+### 1. Install prerequisites
 
-   ```bash
-   docker version
-   docker compose version
-   ```
+- Git
+- Node.js 22.10 or newer within the supported Node 22 release line, with npm
+- Python 3.11 (recommended) or Python 3.12
+- Ollama, or another compatible model server
 
-### Ubuntu or Debian Linux
+On Windows, WSL 2 is recommended. Run the frontend, backend, Python environment, and Ollama in environments that can
+reach one another. Docker is not required for this development setup.
 
-1. Follow Docker's official instructions to [configure its package repository](https://docs.docker.com/engine/install/ubuntu/).
-2. Install Docker Engine and the Compose plugin:
+Clone the project:
 
-   ```bash
-   sudo apt update
-   sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-   sudo docker run hello-world
-   ```
+```bash
+git clone git@gitlab.uni-marburg.de:fb12/ag-becker/theses/practical_2026_llm-sensors.git
+cd practical_2026_llm-sensors
+```
 
-For other Linux distributions, use the matching [Docker Engine installation guide](https://docs.docker.com/engine/install/).
+### 2. Install Ollama and choose a model
 
-## 2. Install Ollama and choose a model
-
-Install Ollama on the same computer that will run Docker:
+Install Ollama on the same computer or development environment as the backend:
 
 - **Windows:** use `OllamaSetup.exe` from the [Ollama download page](https://ollama.com/download/windows).
 - **macOS:** install the application from the [Ollama download page](https://ollama.com/download/mac).
@@ -78,64 +77,55 @@ data, confirm that external processing is allowed by the study's consent and dat
 After the application starts, sign in and select the downloaded local or cloud model from the model menu at the top
 of a new chat. Models exposed by the configured Ollama server appear there automatically.
 
-### Make Ollama reachable from Docker
+The default `.env.example` points the backend to `http://localhost:11434`. To use another compatible server, change
+`OLLAMA_BASE_URL` after copying the environment file in the next step.
 
-The application connects to `http://host.docker.internal:11434`. Docker Desktop normally provides that hostname, and
-the deployment file adds the equivalent host-gateway mapping on Linux. Ollama binds to `127.0.0.1` by default, so a
-native Linux installation may also need this systemd override:
+### 3. Start the frontend
 
-```ini
-# sudo systemctl edit ollama.service
-[Service]
-Environment="OLLAMA_HOST=0.0.0.0:11434"
-```
-
-Then restart and verify Ollama:
+In the first terminal, from the repository root:
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl restart ollama
-curl http://localhost:11434/api/tags
+[ -f .env ] || cp .env.example .env
+npm install
+npm run dev
 ```
 
-Do not expose port `11434` to an untrusted network. To use another Ollama server, change `OLLAMA_BASE_URL` in
-`.env.deploy`.
+The Vite development server runs at [http://localhost:5173](http://localhost:5173) and reloads frontend changes. On
+later runs, only `npm run dev` is required.
 
-## 3. Start the application
+If dependency compatibility warnings prevent installation, use `npm install --force`. If Node reports a heap-limit
+error, set `NODE_OPTIONS=--max-old-space-size=4096` before running the frontend command.
 
-Clone the project, authenticate to its private image registry with a token that has `read_registry`, and run setup:
+### 4. Start the backend
+
+In a second terminal, from the repository root:
 
 ```bash
-git clone git@gitlab.uni-marburg.de:fb12/ag-becker/theses/practical_2026_llm-sensors.git
-cd practical_2026_llm-sensors
-docker login gitlab.uni-marburg.de:5050
-./setup.sh
+cd backend
+python3.11 -m venv venv
+. venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt -U
+sh dev.sh
 ```
 
-The setup script creates `.env.deploy` without overwriting an existing file, generates a persistent
-`WEBUI_SECRET_KEY`, pulls the image, and starts the application at
-[http://localhost:3000](http://localhost:3000). Application data is kept in the
-`practical-2026-llm-sensors_open-webui-data` Docker volume.
+If `python3.11` is not the executable name on your system, use a Python 3.11 or 3.12 executable. On Windows without
+WSL, activate the environment with `venv\Scripts\activate`.
 
-If the image does not exist yet, a maintainer must complete the [first GitLab push](#image-publishing) and allow its
-pipeline to finish.
+The backend runs with Uvicorn reload at [http://localhost:8080](http://localhost:8080), and its API documentation is
+available at [http://localhost:8080/docs](http://localhost:8080/docs). Refresh the frontend after both terminals are
+running. The first registered account becomes the administrator.
 
-## Common operations
+On later runs, restart the backend with:
 
 ```bash
-# Pull the newest main-branch image and recreate the service
-docker compose --env-file .env.deploy -f compose.deploy.yaml pull
-docker compose --env-file .env.deploy -f compose.deploy.yaml up -d
-
-# View status and logs
-docker compose --env-file .env.deploy -f compose.deploy.yaml ps
-docker compose --env-file .env.deploy -f compose.deploy.yaml logs -f open-webui
-
-# Stop the service without deleting its data volume
-docker compose --env-file .env.deploy -f compose.deploy.yaml down
+cd backend
+. venv/bin/activate
+sh dev.sh
 ```
 
-Never run `docker compose down -v` unless the persistent Open WebUI database and uploaded data should be deleted.
+Use `Ctrl+C` in each terminal to stop the development servers. Local application state is stored under
+`backend/data`; do not share this directory with a production installation.
 
 ## Browser extension (separate, unpacked)
 
@@ -144,11 +134,10 @@ Review the privacy disclosure in
 [`browser-extension/experiment-telemetry/README.md`](browser-extension/experiment-telemetry/README.md) before enabling
 it. It remains disabled by default.
 
-For the local Docker deployment, install Node.js 22 and build the fixed-origin extension directly from its source:
+From the repository root, build the extension for the frontend's exact local origin:
 
 ```bash
-EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN=http://localhost:3000 \
-  node browser-extension/experiment-telemetry/build.mjs
+EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN=http://localhost:5173 npm run build:experiment-extension
 ```
 
 Then:
@@ -156,17 +145,19 @@ Then:
 1. Open `chrome://extensions`.
 2. Enable **Developer mode**.
 3. Choose **Load unpacked** and select `browser-extension/experiment-telemetry/dist`.
-4. Set `EXPERIMENT_TELEMETRY_EXTENSION_ENABLED=true` in `.env.deploy`.
-5. Restart with `docker compose --env-file .env.deploy -f compose.deploy.yaml up -d`.
+4. Set `EXPERIMENT_TELEMETRY_EXTENSION_ENABLED=true` in the root `.env` file.
+5. Restart the backend with `cd backend && sh dev.sh`, and run the frontend with `npm run dev` from the repository
+   root.
 6. Sign in as a non-admin participant and confirm that the experiment Start gate reports the extension as ready.
 
-The unpacked workflow is intentionally limited to loopback deployments. A future HTTPS deployment must use the
-Chrome Web Store identity and store URL described in the extension README.
+The Vite development server proxies the extension's same-origin `/api` calls to the backend on port 8080. The unpacked
+workflow is intentionally limited to loopback development; a future HTTPS deployment must use the Chrome Web Store
+identity and store URL described in the extension README.
 
 ## Research toolbox (separate Python environment)
 
-The toolbox processes the admin dashboard's **Full research session JSON export**. It is not installed in the Docker
-image and does not anonymize exported data.
+The toolbox processes the admin dashboard's **Full research session JSON export**. It runs independently from the web
+application and does not anonymize exported data.
 
 ```bash
 python3 -m venv .venv-research
@@ -179,27 +170,12 @@ jupyter lab research-toolbox/notebooks/full_session_analysis.ipynb
 See [`research-toolbox/README.md`](research-toolbox/README.md) for the table model, analysis helpers, and privacy notes.
 Python 3.11 or newer is required.
 
-## Image publishing
-
-The GitLab pipeline uses rootless BuildKit and only GitLab's predefined registry credentials. Every pipeline publishes
-an immutable commit-SHA tag. Branches also receive their branch-slug tag, `main` publishes `latest`, and Git tags
-publish a matching version tag. Build layers are cached in the project registry.
-
-Before the first push, confirm under the GitLab project settings that the Container Registry is enabled and an active
-runner is available. Then preserve the upstream GitHub remote and add this project as a separate remote:
-
-```bash
-git remote add gitlab git@gitlab.uni-marburg.de:fb12/ag-becker/theses/practical_2026_llm-sensors.git
-git push -u gitlab main
-```
-
-If the build remains pending, the project has no eligible runner. If it fails with a rootless user-namespace or mount
-permission error, ask the GitLab administrator to enable the system calls required by rootless BuildKit;
-do not switch the project to privileged Docker-in-Docker merely to bypass that policy.
-
 ---
 
-# Upstream Open WebUI README
+# Upstream Open WebUI project information
+
+The material below is retained from the upstream project. For development of this research fork, use the source-based
+frontend and backend workflow above.
 
 # Open WebUI 👋
 

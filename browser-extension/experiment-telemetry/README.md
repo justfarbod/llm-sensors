@@ -15,24 +15,27 @@ EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN=https://research.example.edu npm run build
 For an unpacked local-development build only, HTTP loopback origins are accepted:
 
 ```bash
-EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN=http://localhost:3000 npm run build:experiment-extension
+EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN=http://localhost:5173 npm run build:experiment-extension
 ```
 
 Load `browser-extension/experiment-telemetry/dist` for local verification, then zip that directory for an unlisted Chrome Web Store submission. Do not submit the source directory because its manifest contains an intentional origin placeholder.
 
-For this repository's local deployment, leave the store ID and URL empty and configure `.env.deploy` as follows:
+For this repository's source-development workflow, leave the store ID and URL empty and configure the root `.env`
+file as follows:
 
 ```text
 EXPERIMENT_TELEMETRY_EXTENSION_ENABLED=true
-EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN=http://localhost:3000
+EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN=http://localhost:5173
 EXPERIMENT_TELEMETRY_EXTENSION_ID=
 EXPERIMENT_TELEMETRY_EXTENSION_STORE_URL=
 EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION=2.0.0
 ```
 
-Restart `compose.deploy.yaml`, open `chrome://extensions`, enable Developer mode, and load the unpacked
-`browser-extension/experiment-telemetry/dist` directory. HTTP is accepted only for loopback development; use the
-Chrome Web Store workflow below for any non-loopback deployment.
+Restart the backend with `cd backend && sh dev.sh`, run the frontend with `npm run dev` from the repository root, open
+`chrome://extensions`, enable Developer mode, and load the unpacked
+`browser-extension/experiment-telemetry/dist` directory. The Vite server proxies the extension's same-origin `/api`
+requests to the backend on port 8080. HTTP is accepted only for loopback development; use the Chrome Web Store
+workflow below for any non-loopback deployment.
 
 After the store assigns an extension ID and URL, configure the server:
 
