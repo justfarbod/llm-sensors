@@ -11,9 +11,57 @@ repository contains three deliberately separate parts:
 - **Browser extension:** optional experiment telemetry for consenting participants.
 - **Research toolbox:** Python utilities and a notebook for analyzing exported sessions.
 
-The extension and toolbox remain standalone source components with their own setup instructions. GitLab is used for
-source control only: this repository does not build or publish a container image. Its CI workflow is explicitly
-disabled so group-level GitLab Auto DevOps cannot infer the upstream Dockerfile and start an image build.
+The extension and toolbox are standalone source components with their own setup instructions. You can run the web
+application from the published Docker image or start the frontend and backend directly for development.
+
+## Run the published Docker image
+
+Install [Docker Desktop](https://docs.docker.com/desktop/) on Windows or macOS, or
+[Docker Engine](https://docs.docker.com/engine/install/) on Linux. Start Ollama, then download the latest image:
+
+```bash
+docker pull justfarbod/llm-sensors
+```
+
+Run the application with persistent data and connect it to Ollama on the host:
+
+```bash
+docker run -d \
+  --name llm-sensors \
+  -p 3000:8080 \
+  --add-host=host.docker.internal:host-gateway \
+  -e OLLAMA_BASE_URL=http://host.docker.internal:11434 \
+  -v llm-sensors-data:/app/backend/data \
+  --restart unless-stopped \
+  justfarbod/llm-sensors:latest
+```
+
+Open [http://localhost:3000](http://localhost:3000). The first registered account becomes the administrator, and
+application data is retained in the `llm-sensors-data` Docker volume.
+
+On Linux, Ollama may need to listen beyond the loopback interface so the container can reach it. Start it with:
+
+```bash
+OLLAMA_HOST=0.0.0.0:11434 ollama serve
+```
+
+Pull a small model in another terminal if you have not already installed one:
+
+```bash
+ollama pull llama3.2:1b
+```
+
+Useful container commands:
+
+```bash
+docker logs -f llm-sensors
+docker stop llm-sensors
+docker start llm-sensors
+```
+
+To update later, pull the image again, replace the container with the same `docker run` command, and keep the
+`llm-sensors-data` volume. The browser extension and research toolbox are installed separately using the sections
+below.
 
 ## Development quick start
 
@@ -31,7 +79,7 @@ This workflow follows the upstream
 - Ollama, or another compatible model server
 
 On Windows, WSL 2 is recommended. Run the frontend, backend, Python environment, and Ollama in environments that can
-reach one another. Docker is not required for this development setup.
+reach one another. The steps below use the local Node.js and Python development toolchains.
 
 Clone the project:
 
