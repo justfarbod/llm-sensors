@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { features as buildFeatures, constrainChatRequest } from '$lib/features';
 	import { v4 as uuidv4 } from 'uuid';
 	import { toast } from 'svelte-sonner';
 	import { PaneGroup, Pane, PaneResizer } from 'paneforge';
@@ -123,6 +124,9 @@
 	import { getBanners } from '$lib/apis/configs';
 
 	export let chatIdProp = '';
+	$: if (!buildFeatures.voice && $showCallOverlay) showCallOverlay.set(false);
+	$: if (!buildFeatures.terminals && $selectedTerminalId) selectedTerminalId.set(null);
+	$: if (!buildFeatures.python && codeInterpreterEnabled) codeInterpreterEnabled = false;
 
 	let loading = true;
 
@@ -452,7 +456,7 @@
 
 				if (
 					model.info?.meta?.capabilities?.['code_interpreter'] &&
-					$config?.features?.enable_code_interpreter &&
+					buildFeatures.python && $config?.features?.enable_code_interpreter &&
 					($user?.role === 'admin' || $user?.permissions?.features?.code_interpreter)
 				) {
 					codeInterpreterEnabled = model.info.meta.defaultFeatureIds.includes('code_interpreter');
@@ -460,7 +464,7 @@
 			}
 
 			// Set Default Terminal — only if the referenced terminal actually exists
-			if (model?.info?.meta?.terminalId) {
+			if (buildFeatures.terminals && model?.info?.meta?.terminalId) {
 				const tid = model.info.meta.terminalId;
 				if (isTerminalAvailable(tid)) {
 					selectedTerminalId.set(tid);
@@ -792,7 +796,7 @@
 		audioQueue.set(audioQueueInstance);
 
 		// Restore direct terminal enabled states based on persisted selectedTerminalId
-		if ($settings?.terminalServers?.length) {
+		if (buildFeatures.terminals && $settings?.terminalServers?.length) {
 			settings.set({
 				...$settings,
 				terminalServers: ($settings.terminalServers ?? []).map((s) => ({
@@ -1323,7 +1327,7 @@
 			imageGenerationEnabled = true;
 		}
 
-		if ($page.url.searchParams.get('code-interpreter') === 'true') {
+		if (buildFeatures.python && $page.url.searchParams.get('code-interpreter') === 'true') {
 			codeInterpreterEnabled = true;
 		}
 
@@ -1350,7 +1354,7 @@
 			}
 		}
 
-		if ($page.url.searchParams.get('call') === 'true') {
+		if (buildFeatures.voice && $page.url.searchParams.get('call') === 'true') {
 			showCallOverlay.set(true);
 			showControls.set(true);
 		}
@@ -1360,7 +1364,7 @@
 			const event = $desktopEvent;
 			desktopEvent.set(null);
 
-			if (event.type === 'call') {
+			if (buildFeatures.voice && event.type === 'call') {
 				// Defer to next macrotask so the call overlay isn't clobbered by
 				// showControlsSubscribe's initial callback (value=false → set(false))
 				// which runs as a pending microtask after this function.
@@ -1861,7 +1865,7 @@
 					}
 
 					// Emit chat event for TTS (only when call overlay is active)
-					if ($showCallOverlay) {
+					if (buildFeatures.voice && $showCallOverlay) {
 						const messageContentParts = getMessageContentParts(
 							removeAllDetails(message.content),
 							$config?.audio?.tts?.split_on ?? 'punctuation'
@@ -1897,7 +1901,7 @@
 			}
 
 			// Emit chat event for TTS (only when call overlay is active)
-			if ($showCallOverlay) {
+			if (buildFeatures.voice && $showCallOverlay) {
 				const messageContentParts = getMessageContentParts(
 					removeAllDetails(message.content),
 					$config?.audio?.tts?.split_on ?? 'punctuation'
@@ -1967,13 +1971,13 @@
 				copyToClipboard(message.content);
 			}
 
-			if ($settings.responseAutoPlayback && !$showCallOverlay) {
+			if (buildFeatures.voice && $settings.responseAutoPlayback && !$showCallOverlay) {
 				await tick();
 				document.getElementById(`speak-button-${message.id}`)?.click();
 			}
 
 			// Emit chat event for TTS (only when call overlay is active)
-			if ($showCallOverlay) {
+			if (buildFeatures.voice && $showCallOverlay) {
 				let lastMessageContentPart =
 					getMessageContentParts(
 						removeAllDetails(message.content),
@@ -2309,14 +2313,14 @@
 
 		if ($config?.features)
 			features = {
-				voice: $showCallOverlay,
+				voice: buildFeatures.voice && $showCallOverlay,
 				image_generation:
 					$config?.features?.enable_image_generation &&
 					($user?.role === 'admin' || $user?.permissions?.features?.image_generation)
 						? imageGenerationEnabled
 						: false,
 				code_interpreter:
-					$config?.features?.enable_code_interpreter &&
+					buildFeatures.python && $config?.features?.enable_code_interpreter &&
 					($user?.role === 'admin' || $user?.permissions?.features?.code_interpreter)
 						? codeInterpreterEnabled
 						: false,
@@ -2525,11 +2529,11 @@
 		const activeTerminalId = $selectedTerminalId ?? null;
 
 		// Only send terminal_id if the model has terminal capability enabled
-		const terminalEnabled = model.info?.meta?.capabilities?.terminal ?? true;
+		const terminalEnabled = buildFeatures.terminals && (model.info?.meta?.capabilities?.terminal ?? true);
 
 		const res = await generateOpenAIChatCompletion(
 			localStorage.token,
-			{
+			constrainChatRequest({
 				stream: stream,
 				model: model.id,
 				...(messages.length > 0 ? { messages } : {}),
@@ -2550,7 +2554,7 @@
 						(server, idx) => toolServerIds.includes(idx) || toolServerIds.includes(server?.id)
 					),
 					// Direct terminal servers — always included when enabled (not routed through selectedToolIds)
-					...($terminalServers ?? []).filter((t) => !t.id)
+					...(buildFeatures.terminals ? ($terminalServers ?? []).filter((t) => !t.id) : [])
 				],
 				features: getFeatures(),
 				variables: {
@@ -2593,7 +2597,7 @@
 							}
 						}
 					: {})
-			},
+			}),
 			`${WEBUI_BASE_URL}/api`
 		).catch(async (error) => {
 			console.log(error);

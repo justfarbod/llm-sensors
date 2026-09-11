@@ -20,6 +20,22 @@ export const experimentUser = {
 	password: 'password'
 };
 
+// Reuse the fixture admin session within a spec instead of consuming the signin
+// rate limit each time we seed a user, group or model.
+let fixtureAdminSession: { token: string } | undefined;
+const getFixtureAdminSession = () => {
+	if (fixtureAdminSession) return cy.wrap({ body: fixtureAdminSession }, { log: false });
+	return cy
+		.request('POST', '/api/v1/auths/signin', {
+			email: adminUser.email,
+			password: adminUser.password
+		})
+		.then((response) => {
+			fixtureAdminSession = response.body;
+			return response;
+		});
+};
+
 const login = (email: string, password: string, admin = false) => {
 	return cy.session(
 		`${admin ? 'admin' : 'user'}-${email}`,
@@ -77,32 +93,44 @@ const register = (name: string, email: string, password: string) => {
 };
 
 const registerAdmin = () => {
-	return register(adminUser.name, adminUser.email, adminUser.password);
+	return cy
+		.request({
+			method: 'POST',
+			url: '/api/v1/auths/signin',
+			body: { email: adminUser.email, password: adminUser.password },
+			failOnStatusCode: false
+		})
+		.then((response) => {
+			if (response.status === 200) {
+				fixtureAdminSession = response.body;
+				return;
+			}
+			return register(adminUser.name, adminUser.email, adminUser.password);
+		});
 };
 
 const ensureUserRole = (targetUser: typeof normalUser, role = 'user') => {
-	return register(targetUser.name, targetUser.email, targetUser.password).then(() => {
-		cy.request('POST', '/api/v1/auths/signin', {
-			email: adminUser.email,
-			password: adminUser.password
-		}).then((session) => {
-			const authorization = `Bearer ${session.body.token}`;
-			cy.request({
+	// The first admin signup disables public signup. Seed other test users via
+	// the authenticated admin API so a clean isolated database works as well.
+	return getFixtureAdminSession().then((session) => {
+		const headers = { Authorization: `Bearer ${session.body.token}` };
+		return cy
+			.request({
 				method: 'GET',
 				url: `/api/v1/users/?query=${encodeURIComponent(targetUser.email)}`,
-				headers: { Authorization: authorization }
-			}).then((response) => {
-				const user = response.body.users.find(
-					(item: { email: string; id: string }) => item.email === targetUser.email
+				headers
+			})
+			.then((response) => {
+				const existing = response.body.users.find(
+					(item: { email: string }) => item.email === targetUser.email
 				);
-				cy.request({
+				return cy.request({
 					method: 'POST',
-					url: `/api/v1/users/${user.id}/update`,
-					headers: { Authorization: authorization },
-					body: { role }
+					url: existing ? `/api/v1/users/${existing.id}/update` : '/api/v1/auths/add',
+					headers,
+					body: existing ? { role } : { ...targetUser, role }
 				});
 			});
-		});
 	});
 };
 
@@ -110,11 +138,33 @@ const registerNormalUser = () => ensureUserRole(normalUser);
 
 const registerExperimentUser = () => {
 	return ensureUserRole(experimentUser).then(() => {
-		cy.request('POST', '/api/v1/auths/signin', {
-			email: adminUser.email,
-			password: adminUser.password
-		}).then((session) => {
+		getFixtureAdminSession().then((session) => {
 			const authorization = `Bearer ${session.body.token}`;
+			const configureFixtureModel = (groupId: string) => {
+				if (!Cypress.env('researchModelFixture')) return;
+				const headers = { Authorization: authorization };
+				cy.request({
+					url: '/api/v1/models/model?id=study-model',
+					headers,
+					failOnStatusCode: false
+				}).then((response) => {
+					if (response.status === 200) return;
+					cy.request({
+						method: 'POST',
+						url: '/api/v1/models/create',
+						headers,
+						body: {
+							id: 'study-model',
+							name: 'Study model',
+							meta: {},
+							params: {},
+							access_grants: [
+								{ principal_type: 'group', principal_id: groupId, permission: 'read' }
+							]
+						}
+					});
+				});
+			};
 			cy.request({
 				method: 'GET',
 				url: `/api/v1/users/?query=${encodeURIComponent(experimentUser.email)}`,
@@ -132,6 +182,7 @@ const registerExperimentUser = () => {
 						(group: { name: string }) => group.name === 'Cypress Experiment Group'
 					);
 					if (existing) {
+						configureFixtureModel(existing.id);
 						cy.request({
 							method: 'POST',
 							url: `/api/v1/groups/id/${existing.id}/users/add`,
@@ -164,6 +215,7 @@ const registerExperimentUser = () => {
 								}
 							}
 						}).then((groupResponse) => {
+							configureFixtureModel(groupResponse.body.id);
 							cy.request({
 								method: 'POST',
 								url: `/api/v1/groups/id/${groupResponse.body.id}/users/add`,

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { features as buildFeatures } from '$lib/features';
 	import hljs from 'highlight.js';
 	import { toast } from 'svelte-sonner';
 	import { getContext, onMount, tick, onDestroy } from 'svelte';
@@ -140,6 +141,7 @@
 	};
 
 	const executePython = async (code) => {
+		if (!buildFeatures.python) return;
 		result = null;
 		stdout = null;
 		stderr = null;
@@ -482,7 +484,7 @@
 						</div>
 					</button>
 
-					{#if ($config?.features?.enable_code_execution ?? true) && (lang.toLowerCase() === 'python' || lang.toLowerCase() === 'py' || (lang === '' && checkPythonCode(code)))}
+					{#if buildFeatures.python && ($config?.features?.enable_code_execution ?? true) && (lang.toLowerCase() === 'python' || lang.toLowerCase() === 'py' || (lang === '' && checkPythonCode(code)))}
 						{#if executing}
 							<div
 								class="run-code-button bg-none border-none p-0.5 cursor-not-allowed bg-white dark:bg-black"

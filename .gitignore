@@ -310,3 +310,6 @@ dist
 cypress/videos
 cypress/screenshots
 .vscode/settings.json
+
+# Generated research profile routes, assets and disabled feature interfaces
+.generated/

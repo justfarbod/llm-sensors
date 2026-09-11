@@ -25,6 +25,33 @@ describe('Admin-only research dashboard', () => {
 		cy.contains('a', 'System Analytics').should('exist');
 	});
 
+	it('retains users, groups, task authoring and workflow editing', () => {
+		cy.viewport(1440, 1000);
+		cy.visit('/admin/users');
+		cy.contains('a', 'Groups').click();
+		cy.location('pathname').should('include', '/admin/users/groups');
+		cy.visit('/admin/essays');
+		cy.contains('h2', 'New Essay Topic').should('be.visible');
+		cy.contains('label', 'Topic title').find('input').type('Profile validation topic');
+		cy.get('textarea[aria-label="Essay question"]').type('Explain **the evidence**.');
+		cy.intercept('POST', '**/api/v1/essays/topics/create', (request) => {
+			expect(request.body).to.deep.equal({
+				title: 'Profile validation topic',
+				question: 'Explain **the evidence**.'
+			});
+			request.reply({ id: 'profile-topic', ...request.body });
+		}).as('createTopic');
+		cy.contains('button', 'Save Topic').click();
+		cy.wait('@createTopic');
+		cy.contains('button', 'Question Tasks').click();
+		cy.contains('h2', 'New Question Task').should('be.visible');
+		cy.contains('button', 'Workflows').click();
+		cy.contains('Experiment Workflow Library').should('be.visible');
+		cy.contains('button', 'New workflow').click();
+		cy.contains('label', 'Workflow name').find('input').type('Profile workflow draft');
+		cy.contains('Ordered tasks').should('be.visible');
+	});
+
 	it('renders research overview filters and handles an empty participant table', () => {
 		cy.visit('/admin/analytics/overview');
 		cy.get('select[aria-label="Group filter"]').should('exist');

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { features as buildFeatures } from '$lib/features';
 	import { getContext, onMount, tick } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { config, models, settings, user } from '$lib/stores';
@@ -485,6 +486,8 @@
 
 	const getAvailableSettings = () => {
 		return allSettings.filter((tab) => {
+			if (!buildFeatures.voice && tab.id === 'audio') return false;
+			if (!buildFeatures.python && tab.id === 'code-execution') return false;
 			if (tab.id === 'connections') {
 				return $config?.features?.enable_direct_connections;
 			}
@@ -918,7 +921,7 @@
 							toast.success($i18n.t('Settings saved successfully!'));
 						}}
 					/>
-				{:else if selectedTab === 'audio'}
+				{:else if buildFeatures.voice && selectedTab === 'audio'}
 					<Audio
 						{saveSettings}
 						on:save={() => {

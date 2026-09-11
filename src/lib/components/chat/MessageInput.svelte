@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { features as buildFeatures } from '$lib/features';
 	import DOMPurify from 'dompurify';
 	import { toast } from 'svelte-sonner';
 
@@ -526,7 +527,7 @@
 		($_user.role === 'admin' || $_user?.permissions?.features?.image_generation);
 
 	let showCodeInterpreterButton = false;
-	$: showCodeInterpreterButton =
+	$: showCodeInterpreterButton = buildFeatures.python &&
 		!$selectedTerminalId &&
 		(atSelectedModel?.id ? [atSelectedModel.id] : selectedModels).length ===
 			codeInterpreterCapableModels.length &&
@@ -1857,7 +1858,7 @@
 											</Tooltip>
 										{/if}
 
-										{#if codeInterpreterEnabled}
+										{#if buildFeatures.python && codeInterpreterEnabled}
 											<Tooltip content={$i18n.t('Code Interpreter')} placement="top">
 												<button
 													aria-label={codeInterpreterEnabled
@@ -1932,7 +1933,7 @@
 											</Tooltip>
 										</div>
 									{:else}
-										{#if prompt !== '' && !history?.currentId && !$selectedTerminalId && ($config?.features?.enable_notes ?? false) && ($_user?.role === 'admin' || ($_user?.permissions?.features?.notes ?? true))}
+										{#if prompt !== '' && !history?.currentId && !$selectedTerminalId && (buildFeatures.personal && ($config?.features?.enable_notes ?? false)) && ($_user?.role === 'admin' || ($_user?.permissions?.features?.notes ?? true))}
 											<!-- {$i18n.t('Create Note')}  -->
 											<Tooltip content={$i18n.t('Create note')} className=" flex items-center">
 												<button
@@ -1954,11 +1955,11 @@
 											{@const hasDirectToolServerAccess =
 												$_user?.role === 'admin' ||
 												($_user?.permissions?.features?.direct_tool_servers ?? true)}
-											{#if terminalCapableModels.length > 0 && (($terminalServers ?? []).some((t) => t.id) || (hasDirectToolServerAccess && (($terminalServers ?? []).some((t) => !t.id) || ($settings?.terminalServers ?? []).some((s) => s.url))))}
+											{#if buildFeatures.terminals && terminalCapableModels.length > 0 && (($terminalServers ?? []).some((t) => t.id) || (hasDirectToolServerAccess && (($terminalServers ?? []).some((t) => !t.id) || ($settings?.terminalServers ?? []).some((s) => s.url))))}
 												<TerminalMenu bind:show={showTerminalMenu} />
 											{/if}
 
-											{#if $_user?.role === 'admin' || ($_user?.permissions?.chat?.stt ?? true)}
+											{#if buildFeatures.voice && ($_user?.role === 'admin' || ($_user?.permissions?.chat?.stt ?? true))}
 												<!-- {$i18n.t('Record voice')} -->
 												<Tooltip content={$i18n.t('Dictate')}>
 													<button
@@ -2009,7 +2010,7 @@
 											{/if}
 										{/if}
 
-										{#if prompt === '' && files.length === 0 && ($_user?.role === 'admin' || ($_user?.permissions?.chat?.call ?? true))}
+										{#if buildFeatures.voice && prompt === '' && files.length === 0 && ($_user?.role === 'admin' || ($_user?.permissions?.chat?.call ?? true))}
 											<div class=" flex items-center">
 												<!-- {$i18n.t('Call')} -->
 												<Tooltip content={$i18n.t('Voice mode')}>

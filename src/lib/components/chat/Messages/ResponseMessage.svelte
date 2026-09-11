@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { features as buildFeatures } from '$lib/features';
 	import { toast } from 'svelte-sonner';
 	import dayjs from 'dayjs';
 
@@ -228,6 +229,7 @@
 			: $config?.audio?.tts?.voice);
 
 	const speak = async () => {
+		if (!buildFeatures.voice) return;
 		if (!(message?.content ?? '').trim().length) {
 			toast.info($i18n.t('No content to speak'));
 			return;
@@ -1056,7 +1058,7 @@
 									</button>
 								</Tooltip>
 
-								{#if !readOnly && ($user?.role === 'admin' || ($user?.permissions?.chat?.tts ?? true))}
+								{#if buildFeatures.voice && !readOnly && ($user?.role === 'admin' || ($user?.permissions?.chat?.tts ?? true))}
 									<Tooltip content={$i18n.t('Read Aloud')} placement="bottom">
 										<button
 											aria-label={$i18n.t('Read Aloud')}

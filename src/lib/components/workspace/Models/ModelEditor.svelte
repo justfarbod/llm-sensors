@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { features as buildFeatures } from '$lib/features';
 	import { toast } from 'svelte-sonner';
 
 	import { onMount, getContext, tick } from 'svelte';
@@ -822,7 +823,7 @@
 						{@const availableFeatures = Object.entries(capabilities)
 							.filter(
 								([key, value]) =>
-									value && ['web_search', 'code_interpreter', 'image_generation'].includes(key)
+									value && (buildFeatures.python || key !== 'code_interpreter') && ['web_search', 'code_interpreter', 'image_generation'].includes(key)
 							)
 							.map(([key, value]) => key)}
 
@@ -839,12 +840,13 @@
 						</div>
 					{/if}
 
-					{#if capabilities.terminal}
+					{#if buildFeatures.terminals && capabilities.terminal}
 						<div class="my-4">
 							<TerminalSelector bind:terminalId />
 						</div>
 					{/if}
 
+{#if buildFeatures.voice}
 					<div class="my-4">
 						<div class="flex w-full justify-between mb-1">
 							<div class="self-center text-xs font-medium text-gray-500">
@@ -859,6 +861,7 @@
 						/>
 					</div>
 
+{/if}
 					<hr class=" border-gray-100/30 dark:border-gray-850/30 my-4" />
 
 					<div class="my-2 flex justify-end">

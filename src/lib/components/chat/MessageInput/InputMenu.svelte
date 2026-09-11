@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { features as buildFeatures } from '$lib/features';
 	import { getContext, onMount, tick } from 'svelte';
 	import { fly } from 'svelte/transition';
 
@@ -240,7 +241,7 @@
 						</button>
 					</Tooltip>
 
-					{#if $config?.features?.enable_notes ?? false}
+					{#if (buildFeatures.personal && $config?.features?.enable_notes) ?? false}
 						<Tooltip
 							content={fileUploadCapableModels.length !== selectedModels.length
 								? $i18n.t('Model(s) do not support file upload')

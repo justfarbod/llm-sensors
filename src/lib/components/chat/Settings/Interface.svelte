@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { features as buildFeatures } from '$lib/features';
 	import { config, models, settings, user } from '$lib/stores';
 	import { createEventDispatcher, onMount, onDestroy, getContext } from 'svelte';
 	import { toast } from 'svelte-sonner';
@@ -1320,7 +1321,8 @@
 				</div>
 			</div>
 
-			<div class=" my-2 text-sm font-medium">{$i18n.t('Voice')}</div>
+			{#if buildFeatures.voice}
+<div class=" my-2 text-sm font-medium">{$i18n.t('Voice')}</div>
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">
@@ -1360,7 +1362,8 @@
 				</div>
 			</div>
 
-			<div class=" my-2 text-sm font-medium">{$i18n.t('File')}</div>
+			{/if}
+<div class=" my-2 text-sm font-medium">{$i18n.t('File')}</div>
 
 			<div>
 				<div class=" py-0.5 flex w-full justify-between">

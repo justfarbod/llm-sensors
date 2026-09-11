@@ -20,6 +20,12 @@ EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN=http://localhost:5173 npm run build:experi
 
 Load `browser-extension/experiment-telemetry/dist` for local verification, then zip that directory for an unlisted Chrome Web Store submission. Do not submit the source directory because its manifest contains an intentional origin placeholder.
 
+The build also reads `EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN` from the frontend's local `.env`
+configuration, so after configuring it you can run `npm run build:experiment-extension` directly.
+An explicitly supplied environment variable overrides that value. Use the exact address shown in
+the participant's browser: `http://localhost:5173` and `http://localhost:8080` are different origins,
+even when both serve the same application. Restart the backend after changing its `.env` origin.
+
 For this repository's source-development workflow, leave the store ID and URL empty and configure the root `.env`
 file as follows:
 
@@ -49,14 +55,42 @@ EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION=2.0.0
 
 The website blocks experiment Start until a current heartbeat confirms version 2, schema 2, the `tabs` permission, and disabled incognito access. A normal website cannot silently install an extension; participants must confirm installation on the Chrome Web Store page.
 
+Version 2.0.1 connects automatically in the participant's existing tab, including after signing in
+without a page reload. After installation, return to the experiment tab and wait for **Extension
+connected**. There is no need to click the extension icon. The start screen checks immediately,
+when the tab regains focus, and every 2.5 seconds while visible. If the check takes longer than
+three seconds, **Check again** becomes available; background checks continue.
+
+The toolbar icon is a fallback: it reconnects the current experiment tab without reloading or
+changing its URL. From another website, it focuses an existing experiment tab (preferring the same
+window, then the most recently accessed tab). It opens a new tab only if no matching tab exists.
+An enabled extension with site access is required; Start still requires server confirmation for
+the participant's current session as well as a response from the extension in that tab.
+
+Deploy the updated frontend together with the rebuilt extension. For an unpacked installation,
+rebuild using the exact origin participants open, then click **Reload** on the extension's card
+in `chrome://extensions`. When upgrading from 2.0.0, reload existing experiment pages once to
+replace their old content scripts. For store installations, publish the 2.0.1 artifact and ensure
+participants have received the update. Schema version and permissions are unchanged.
+
+Version 2.0.2 reads the local origin during builds and shows the built origin in the toolbar tooltip.
+The version number alone does not identify the origin: after any rebuild, reload the unpacked
+extension in `chrome://extensions`, then check its tooltip matches the experiment tab's address.
+
 ## Verification
 
 1. Apply the backend migration and configure the matching local or store server values above.
 2. Build and load the fixed-origin extension.
 3. Sign in as a non-admin participant and complete consent and the pre-survey.
-4. Confirm the Start gate reports the extension as ready.
+4. Confirm the Start gate reports **Extension connected** without clicking the toolbar icon or
+   reloading. Also test installing while the start screen is already open and signing in from `/auth`.
 5. Start the experiment and create, navigate, activate, move, and close several normal tabs.
 6. Verify schema-version-2 events at `/api/v1/analytics/experiments/sessions/{session_id}/tab-activity`.
 7. Open an incognito window and verify that no event with `incognito: true` is accepted or stored.
+8. Click the toolbar icon in the experiment tab and from another website. Verify it reuses the
+   existing tab and preserves the URL, session, and any entered work. Test multiple tabs/windows
+   and verify that a new tab is created only when none matches the configured origin.
+9. Disable the extension or disconnect the network at the start screen. Verify Start becomes
+   unavailable, then reconnect and verify recovery without navigation.
 
 Raw tab URLs and titles are sensitive and are retained indefinitely by this implementation. The participant disclosure and institutional data-handling policy must reflect that fact.

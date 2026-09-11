@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { features as buildFeatures } from '$lib/features';
 	import { toast } from 'svelte-sonner';
 	import { createEventDispatcher, onMount, getContext } from 'svelte';
 	import { getToolServersData } from '$lib/apis';
@@ -30,7 +31,7 @@
 	const updateHandler = async () => {
 		await saveSettings({
 			toolServers: servers,
-			terminalServers: terminalServerConfigs
+			...(buildFeatures.terminals ? { terminalServers: terminalServerConfigs } : {})
 		});
 
 		let toolServersData = await getToolServersData($settings?.toolServers ?? []);
@@ -44,6 +45,8 @@
 			return true;
 		});
 		toolServers.set(toolServersData);
+
+		if (!buildFeatures.terminals) { terminalServers.set([]); return; }
 
 		// Refresh terminal servers store (preserve system terminals)
 		const existingSystemTerminals = ($terminalServers ?? []).filter((t) => t.id);
@@ -136,6 +139,7 @@
 					</div>
 				</div>
 
+{#if buildFeatures.terminals}
 				<hr class="border-gray-100/50 dark:border-gray-850/50 my-4" />
 
 				<div class="pr-1.5">
@@ -159,6 +163,7 @@
 						</div>
 					</div>
 				</div>
+{/if}
 			</div>
 		{:else}
 			<div class="flex h-full justify-center">

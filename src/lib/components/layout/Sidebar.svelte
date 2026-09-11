@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { features as buildFeatures } from '$lib/features';
 	import { toast } from 'svelte-sonner';
 	import { v4 as uuidv4 } from 'uuid';
 	import Sortable from 'sortablejs';
@@ -110,7 +111,7 @@
 		switch (id) {
 			case 'notes':
 				return (
-					($config?.features?.enable_notes ?? false) &&
+					((buildFeatures.personal && $config?.features?.enable_notes) ?? false) &&
 					($user?.role === 'admin' || ($user?.permissions?.features?.notes ?? true))
 				);
 			case 'workspace':
@@ -123,16 +124,16 @@
 				);
 			case 'automations':
 				return (
-					$config?.features?.enable_automations &&
+					(buildFeatures.personal && $config?.features?.enable_automations) &&
 					($user?.role === 'admin' || $user?.permissions?.features?.automations)
 				);
 			case 'calendar':
 				return (
-					$config?.features?.enable_calendar &&
+					(buildFeatures.personal && $config?.features?.enable_calendar) &&
 					($user?.role === 'admin' || $user?.permissions?.features?.calendar)
 				);
 			case 'playground':
-				return $user?.role === 'admin';
+				return buildFeatures.personal && $user?.role === 'admin';
 			default:
 				return false;
 		}
@@ -267,6 +268,7 @@
 	};
 
 	const initChannels = async () => {
+		if (!buildFeatures.personal) return;
 		// default (none), group, dm type
 		const res = await getChannels(localStorage.token).catch((error) => {
 			return null;
@@ -303,7 +305,7 @@
 			})(),
 			await (async () => {
 				if (
-					$config?.features?.enable_notes &&
+					(buildFeatures.personal && $config?.features?.enable_notes) &&
 					($user?.role === 'admin' || ($user?.permissions?.features?.notes ?? true))
 				) {
 					console.log('Init pinned notes');
@@ -552,7 +554,7 @@
 				if (value) {
 					// Only fetch channels if the feature is enabled and user has permission
 					if (
-						$config?.features?.enable_channels &&
+						(buildFeatures.personal && $config?.features?.enable_channels) &&
 						($user?.role === 'admin' || ($user?.permissions?.features?.channels ?? true))
 					) {
 						await initChannels();
@@ -1196,7 +1198,7 @@
 					</Folder>
 				{/if}
 
-				{#if ($config?.features?.enable_notes ?? false) && ($user?.role === 'admin' || ($user?.permissions?.features?.notes ?? true)) && $pinnedNotes.length > 0}
+				{#if ((buildFeatures.personal && $config?.features?.enable_notes) ?? false) && ($user?.role === 'admin' || ($user?.permissions?.features?.notes ?? true)) && $pinnedNotes.length > 0}
 					<Folder
 						id="sidebar-pinned-notes"
 						bind:open={showPinnedNotes}
@@ -1260,7 +1262,7 @@
 					</Folder>
 				{/if}
 
-				{#if $config?.features?.enable_channels && ($user?.role === 'admin' || ($user?.permissions?.features?.channels ?? true))}
+				{#if (buildFeatures.personal && $config?.features?.enable_channels) && ($user?.role === 'admin' || ($user?.permissions?.features?.channels ?? true))}
 					<Folder
 						id="sidebar-channels"
 						bind:open={showChannels}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { features as buildFeatures } from '$lib/features';
 	import { getContext } from 'svelte';
 	import Checkbox from '$lib/components/common/Checkbox.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
@@ -57,7 +58,10 @@
 		}
 	};
 
-	const allTools = Object.keys(toolLabels);
+	const allTools = Object.keys(toolLabels).filter((tool) =>
+		(buildFeatures.python || tool !== 'code_interpreter') &&
+		(buildFeatures.personal || !['notes', 'channels', 'calendar', 'automations'].includes(tool))
+	);
 
 	export let builtinTools: Record<string, boolean> = {};
 </script>

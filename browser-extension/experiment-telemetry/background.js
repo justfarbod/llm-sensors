@@ -1,4 +1,4 @@
-importScripts('deployment-config.js', 'tab-normalization.js');
+importScripts('deployment-config.js', 'tab-normalization.js', 'connection.js');
 
 const CONFIG = globalThis.OPEN_WEBUI_EXPERIMENT_EXTENSION_CONFIG;
 const { normalizeTab } = globalThis.ExperimentTabTelemetry;
@@ -270,19 +270,33 @@ async function stopUnlocked(finalSnapshot = true, clear = false, excludedTabIds 
 const stop = (finalSnapshot = true, clear = false) =>
 	runSerial(() => stopUnlocked(finalSnapshot, clear));
 
-chrome.runtime.onInstalled.addListener(async () => {
-	for (const tab of await chrome.tabs.query({ url: `${CONFIG.origin}/*` })) {
-		if (tab.id === undefined || tab.incognito) continue;
-		try {
-			await chrome.scripting.executeScript({
-				target: { tabId: tab.id },
-				files: ['deployment-config.js', 'content.js']
-			});
-		} catch {}
-	}
-});
+let reconnectingTabs = null;
+const reconnectOpenTabs = () => {
+	if (reconnectingTabs) return reconnectingTabs;
+	reconnectingTabs = (async () => {
+		for (const tab of await chrome.tabs.query({ url: `${CONFIG.origin}/*` })) {
+			if (!globalThis.ExperimentExtensionConnection.matchesOrigin(tab, CONFIG.origin)) continue;
+			try {
+				await globalThis.ExperimentExtensionConnection.reconnect(tab.id);
+			} catch {}
+		}
+	})().finally(() => {
+		reconnectingTabs = null;
+	});
+	return reconnectingTabs;
+};
+chrome.runtime.onInstalled.addListener(() => void reconnectOpenTabs().catch(() => {}));
 
-chrome.action.onClicked.addListener(() => chrome.tabs.create({ url: CONFIG.origin }));
+// Reloading/re-enabling an extension can start a fresh worker without firing
+// onInstalled. Repair already-open app tabs whenever this worker starts too.
+// The content script and this sweep both coalesce duplicate connection checks.
+void reconnectOpenTabs().catch(() => {});
+
+chrome.action.onClicked.addListener((tab) => {
+	void globalThis.ExperimentExtensionConnection.openExperiment(tab, CONFIG.origin).catch((error) =>
+		console.warn('Could not reconnect the experiment tab.', error)
+	);
+});
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 	if (message?.type === 'extension-capabilities') {

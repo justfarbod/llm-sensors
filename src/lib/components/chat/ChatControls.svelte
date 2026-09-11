@@ -3,7 +3,8 @@
 </script>
 
 <script lang="ts">
-	import { SvelteFlowProvider } from '@xyflow/svelte';
+	import { features as buildFeatures } from '$lib/features';
+	import SvelteFlowProvider from '$lib/features/full/FlowProvider.svelte';
 	import { slide } from 'svelte/transition';
 	import { Pane, PaneResizer } from 'paneforge';
 	import { v4 as uuidv4 } from 'uuid';
@@ -71,13 +72,13 @@
 	$: hasMessages = history?.messages && Object.keys(history.messages).length > 0;
 
 	$: showControlsTab = $user?.role === 'admin' || ($user?.permissions?.chat?.controls ?? true);
-	$: showFilesTab =
+	$: showFilesTab = (buildFeatures.terminals || buildFeatures.python) && (
 		($selectedTerminalId &&
 			(($terminalServers ?? []).some((t) => t.id && t.id === $selectedTerminalId) ||
 				$user?.role === 'admin' ||
 				($user?.permissions?.features?.direct_tool_servers ?? true))) ||
-		(codeInterpreterEnabled && $config?.code?.interpreter_engine !== 'jupyter');
-	$: showOverviewTab = hasMessages;
+		(codeInterpreterEnabled && $config?.code?.interpreter_engine !== 'jupyter'));
+	$: showOverviewTab = buildFeatures.overview && hasMessages;
 
 	// Tab fallback: if active tab becomes hidden, switch to next available
 	$: if (!showOverviewTab && activeTab === 'overview') activeTab = 'controls';
@@ -172,14 +173,14 @@
 	const handleMediaQuery = async (e) => {
 		if (e.matches) {
 			largeScreen = true;
-			if ($showCallOverlay) {
+			if (buildFeatures.voice && $showCallOverlay) {
 				showCallOverlay.set(false);
 				await tick();
 				showCallOverlay.set(true);
 			}
 		} else {
 			largeScreen = false;
-			if ($showCallOverlay) {
+			if (buildFeatures.voice && $showCallOverlay) {
 				showCallOverlay.set(false);
 				await tick();
 				showCallOverlay.set(true);
@@ -264,7 +265,7 @@
 		}
 		showArtifacts.set(false);
 		showEmbeds.set(false);
-		if ($showCallOverlay) showCallOverlay.set(false);
+		if (buildFeatures.voice && $showCallOverlay) showCallOverlay.set(false);
 	};
 
 	$: if (paneReady && !chatId) closeHandler();
@@ -281,7 +282,7 @@
 			className="min-h-[100dvh] !bg-white dark:!bg-gray-850"
 		>
 			<div class="h-[100dvh] flex flex-col">
-				{#if $showCallOverlay}
+				{#if buildFeatures.voice && $showCallOverlay}
 					<div
 						class="h-full max-h-[100dvh] bg-white text-gray-700 dark:bg-black dark:text-gray-300 flex justify-center"
 					>
@@ -427,7 +428,7 @@
 					: 'overflow-y-auto'} scrollbar-hidden"
 				id="controls-container"
 			>
-				{#if $showCallOverlay}
+				{#if buildFeatures.voice && $showCallOverlay}
 					<div class="w-full h-full flex justify-center">
 						<CallOverlay
 							bind:files

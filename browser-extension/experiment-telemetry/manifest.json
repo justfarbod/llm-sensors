@@ -1,7 +1,7 @@
 {
 	"manifest_version": 3,
 	"name": "Open WebUI Experiment Telemetry",
-	"version": "2.0.0",
+	"version": "2.0.2",
 	"description": "Records experiment interactions and normal-window tab lifecycle metadata during active research sessions.",
 	"permissions": ["alarms", "scripting", "storage", "tabs"],
 	"host_permissions": ["__OPEN_WEBUI_ORIGIN__/*"],
@@ -17,6 +17,6 @@
 		}
 	],
 	"action": {
-		"default_title": "Open Open WebUI Experiment"
+		"default_title": "Connect to your experiment at __OPEN_WEBUI_ORIGIN__"
 	}
 }

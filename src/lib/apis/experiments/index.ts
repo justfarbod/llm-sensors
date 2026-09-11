@@ -75,7 +75,8 @@ const request = async <T = ExperimentCurrent>(
 	return body as T;
 };
 
-export const getCurrentExperiment = (token: string) => request(token);
+export const getCurrentExperiment = (token: string, signal?: AbortSignal) =>
+	request(token, '', { signal });
 export const submitExperimentConsent = (token: string) =>
 	request(token, '/consent', { method: 'POST' });
 export const submitExperimentPreSurvey = (token: string, body: object) =>

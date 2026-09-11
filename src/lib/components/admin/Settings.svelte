@@ -1,4 +1,5 @@
 <script>
+	import { features as buildFeatures } from '$lib/features';
 	import { getContext, tick, onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
@@ -52,6 +53,7 @@
 		].includes(tabFromPath)
 			? tabFromPath
 			: 'general';
+		if ((!buildFeatures.voice && selectedTab === 'audio') || (!buildFeatures.python && selectedTab === 'code-execution')) selectedTab = 'general';
 	}
 
 	$: if (selectedTab) {
@@ -248,6 +250,8 @@
 
 	const setFilteredSettings = () => {
 		filteredSettings = allSettings.filter((tab) => {
+			if (!buildFeatures.voice && tab.id === 'audio') return false;
+			if (!buildFeatures.python && tab.id === 'code-execution') return false;
 			const searchTerm = search.toLowerCase().trim();
 			return (
 				search === '' ||
@@ -545,7 +549,7 @@
 					await config.set(await getBackendConfig());
 				}}
 			/>
-		{:else if selectedTab === 'code-execution'}
+		{:else if buildFeatures.python && selectedTab === 'code-execution'}
 			<CodeExecution
 				saveHandler={async () => {
 					toast.success($i18n.t('Settings saved successfully!'));
@@ -560,7 +564,7 @@
 					toast.success($i18n.t('Settings saved successfully!'));
 				}}
 			/>
-		{:else if selectedTab === 'audio'}
+		{:else if buildFeatures.voice && selectedTab === 'audio'}
 			<Audio
 				saveHandler={() => {
 					toast.success($i18n.t('Settings saved successfully!'));

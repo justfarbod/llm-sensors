@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { features as buildFeatures } from '$lib/features';
 	import { toast } from 'svelte-sonner';
 	import { onMount, tick, getContext } from 'svelte';
 	import { openDB, deleteDB } from 'idb';
@@ -156,6 +157,9 @@
 		});
 		toolServers.set(toolServersData);
 
+		// Research keeps ordinary tool servers, but never discovers or injects terminals.
+		if (!buildFeatures.terminals) { terminalServers.set([]); return; }
+
 		// Inject enabled terminal servers as always-on tool servers
 		const enabledTerminals = ($settings?.terminalServers ?? []).filter((s) => s.enabled);
 		if (enabledTerminals.length > 0) {
@@ -227,10 +231,10 @@
 			showSettings.set(false);
 			showShortcuts.set(false);
 			experimentCurrent.set({ state: 'NOT_APPLICABLE' });
-			loaded = true;
 			if (!$page.url.pathname.startsWith('/admin')) {
 				await goto('/admin/analytics/overview');
 			}
+			loaded = true;
 			return;
 		}
 
@@ -394,14 +398,19 @@
 		});
 
 		// Persist selectedTerminalId across page loads
-		selectedTerminalId.set(localStorage.selectedTerminalId ?? null);
-		selectedTerminalId.subscribe((value) => {
-			if (value === null) {
-				delete localStorage.selectedTerminalId;
-			} else {
-				localStorage.selectedTerminalId = value;
-			}
-		});
+		if (buildFeatures.terminals) {
+			selectedTerminalId.set(localStorage.selectedTerminalId ?? null);
+			selectedTerminalId.subscribe((value) => {
+				if (value === null) {
+					delete localStorage.selectedTerminalId;
+				} else {
+					localStorage.selectedTerminalId = value;
+				}
+			});
+		} else {
+			// Ignore the saved selection without erasing it for the full profile.
+			selectedTerminalId.set(null);
+		}
 
 		if (restrictedParticipant) {
 			showControls.set(false);
@@ -508,7 +517,7 @@
 				{/if}
 
 				{#if $user?.role === 'admin'}
-					{#if loaded}<slot />{:else}<div
+					{#if loaded && $page.url.pathname.startsWith('/admin')}<slot />{:else}<div
 							class="w-full flex-1 h-full flex items-center justify-center"
 						>
 							<Spinner className="size-5" />

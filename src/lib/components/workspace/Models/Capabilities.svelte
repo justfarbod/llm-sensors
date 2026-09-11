@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { features as buildFeatures } from '$lib/features';
 	import { getContext } from 'svelte';
 	import Checkbox from '$lib/components/common/Checkbox.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
@@ -75,6 +76,8 @@
 
 	// Hide file_context when file_upload is disabled
 	$: visibleCapabilities = Object.keys(capabilityLabels).filter((cap) => {
+		if (!buildFeatures.python && cap === 'code_interpreter') return false;
+		if (!buildFeatures.terminals && cap === 'terminal') return false;
 		if (cap === 'file_context' && !capabilities.file_upload) {
 			return false;
 		}

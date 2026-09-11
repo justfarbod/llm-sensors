@@ -3,10 +3,10 @@
 	"version": "0.9.5",
 	"private": true,
 	"scripts": {
-		"dev": "npm run pyodide:fetch && vite dev --host",
-		"dev:5050": "npm run pyodide:fetch && vite dev --port 5050",
-		"build": "npm run pyodide:fetch && vite build",
-		"build:watch": "npm run pyodide:fetch && vite build --watch",
+		"dev": "node scripts/run-frontend.mjs research dev --host",
+		"dev:5050": "node scripts/run-frontend.mjs research dev --port 5050",
+		"build": "node scripts/run-frontend.mjs research build",
+		"build:watch": "node scripts/run-frontend.mjs research build --watch",
 		"preview": "vite preview",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
@@ -20,7 +20,15 @@
 		"cy:open": "cypress open",
 		"test:frontend": "vitest --passWithNoTests",
 		"build:experiment-extension": "node browser-extension/experiment-telemetry/build.mjs",
-		"pyodide:fetch": "node scripts/prepare-pyodide.js"
+		"pyodide:fetch": "node scripts/prepare-pyodide.js",
+		"dev:research": "node scripts/run-frontend.mjs research dev --host",
+		"build:research": "node scripts/run-frontend.mjs research build",
+		"dev:full": "node scripts/run-frontend.mjs full dev --host",
+		"build:full": "node scripts/run-frontend.mjs full build",
+		"test:profiles": "node --test scripts/test-frontend-profile.mjs",
+		"test:profiles:dev": "node scripts/test-frontend-profile-dev.mjs",
+		"test:profiles:switch": "node scripts/test-frontend-profile-switch.mjs",
+		"validate:research": "node scripts/validate-research-build.mjs"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "3.2.2",

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { features as buildFeatures } from '$lib/features';
 	import { createEventDispatcher, getContext, onMount, tick } from 'svelte';
 
 	import { goto } from '$app/navigation';
@@ -363,7 +364,7 @@
 				</div>
 			{/if}
 
-			{#if ($config?.features?.enable_notes ?? false) && ($user?.role === 'admin' || ($user?.permissions?.features?.notes ?? true))}
+			{#if ((buildFeatures.personal && $config?.features?.enable_notes) ?? false) && ($user?.role === 'admin' || ($user?.permissions?.features?.notes ?? true))}
 				<div class="flex items-center w-full">
 					<a
 						href="/notes"
@@ -407,7 +408,7 @@
 				</div>
 			{/if}
 
-			{#if $config?.features?.enable_calendar && ($user?.role === 'admin' || $user?.permissions?.features?.calendar)}
+			{#if (buildFeatures.personal && $config?.features?.enable_calendar) && ($user?.role === 'admin' || $user?.permissions?.features?.calendar)}
 				<div class="flex items-center w-full">
 					<a
 						href="/calendar"
@@ -460,7 +461,7 @@
 				</div>
 			{/if}
 
-			{#if $config?.features?.enable_automations && ($user?.role === 'admin' || $user?.permissions?.features?.automations)}
+			{#if (buildFeatures.personal && $config?.features?.enable_automations) && ($user?.role === 'admin' || $user?.permissions?.features?.automations)}
 				<div class="flex items-center w-full">
 					<a
 						href="/automations"
@@ -517,7 +518,7 @@
 				</div>
 			{/if}
 
-			{#if role === 'admin'}
+			{#if buildFeatures.personal && role === 'admin'}
 				<div class="flex items-center w-full">
 					<a
 						href="/playground"

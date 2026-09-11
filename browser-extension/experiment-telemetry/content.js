@@ -1,10 +1,12 @@
 (() => {
-	if (globalThis.__openWebUIExperimentTelemetryLoaded) return;
-	globalThis.__openWebUIExperimentTelemetryLoaded = true;
-	if (location.pathname.startsWith('/auth') || location.pathname.startsWith('/admin')) return;
-
 	const CONFIG = globalThis.OPEN_WEBUI_EXPERIMENT_EXTENSION_CONFIG;
 	if (!CONFIG || location.origin !== CONFIG.origin) return;
+	const previous = globalThis.__openWebUIExperimentTelemetry;
+	if (previous?.isAlive()) {
+		void previous.check();
+		return;
+	}
+	previous?.dispose();
 
 	let enabled = false;
 	let sessionId = null;
@@ -15,6 +17,34 @@
 	let lastKeydown = null;
 	const pendingHolds = new Map();
 	const removers = [];
+	const connectionRemovers = [];
+	let disposed = false;
+	let stateKey = null;
+	let experimentState = null;
+	let statusCheck = null;
+	let revision = 0;
+	const requests = new Set();
+	const eligible = () =>
+		!disposed &&
+		!/^\/(auth|admin)(\/|$)/.test(location.pathname) &&
+		(experimentState === null ||
+			['TOPIC_REQUIRED', 'TASK_REQUIRED', 'IN_PROGRESS'].includes(experimentState));
+	const connectionListen = (target, type, handler) => {
+		target.addEventListener(type, handler);
+		connectionRemovers.push(() => target.removeEventListener(type, handler));
+	};
+	const request = async (url, options) => {
+		const controller = new AbortController();
+		requests.add(controller);
+		const timer = setTimeout(() => controller.abort(), 5000);
+		try {
+			const response = await fetch(url, { ...options, signal: controller.signal });
+			return response.ok ? await response.json() : null;
+		} finally {
+			clearTimeout(timer);
+			requests.delete(controller);
+		}
+	};
 
 	const id = () => crypto.randomUUID();
 	const eventBase = (type, context = 'unknown') => ({
@@ -25,6 +55,7 @@
 	});
 
 	const fieldFor = (target) => {
+		if (!eligible() || localStorage.getItem('token') === null) return null;
 		const element = target instanceof Element ? target : target?.parentElement;
 		const tagged = element?.closest('[data-experiment-field]');
 		const field = tagged?.getAttribute('data-experiment-field');
@@ -74,6 +105,7 @@
 	};
 
 	const queue = (event) => {
+		if (!enabled || !eligible() || !localStorage.getItem('token')) return;
 		pendingEvents.push(event);
 		if (pendingEvents.length >= 50) void sendPending();
 		else if (!eventTimer) {
@@ -256,23 +288,17 @@
 		lastKeydown = null;
 	};
 
-	const heartbeat = async () => {
-		const token = localStorage.getItem('token');
-		if (!token) return null;
+	const heartbeat = async (token) => {
 		const capabilities = await chrome.runtime.sendMessage({ type: 'extension-capabilities' });
-		const response = await fetch(
-			`${CONFIG.origin}/api/v1/experiments/telemetry/extension/heartbeat`,
-			{
-				method: 'POST',
-				headers: {
-					Accept: 'application/json',
-					'Content-Type': 'application/json',
-					authorization: `Bearer ${token}`
-				},
-				body: JSON.stringify(capabilities)
-			}
-		);
-		return response.ok ? response.json() : null;
+		return request(`${CONFIG.origin}/api/v1/experiments/telemetry/extension/heartbeat`, {
+			method: 'POST',
+			headers: {
+				Accept: 'application/json',
+				'Content-Type': 'application/json',
+				authorization: `Bearer ${token}`
+			},
+			body: JSON.stringify(capabilities)
+		});
 	};
 
 	const flush = async (final = false) => {
@@ -295,26 +321,37 @@
 		} catch {}
 	};
 
-	const checkStatus = async () => {
+	const performStatusCheck = async () => {
 		const token = localStorage.getItem('token');
-		if (!token) {
-			await stop(false, true);
-			return;
+		const startedRevision = revision;
+		const current = () =>
+			eligible() && revision === startedRevision && localStorage.getItem('token') === token;
+		if (!token || !eligible()) {
+			if (enabled) await stop(false, !token);
+			return null;
 		}
 		try {
-			const presence = await heartbeat();
+			if (!chrome.runtime?.id) {
+				dispose();
+				return null;
+			}
+			const presence = await heartbeat(token);
+			if (!current()) return null;
 			if (!presence?.ready) {
 				if (enabled) await stop(true, false);
-				return;
+				return presence;
 			}
-			const response = await fetch(`${CONFIG.origin}/api/v1/experiments/telemetry/status`, {
+			if (presence.state !== 'IN_PROGRESS') {
+				if (enabled) await stop(false, false);
+				return presence;
+			}
+			const status = await request(`${CONFIG.origin}/api/v1/experiments/telemetry/status`, {
 				headers: { Accept: 'application/json', authorization: `Bearer ${token}` }
 			});
-			if (!response.ok) return;
-			const status = await response.json();
-			if (!status.enabled || status.state !== 'IN_PROGRESS' || !status.experiment_session_id) {
+			if (!current()) return null;
+			if (!status?.enabled || status.state !== 'IN_PROGRESS' || !status.experiment_session_id) {
 				if (enabled) await stop(false, false);
-				return;
+				return null;
 			}
 			const result = await chrome.runtime.sendMessage({
 				type: 'session-start',
@@ -322,25 +359,47 @@
 				token,
 				sessionId: status.experiment_session_id
 			});
-			if (!result?.ok) return;
+			if (!current()) {
+				if (!disposed) await stop(false, false);
+				return null;
+			}
+			if (!result?.ok) return null;
 			if (!enabled) {
 				enabled = true;
 				sessionId = status.experiment_session_id;
 				attach();
 			}
-		} catch {}
+			return presence;
+		} catch {
+			if (!chrome.runtime?.id) dispose();
+			return null;
+		}
+	};
+	const checkStatus = () => {
+		if (disposed) return Promise.resolve(null);
+		if (statusCheck) return statusCheck;
+		statusCheck = performStatusCheck().finally(() => {
+			statusCheck = null;
+		});
+		return statusCheck;
 	};
 
-	window.addEventListener('open-webui-experiment-telemetry-flush', () => void flush(false));
-	chrome.runtime.onMessage.addListener((message) => {
+	connectionListen(window, 'open-webui-experiment-telemetry-flush', () => void flush(false));
+	const onMessage = (message, _sender, sendResponse) => {
+		if (message?.type === 'extension-reconnect') {
+			void checkStatus();
+			sendResponse({ ok: !disposed });
+			return;
+		}
 		if (message?.type !== 'telemetry-stopped') return;
 		if (enabled) detach();
 		enabled = false;
 		sessionId = null;
 		pendingEvents = [];
 		pendingHolds.clear();
-	});
-	window.addEventListener('open-webui-experiment-telemetry-flush-request', (event) => {
+	};
+	chrome.runtime.onMessage.addListener(onMessage);
+	connectionListen(window, 'open-webui-experiment-telemetry-flush-request', (event) => {
 		void flush(Boolean(event.detail?.final)).then((result) =>
 			window.dispatchEvent(
 				new CustomEvent('open-webui-experiment-telemetry-flush-result', {
@@ -349,11 +408,63 @@
 			)
 		);
 	});
-	window.addEventListener('open-webui-experiment-state', (event) => {
-		if (event.detail?.state === 'IN_PROGRESS') void checkStatus();
-		else if (enabled) void stop(false, false);
-		else void heartbeat();
+	connectionListen(window, 'open-webui-experiment-extension-check-request', (event) => {
+		const detail = event.detail;
+		if (typeof detail?.request_id !== 'string' || typeof detail.experiment_session_id !== 'string')
+			return;
+		void checkStatus().then((presence) => {
+			if (disposed) return;
+			window.dispatchEvent(
+				new CustomEvent('open-webui-experiment-extension-check-result', {
+					detail: {
+						request_id: detail.request_id,
+						experiment_session_id: presence?.experiment_session_id ?? detail.experiment_session_id,
+						ready: presence?.ready === true
+					}
+				})
+			);
+		});
 	});
+	connectionListen(window, 'open-webui-experiment-state', (event) => {
+		const nextKey = `${event.detail?.state}:${event.detail?.session_id ?? ''}`;
+		if (stateKey === nextKey) return;
+		stateKey = nextKey;
+		experimentState = event.detail?.state;
+		revision += 1;
+		// Wait out an old check before checking the new state; refreshes of an
+		// unchanged state never cause another heartbeat.
+		if (!eligible() && enabled) void stop(false, experimentState === 'SIGNED_OUT');
+		void (statusCheck ?? Promise.resolve()).then(() => checkStatus());
+	});
+	connectionListen(window, 'focus', () => void checkStatus());
+	connectionListen(document, 'visibilitychange', () => {
+		if (!document.hidden) void checkStatus();
+	});
+	connectionListen(window, 'storage', (event) => {
+		if (event.key === 'token' || event.key === null) {
+			revision += 1;
+			void (statusCheck ?? Promise.resolve()).then(() => checkStatus());
+		}
+	});
+	const dispose = () => {
+		if (disposed) return;
+		disposed = true;
+		while (removers.length) removers.pop()();
+		while (connectionRemovers.length) connectionRemovers.pop()();
+		clearInterval(statusTimer);
+		clearTimeout(eventTimer);
+		for (const controller of requests) controller.abort();
+		try {
+			chrome.runtime.onMessage.removeListener(onMessage);
+		} catch {}
+		pendingEvents = [];
+		pendingHolds.clear();
+	};
+	globalThis.__openWebUIExperimentTelemetry = {
+		isAlive: () => !disposed && Boolean(chrome.runtime?.id),
+		check: checkStatus,
+		dispose
+	};
 
 	void checkStatus();
 	statusTimer = setInterval(checkStatus, 20000);

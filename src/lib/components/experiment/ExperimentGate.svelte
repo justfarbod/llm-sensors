@@ -17,6 +17,7 @@
 	import { experimentCurrent, experimentRefresh, showEssaySidebar, user } from '$lib/stores';
 	import SafeMarkdown from '$lib/components/common/SafeMarkdown.svelte';
 	import ExperimentSurveyModal from './ExperimentSurveyModal.svelte';
+	import { checkExperimentExtension } from '$lib/utils/experimentTelemetry';
 	import {
 		createExperimentStateLoader,
 		experimentNeedsGate,
@@ -31,12 +32,25 @@
 	let channel: BroadcastChannel | null = null;
 	let refreshValue = 0;
 	let extensionPollTimer: ReturnType<typeof setInterval>;
+	let mounted = false;
+	let extensionCheckSession: string | null = null;
+	let extensionCheckController: AbortController | null = null;
+	let extensionChecking = false;
+	let extensionChecked = false;
+	let extensionConnected = false;
 	$: telemetryExtension = $experimentCurrent?.telemetry_extension;
 	$: extensionRequiredForStart = Boolean(
 		telemetryExtension?.required &&
 		['TOPIC_REQUIRED', 'TASK_REQUIRED'].includes($experimentCurrent?.state ?? '')
 	);
-	$: extensionReadyForStart = !extensionRequiredForStart || Boolean(telemetryExtension?.ready);
+	$: extensionReadyForStart =
+		!extensionRequiredForStart ||
+		Boolean(
+			telemetryExtension?.ready &&
+			!telemetryExtension?.configuration_error &&
+			extensionConnected &&
+			extensionCheckSession === $experimentCurrent?.session_id
+		);
 	const chromeSupported = () => {
 		if (typeof navigator === 'undefined') return false;
 		const clientHints = (navigator as any).userAgentData;
@@ -107,24 +121,63 @@
 			next.state === 'IN_PROGRESS' && $experimentCurrent?.state !== 'IN_PROGRESS';
 		if (!sameExperimentState($experimentCurrent, next)) experimentCurrent.set(next);
 		window.dispatchEvent(
-			new CustomEvent('open-webui-experiment-state', { detail: { state: next.state } })
+			new CustomEvent('open-webui-experiment-state', {
+				detail: { state: next.state, session_id: next.session_id }
+			})
 		);
 		if (enteredWriting) showEssaySidebar.set(true);
 	};
 
 	const refresh = async (force = false) => {
-		if (!localStorage.token) return;
+		const token = localStorage.token;
+		if (!token) return;
 		try {
 			const next = await loadExperimentState(
 				$experimentCurrent,
-				() => getCurrentExperiment(localStorage.token),
+				() => getCurrentExperiment(token, AbortSignal.timeout(5000)),
 				force
 			);
+			if (localStorage.token !== token) return;
 			if (next) setExperimentState(next);
+			return next;
 		} catch (error) {
 			console.error('Failed to load Experiment Mode state', error);
 		}
 	};
+
+	const checkExtension = async () => {
+		const sessionId = extensionCheckSession;
+		const controller = extensionCheckController;
+		if (!sessionId || !controller || extensionChecking || document.hidden) return;
+		extensionChecking = true;
+		try {
+			const connected = await checkExperimentExtension(sessionId, controller.signal);
+			if (controller.signal.aborted) return;
+			extensionChecked = true;
+			if (!connected) extensionConnected = false;
+			// Refresh even after a timeout so stale server readiness is not retained.
+			const next = await refresh(true);
+			if (controller.signal.aborted || $experimentCurrent?.session_id !== sessionId) return;
+			extensionConnected =
+				connected && next?.session_id === sessionId && Boolean(next.telemetry_extension?.ready);
+		} finally {
+			if (extensionCheckController === controller) extensionChecking = false;
+		}
+	};
+
+	const syncExtensionCheck = (sessionId: string | null) => {
+		if (extensionCheckSession === sessionId) return;
+		extensionCheckController?.abort();
+		extensionCheckSession = sessionId;
+		extensionCheckController = sessionId ? new AbortController() : null;
+		extensionChecking = false;
+		extensionChecked = false;
+		extensionConnected = false;
+		if (sessionId) void checkExtension();
+	};
+	$: syncExtensionCheck(
+		mounted && extensionRequiredForStart ? ($experimentCurrent?.session_id ?? null) : null
+	);
 
 	const run = async (action: () => Promise<any>) => {
 		if (loading) return;
@@ -189,16 +242,27 @@
 	}
 
 	onMount(() => {
+		mounted = true;
 		refresh();
 		channel = new BroadcastChannel('experiment-mode');
 		channel.onmessage = () => refresh();
-		const focus = () => refresh();
+		const focus = () => {
+			if (extensionCheckSession) void checkExtension();
+			else void refresh();
+		};
+		const visibility = () => {
+			if (!document.hidden) focus();
+		};
 		window.addEventListener('focus', focus);
+		document.addEventListener('visibilitychange', visibility);
 		extensionPollTimer = setInterval(() => {
-			if (extensionRequiredForStart && !telemetryExtension?.ready) void refresh(true);
+			if (extensionRequiredForStart) void checkExtension();
 		}, 2500);
 		return () => {
+			mounted = false;
+			extensionCheckController?.abort();
 			window.removeEventListener('focus', focus);
+			document.removeEventListener('visibilitychange', visibility);
 			clearInterval(extensionPollTimer);
 		};
 	});
@@ -337,39 +401,69 @@
 				{:else if $experimentCurrent.state === 'TOPIC_REQUIRED' || $experimentCurrent.state === 'TASK_REQUIRED'}
 					{#if extensionRequiredForStart}
 						<div class="mb-5 rounded-2xl border border-gray-200 p-4 dark:border-gray-700">
-							<h2 class="font-semibold">Required Chrome telemetry extension</h2>
-							<p class="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
-								The experiment cannot start until Chrome confirms the extension, version
-								{telemetryExtension?.minimum_version} or newer, full tab permission, and disabled incognito
-								access. Chrome will ask you to approve installation.
-							</p>
-							{#if telemetryExtension?.configuration_error}
-								<p
-									class="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300"
-								>
-									Deployment error: {telemetryExtension.configuration_error}
+							<h2 class="font-semibold">Experiment extension</h2>
+							<div aria-live="polite" role="status">
+								{#if telemetryExtension?.configuration_error}
+									<p
+										class="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300"
+									>
+										Deployment error: {telemetryExtension.configuration_error}
+									</p>
+								{:else if extensionReadyForStart}
+									<p class="mt-3 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+										Extension connected. You're ready to start.
+									</p>
+								{:else if !chromeSupported()}
+									<p class="mt-3 text-sm text-red-700 dark:text-red-300">
+										This experiment requires Google Chrome on a desktop computer.
+									</p>
+								{:else if !extensionChecked}
+									<p class="mt-3 text-sm text-gray-600 dark:text-gray-300">Checking extension…</p>
+								{:else}
+									<p class="mt-3 text-sm text-gray-600 dark:text-gray-300">
+										The extension isn't connected yet. We'll keep checking automatically.
+									</p>
+								{/if}
+							</div>
+							{#if !telemetryExtension?.configuration_error && !extensionReadyForStart && chromeSupported()}
+								<p class="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
+									Install the extension, then return to this tab. We'll connect automatically.
 								</p>
-							{:else if telemetryExtension?.ready}
-								<p class="mt-3 text-sm font-medium text-emerald-700 dark:text-emerald-400">
-									Extension connected{telemetryExtension.detected_version
-										? ` · version ${telemetryExtension.detected_version}`
-										: ''}.
-								</p>
-							{:else if !chromeSupported()}
-								<p class="mt-3 text-sm text-red-700 dark:text-red-300">
-									This experiment requires Google Chrome on a desktop computer.
-								</p>
-							{:else}
-								{#if telemetryExtension?.store_url}<a
+								{#if telemetryExtension?.store_url}
+									<a
 										class="mt-4 inline-flex rounded-xl bg-black px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-black"
 										href={telemetryExtension.store_url}
 										target="_blank"
 										rel="noopener noreferrer">Install from Chrome Web Store</a
-									>{:else}<p class="mt-3 text-sm text-gray-600 dark:text-gray-300">
+									>
+								{:else}
+									<p class="mt-3 text-sm text-gray-600 dark:text-gray-300">
 										Local manual installation: open <code>chrome://extensions</code>, enable
 										Developer mode, and load the generated <code>experiment-telemetry/dist</code> directory.
-									</p>{/if}
-								<p class="mt-2 text-xs text-gray-500">Waiting for the extension heartbeat…</p>
+									</p>
+								{/if}
+								{#if extensionChecked}
+									<button
+										type="button"
+										class="mt-3 rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium disabled:opacity-40 dark:border-gray-600"
+										disabled={extensionChecking}
+										on:click={() => checkExtension()}>Check again</button
+									>
+								{/if}
+								<details class="mt-3 text-sm text-gray-600 dark:text-gray-300">
+									<summary class="cursor-pointer">Trouble connecting?</summary>
+									<p class="mt-2">
+										Make sure the extension is enabled and allowed on this site. You can click its
+										browser toolbar icon to reconnect this tab without losing your place. If you
+										have an older version, update it and reload this tab.
+									</p>
+									<p class="mt-2">
+										The experiment requires version {telemetryExtension?.minimum_version} or newer, full
+										tab permission, and disabled incognito access.{telemetryExtension?.detected_version
+											? ` Last detected version: ${telemetryExtension.detected_version}.`
+											: ''}
+									</p>
+								</details>
 							{/if}
 						</div>
 					{/if}
@@ -423,10 +517,13 @@
 							<label class="block text-sm"
 								>{question[1]}<select
 									class="mt-1 w-full rounded-xl bg-gray-100 px-3 py-2 dark:bg-gray-800"
-									bind:value={post[question[0]]}
+									value={post[question[0]]}
+									on:change={(event) => {
+										post = { ...post, [question[0]]: event.currentTarget.value };
+									}}
 									required
 									><option value="" disabled>Select one</option
-									>{#each [1, 2, 3, 4, 5] as value}<option {value}
+									>{#each [1, 2, 3, 4, 5] as value}<option value={String(value)}
 											>{value} - {value === 1
 												? question[2]
 												: value === 5

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { features as buildFeatures } from '$lib/features';
 	import '$lib/utils/codemirror';
 
 	import { basicSetup, EditorView } from 'codemirror';
@@ -177,6 +178,7 @@ print("${endTag}")
 	};
 
 	export const formatPythonCodeHandler = async () => {
+		if (!buildFeatures.python && $user?.role !== 'admin') return;
 		if (codeEditor) {
 			const res = await (
 				$user?.role === 'admin'

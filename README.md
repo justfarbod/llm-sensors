@@ -141,6 +141,17 @@ npm run dev
 The Vite development server runs at [http://localhost:5173](http://localhost:5173) and reloads frontend changes. On
 later runs, only `npm run dev` is required.
 
+### Frontend build profiles
+
+- **Research (default):** `npm run dev` or `npm run build` provides the focused experiment interface with a smaller
+  frontend and lower build resource requirements.
+- **Full:** `npm run dev:full` or `npm run build:full` provides the complete Open WebUI interface and its optional
+  frontend features.
+
+Both production commands write the deployable application to `build`. See
+[frontend profiles](docs/FRONTEND_PROFILES.md) for the complete feature scope, validation commands, and switching
+guidance.
+
 If dependency compatibility warnings prevent installation, use `npm install --force`. If Node reports a heap-limit
 error, set `NODE_OPTIONS=--max-old-space-size=4096` before running the frontend command.
 

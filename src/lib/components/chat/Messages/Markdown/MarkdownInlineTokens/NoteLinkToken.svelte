@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { features as buildFeatures } from '$lib/features';
 	import { onMount, getContext } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { getNoteById } from '$lib/apis/notes';
@@ -15,6 +16,7 @@
 	let loading = true;
 
 	onMount(async () => {
+		if (!buildFeatures.personal) { title = $i18n.t('Note'); loading = false; return; }
 		try {
 			const note = await getNoteById(localStorage.token, noteId);
 			if (note) {

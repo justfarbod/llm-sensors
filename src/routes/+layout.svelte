@@ -1,4 +1,5 @@
 <script>
+	import { features as buildFeatures, unsupportedExecution, rejectPythonExecution } from '$lib/features';
 	import { io } from 'socket.io-client';
 	import { spring } from 'svelte/motion';
 	import PyodideWorker from '$lib/workers/pyodide.worker?worker';
@@ -222,6 +223,7 @@
 	};
 
 	const executePythonAsWorker = async (id, code, cb, files = []) => {
+		if (rejectPythonExecution(cb)) return;
 		let result = null;
 		let stdout = null;
 		let stderr = null;
@@ -363,7 +365,7 @@
 
 	const resolveToolServer = (serverUrl) => {
 		let toolServer = $settings?.toolServers?.find((server) => server.url === serverUrl);
-		if (!toolServer) {
+		if (!toolServer && buildFeatures.terminals) {
 			const terminalServer = ($settings?.terminalServers ?? []).find(
 				(server) => server.url === serverUrl
 			);
@@ -379,7 +381,7 @@
 
 		let toolServerData =
 			$toolServers?.find((server) => server.url === serverUrl) ??
-			$terminalServers?.find((server) => server.url === serverUrl);
+			(buildFeatures.terminals ? $terminalServers?.find((server) => server.url === serverUrl) : undefined);
 
 		let token = null;
 		if (toolServer) {
@@ -392,6 +394,9 @@
 	};
 
 	const executeTool = async (data, cb, chatId) => {
+		if (!buildFeatures.terminals && (($settings?.terminalServers ?? []).some((s) => s.url === data.server?.url) || ($terminalServers ?? []).some((s) => s.url === data.server?.url) || data.server?.url?.includes('/api/v1/terminals/'))) {
+			cb?.(unsupportedExecution()); return;
+		}
 		const { toolServer, toolServerData, token } = resolveToolServer(data.server?.url);
 
 		console.log('executeTool', data, toolServer);
@@ -455,6 +460,7 @@
 
 		// Calendar alerts are not chat-scoped — handle before chat_id checks
 		if (type === 'calendar:alert' && data) {
+			if (!buildFeatures.personal) return;
 			const timeStr =
 				data.minutes_until <= 0
 					? $i18n.t('Starting now')
@@ -636,6 +642,7 @@
 	};
 
 	const channelEventHandler = async (event) => {
+		if (!buildFeatures.personal) return;
 		console.log('channelEventHandler', event);
 		if (event.data?.type === 'typing') {
 			return;
@@ -826,7 +833,7 @@
 		if ($user?.role !== 'admin') return;
 
 		try {
-			if (event.type === 'connections:terminal') {
+			if (event.type === 'connections:terminal' && buildFeatures.terminals) {
 				if (event.data.action === 'add') {
 					await addTerminalConnection(token, {
 						url: event.data.url,
@@ -979,7 +986,9 @@
 				$socket?.on('events', chatEventHandler);
 				$socket?.on('events:channel', channelEventHandler);
 
-				const userSettings = await getUserSettings(localStorage.token);
+				// Personal settings are unavailable to admins and active participants.
+				// Keep socket/session initialization running when that endpoint denies access.
+				const userSettings = await getUserSettings(localStorage.token).catch(() => null);
 				if (userSettings) {
 					settings.set(userSettings.ui);
 				} else {

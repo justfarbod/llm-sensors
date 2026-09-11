@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { features as buildFeatures } from '$lib/features';
 	import { toast } from 'svelte-sonner';
 	import { getContext, onDestroy, onMount, tick } from 'svelte';
 	const i18n = getContext('i18n');
@@ -229,7 +230,7 @@
 	onMount(() => {
 		actions = [
 			...actions,
-			...(($config?.features?.enable_notes ?? false) &&
+			...(buildFeatures.personal && ($config?.features?.enable_notes ?? false) &&
 			($user?.role === 'admin' || ($user?.permissions?.features?.notes ?? true))
 				? [
 						{
