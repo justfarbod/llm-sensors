@@ -1,4 +1,6 @@
 <script lang="ts">
+	import PromptBudget from '$lib/components/experiment/PromptBudget.svelte';
+	import { experimentQuestionContext, experimentPromptUsage } from '$lib/stores/experimentPromptBudgets';
 	import { getContext, onDestroy, onMount, tick } from 'svelte';
 	import { quintOut } from 'svelte/easing';
 	import { slide } from 'svelte/transition';
@@ -26,7 +28,7 @@
 	import SafeMarkdown from '$lib/components/common/SafeMarkdown.svelte';
 	import QuestionImage from '$lib/components/experiment/QuestionImage.svelte';
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte';
-	import { firstUnlockedExperimentTask } from '$lib/utils/experiments';
+	import { experimentTaskAfterSurvey, firstUnlockedExperimentTask } from '$lib/utils/experiments';
 	import { flushExperimentTelemetry } from '$lib/utils/experimentTelemetry';
 	import { markdownTextMetrics } from '$lib/utils/markdownEditor';
 
@@ -53,15 +55,26 @@
 	let sidebarWidth = 520;
 	let resizing = false;
 	let initialSelectionChecked = false;
+	let previousTasks: ExperimentTaskSummary[] = [];
 	const minSize = 30;
 	const maxSize = 65;
 
 	$: tasks = (($experimentCurrent?.tasks ?? []) as ExperimentTaskSummary[]).filter(
 		(task) => task.task_type !== 'SURVEY'
 	);
+	const advanceAfterSurvey = (updatedTasks: ExperimentTaskSummary[]) => {
+		const next = experimentTaskAfterSurvey(previousTasks, updatedTasks);
+		previousTasks = updatedTasks;
+		// Initial selection handles prefix surveys; an existing selection must advance here.
+		if (next && selectedTaskId) void selectTask(next);
+	};
+	$: advanceAfterSurvey($experimentCurrent?.tasks ?? []);
 	$: selectedSummary = tasks.find((task) => task.id === selectedTaskId);
 	$: questions = detail?.question_task?.questions ?? [];
 	$: currentQuestion = questions[questionIndex];
+	$: experimentQuestionContext.set(!loading && detail?.id === selectedTaskId && detail?.task_type === 'QUESTION' && currentQuestion
+		? { taskId: selectedTaskId, questionId: currentQuestion.id, label: `${$i18n.t('Question')} ${questionIndex + 1}` }
+		: null);
 	$: essayWordCount = markdownTextMetrics(essayContent).wordCount;
 	$: if (initialSelectionChecked && !selectedTaskId) {
 		const firstUnlocked = firstUnlockedExperimentTask(tasks);
@@ -132,11 +145,13 @@
 		if (!skipOutgoingSave && !(await saveCurrent())) return;
 		selectedTaskId = task.id;
 		sessionStorage.experimentTaskId = task.id;
+		experimentQuestionContext.set(null);
 		experimentActiveTaskId.set(task.id);
 		questionIndex = 0;
 		loading = true;
 		try {
 			detail = await getExperimentTask(localStorage.token, task.id);
+			experimentPromptUsage.update((values) => ({ ...values, [task.id]: detail.llm_prompt_usage }));
 			if (detail.task_type === 'ESSAY') {
 				essayContent = detail.draft ?? '';
 				showEssayExplanation = true;
@@ -319,6 +334,7 @@
 			</div>
 		</div>
 
+		<PromptBudget />
 		{#if loading}<div class="flex flex-1 items-center justify-center text-sm text-gray-500">
 				{$i18n.t('Loading...')}
 			</div>

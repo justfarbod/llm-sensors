@@ -62,7 +62,7 @@ from open_webui.utils.payload import (
     apply_system_prompt_to_body,
 )
 from open_webui.utils.auth import get_admin_user, get_verified_user
-from open_webui.utils.experiments import require_experiment_access_dependency
+from open_webui.utils.experiments import require_experiment_access_dependency, require_guarded_experiment_generation
 from open_webui.config import (
     UPLOAD_DIR,
 )
@@ -215,7 +215,7 @@ def get_api_key(idx, url, configs):
 #
 ##########################################
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_guarded_experiment_generation)])
 
 
 @router.head('/')

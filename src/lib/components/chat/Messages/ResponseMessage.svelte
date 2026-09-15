@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { promptBudgetBlocked } from '$lib/stores/experimentPromptBudgets';
 	import { features as buildFeatures } from '$lib/features';
 	import { toast } from 'svelte-sonner';
 	import dayjs from 'dayjs';
@@ -1269,7 +1270,7 @@
 										</Tooltip>
 									{/if}
 
-									{#if isLastMessage && ($user?.role === 'admin' || ($user?.permissions?.chat?.continue_response ?? true))}
+									{#if !$promptBudgetBlocked && isLastMessage && ($user?.role === 'admin' || ($user?.permissions?.chat?.continue_response ?? true))}
 										<Tooltip content={$i18n.t('Continue Response')} placement="bottom">
 											<button
 												aria-label={$i18n.t('Continue Response')}
@@ -1306,7 +1307,7 @@
 										</Tooltip>
 									{/if}
 
-									{#if $user?.role === 'admin' || ($user?.permissions?.chat?.regenerate_response ?? true)}
+									{#if !$promptBudgetBlocked && ($user?.role === 'admin' || ($user?.permissions?.chat?.regenerate_response ?? true))}
 										{#if $settings?.regenerateMenu ?? true}
 											<button
 												type="button"

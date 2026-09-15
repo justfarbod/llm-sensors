@@ -1,8 +1,10 @@
+import type { LLMPromptBudget } from '$lib/utils/experimentPromptBudgets';
 import { WEBUI_API_BASE_URL } from '$lib/constants';
 import type { ExperimentCondition } from '$lib/apis/experiment-plans';
 
 export type WorkflowIssue = { path: string; message: string };
 export type WorkflowItem = {
+	llm_prompt_budget?: LLMPromptBudget | null;
 	key: string;
 	task_type: 'ESSAY' | 'QUESTION' | 'SURVEY';
 	title: string;

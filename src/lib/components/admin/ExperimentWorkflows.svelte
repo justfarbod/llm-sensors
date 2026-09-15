@@ -1,4 +1,6 @@
 <script lang="ts">
+	import PromptBudgetEditor from './PromptBudgetEditor.svelte';
+	import { defaultPromptBudget, questionPromptBudget } from '$lib/utils/experimentPromptBudgets';
 	import { getContext, onMount } from 'svelte';
 	import type { Writable } from 'svelte/store';
 	import type { i18n as i18nType } from 'i18next';
@@ -227,6 +229,9 @@
 
 	const setQuestionTask = (item: WorkflowItem, taskId: string) => {
 		item.question_task_id = taskId;
+		item.llm_prompt_budget = item.llm_prompt_budget?.mode === 'PER_QUESTION'
+			? questionPromptBudget(questionTasks.find((task) => task.id === taskId)?.questions ?? [])
+			: item.llm_prompt_budget ?? defaultPromptBudget();
 		const task = questionTasks.find((candidate) => candidate.id === taskId);
 		if (task) item.title = task.title;
 		if (editing) editing.definition.items = [...editing.definition.items];
@@ -641,6 +646,14 @@
 								</div>
 							</div>
 						{/if}
+					{/if}
+					{#if item.task_type !== 'SURVEY'}
+						<PromptBudgetEditor
+							bind:budget={item.llm_prompt_budget}
+							taskType={item.task_type}
+							questionTaskId={item.question_task_id}
+							onChange={changed}
+						/>
 					{/if}
 				</section>
 			{:else}

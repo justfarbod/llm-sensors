@@ -42,6 +42,7 @@ from open_webui.models.question_submissions import (
     QuestionSubmission,
     QuestionSubmissions,
 )
+from open_webui.utils.experiment_prompt_budgets import task_usage
 from open_webui.models.question_tasks import QuestionTasks
 from open_webui.models.survey_submissions import SurveyDraftForm, SurveySubmissions
 from open_webui.models.survey_tasks import SurveyTasks
@@ -75,6 +76,7 @@ class ExperimentTaskSummary(BaseModel):
     task_type: ExperimentTaskType
     title: str
     status: SessionTaskStatus
+    llm_prompt_usage: Optional[dict] = None
     question_count: Optional[int] = None
     essay_topic: Optional[ExperimentTopicResponse] = None
     survey_required: Optional[bool] = None
@@ -496,6 +498,7 @@ async def response_for(user, db: AsyncSession):
                 title=item.title,
                 status=item.status,
                 question_count=count,
+                llm_prompt_usage=await task_usage(item, db=db),
                 essay_topic=(
                     ExperimentTopicResponse(
                         id=item.essay_topic_id, title=item.essay_topic_title, question=item.essay_topic_question
@@ -655,6 +658,7 @@ async def get_current_task(
             'title': task.title,
             'status': task.status,
             'draft': task.essay_draft or '',
+            'llm_prompt_usage': await task_usage(task, db=db),
             'topic': {
                 'id': task.essay_topic_id,
                 'title': task.essay_topic_title,
@@ -683,6 +687,7 @@ async def get_current_task(
         'title': task.title,
         'status': task.status,
         'question_task': question_task,
+        'llm_prompt_usage': await task_usage(task, db=db),
         'submission': await QuestionSubmissions.participant_model(submission.id, user.id, db=db),
     }
 
@@ -956,3 +961,9 @@ async def finalize_all_tasks(
     for response_ids, submission_id in pending_jobs:
         await _schedule_grading(request, user, response_ids, submission_id)
     return await response_for(user, db)
+
+
+@router.get('/current/tasks/{task_id}/prompt-usage')
+async def get_prompt_usage(task_id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)):
+    task, _ = await _session_task_for_user(task_id, user, db, editable=False)
+    return await task_usage(task, db=db)

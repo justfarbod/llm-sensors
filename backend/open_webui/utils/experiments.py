@@ -56,3 +56,13 @@ async def require_non_experiment_user_dependency(
             detail='This feature is not available during the experiment session.',
         )
     return user
+
+
+async def require_guarded_experiment_generation(request: Request, user=Depends(get_verified_user)):
+    path = request.url.path
+    if request.method == 'POST' and any(part in path for part in (
+        '/chat', '/generate', '/completions', '/responses', '/messages'
+    )):
+        state, _, _ = await Experiments.get_current(user)
+        if state != ExperimentState.NOT_APPLICABLE:
+            raise HTTPException(status_code=403, detail='Use the experiment chat endpoint for LLM requests.')

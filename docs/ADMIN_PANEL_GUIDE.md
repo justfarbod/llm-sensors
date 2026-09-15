@@ -9,7 +9,7 @@ The Admin Panel is your central hub for managing studies and participants.
 ![Admin Panel Tour](images/admin_guide/01_admin_panel_tour.png)
 
 At the top of the page, you'll find the primary navigation bar:
-- **Research Dashboard**: View study progress, participant activity, and overall results. You can switch between different tabs like Overview, Participants, Essays, and Survey Results to get specific insights. You can also filter these views by User Group or Experiment State.
+- **Research Dashboard**: View study progress, participant activity, and overall results. You can switch between different tabs like Overview, Workflows, Participants, and LLM Usage to get specific insights. You can also filter these views by User Group or Experiment State.
 - **Users**: Manage participant accounts and create User Groups to organize them.
 - **Experiment Tasks**: Create the individual tasks (essays, questions, surveys) and assemble them into full experiment workflows.
 
@@ -17,23 +17,25 @@ At the top of the page, you'll find the primary navigation bar:
 
 ## 2. Researcher Dashboard & Participant Sessions
 
-The Researcher Dashboard allows you to monitor participant progress and download their session data for further analysis.
+The Researcher Dashboard organizes results by the workflow configuration participants received. Workflows show ordered steps with progress, elapsed time, question grades, essay texts and length statistics, or survey answers. The latest deployed configuration with runs opens by default; older configurations remain selectable even after library edits or deletion. Unmatched deployments appear as historical workflows.
+
+All data is included by default. Synthetic runs carry a **Synthetic demo** label and can be filtered separately. LLM Usage counts the whole run and separates messages without a step assignment. Historical runs without an applied plan may use explicitly labeled time-window attribution.
 
 ### Exporting Sessions
 Navigate to **Research Dashboard** &rarr; **Participants** to see a list of everyone assigned to your studies.
 
 ![Dashboard Session Exports](images/admin_guide/02_dashboard_export_sessions.png)
 
-- Select individual participants or use the header checkbox to select everyone.
+- Select the participants whose completed or active sessions you want to export.
 - If you need to protect participant privacy, toggle the **Anonymize account identifiers** option to hide emails and usernames.
 - Click **Export full sessions (JSON)** to download the data for the selected participants.
 
 ### Session Inspector
-Click on any participant's row to open the Session Inspector.
+Click a participant's name to open the Session Inspector within the current workflow context.
 
 ![Participant Session Detail](images/admin_guide/03_participant_session_detail.png)
 
-This detailed view gives you a step-by-step timeline of the participant's session, including when they accepted consent, submitted surveys, and started writing. You can also see a live preview of their essay drafts and final submissions.
+The ordered task timeline contains essays, question submissions and grading actions, survey responses, task conversations, and telemetry. Pending grades stay pending; optional skipped surveys remain distinct from completed ones. Whole-run elapsed duration is separate from interaction telemetry. Full exports include workflow/configuration identity and retain existing fields. Account anonymization does not redact free text or sensitive tab URLs.
 
 ---
 
@@ -95,6 +97,28 @@ In the Workflow Editor, give your study a name and description. You can set the 
 Scroll down to the **Ordered tasks** section to add stages to your workflow. Click **+ Essay**, **+ Question Task**, or **+ Survey** to add the tasks you created earlier. You can use the up and down arrows to easily reorder them.
 
 ---
+
+### Student LLM prompt limits
+
+Each essay or question task in a workflow has an **LLM prompt limit**, initially **100**. Essays use one limit for the whole task. For question tasks, choose **Whole task** or **Each question separately** and enter a limit for each question. Set **0** to disable student LLM requests for that task or question.
+
+Students see prompts used, remaining allowance, and requests in progress beside their task and chat input. Only successfully completed responses count, including regenerations and continuations. Failed or cancelled requests restore the allowance. Switching tasks, questions, or chats does not reset usage; students can keep editing and submitting answers after reaching the limit.
+
+Existing workflow tasks are migrated to a limit of 100. Workflow exports use version 4 and preserve per-question limits when imported or applied to a group. Supported version 2 and version 3 archives are upgraded automatically with a task-wide limit of 100.
+
+### Whole-group conditions and combined behaviors
+
+In **LLM behavior and response perturbations**, allocations are whole percentages from **0% to 100%**. Enabled conditions must total **100%** and include exactly one control. The control may have **0%** allocation; conditions at 0% and disabled conditions are never assigned to new participants.
+
+To give every new participant in a group reliability warnings and delayed responses together:
+
+1. Set **Control** to **0%** and leave it enabled.
+2. Add a condition named **Warning + delay**, leave it enabled, and set its allocation to **100%**. Set any other enabled conditions to 0%.
+3. Within that condition, enable **Reliability-warning modal** and configure its message, acknowledgement, and cadence. For a warning after every prompt, choose **Every N prompts** with a value of **1**.
+4. Set **Response timing** to **Delayed reveal** and choose the delay in seconds. The delay applies to every response, independently of the warning cadence.
+5. Save the workflow and publish it to the target group. The same settings are available in the direct experiment-plan editor.
+
+Behaviors within a condition operate together. Separate groups can each use a different condition at 100%, making group membership determine the condition for new sessions. Participants whose sessions already exist keep their original plan and condition when a new version is published.
 
 ## 6. Downloading and Uploading Workflows
 

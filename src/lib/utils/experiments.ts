@@ -6,6 +6,31 @@ export const firstUnlockedExperimentTask = (tasks: ExperimentTaskSummary[]) =>
 	tasks.find((task) => task.status === 'COMPLETED') ??
 	tasks.find((task) => task.status === 'FINALIZED');
 
+export const experimentTaskAfterSurvey = (
+	previousTasks: ExperimentTaskSummary[],
+	tasks: ExperimentTaskSummary[]
+) => {
+	const survey = previousTasks.find(
+		(task) => task.task_type === 'SURVEY' && task.status === 'ACTIVE'
+	);
+	if (
+		!survey ||
+		!tasks.some(
+			(task) => task.id === survey.id && ['FINALIZED', 'SKIPPED'].includes(task.status)
+		) ||
+		tasks.some((task) => task.task_type === 'SURVEY' && task.status === 'ACTIVE')
+	)
+		return;
+
+	const followingTasks = tasks.filter(
+		(task) => task.task_type !== 'SURVEY' && task.position > survey.position
+	);
+	return (
+		followingTasks.find((task) => task.status === 'ACTIVE') ??
+		followingTasks.find((task) => task.status === 'AVAILABLE')
+	);
+};
+
 export const experimentAllowsApp = (experiment: ExperimentCurrent | undefined) =>
 	experiment !== undefined && ['NOT_APPLICABLE', 'IN_PROGRESS'].includes(experiment.state);
 

@@ -29,6 +29,7 @@ from open_webui.env import (
     REDIS_SENTINEL_HOSTS,
     REDIS_SENTINEL_PORT,
     FRONTEND_BUILD_DIR,
+    BASE_DIR,
     OFFLINE_MODE,
     OPEN_WEBUI_DIR,
     WEBUI_AUTH,
@@ -926,16 +927,20 @@ try:
 except Exception as e:
     pass
 
-for file_path in (FRONTEND_BUILD_DIR / 'static').glob('**/*'):
+frontend_static_dir = FRONTEND_BUILD_DIR / 'static'
+if not frontend_static_dir.exists():
+    frontend_static_dir = BASE_DIR / 'static' / 'static'
+
+for file_path in frontend_static_dir.glob('**/*'):
     if file_path.is_file():
-        target_path = STATIC_DIR / file_path.relative_to((FRONTEND_BUILD_DIR / 'static'))
+        target_path = STATIC_DIR / file_path.relative_to(frontend_static_dir)
         target_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             shutil.copyfile(file_path, target_path)
         except Exception as e:
             logging.error(f'An error occurred: {e}')
 
-frontend_favicon = FRONTEND_BUILD_DIR / 'static' / 'favicon.png'
+frontend_favicon = frontend_static_dir / 'favicon.png'
 
 if frontend_favicon.exists():
     try:
@@ -943,7 +948,7 @@ if frontend_favicon.exists():
     except Exception as e:
         logging.error(f'An error occurred: {e}')
 
-frontend_splash = FRONTEND_BUILD_DIR / 'static' / 'splash.png'
+frontend_splash = frontend_static_dir / 'splash.png'
 
 if frontend_splash.exists():
     try:
@@ -951,7 +956,7 @@ if frontend_splash.exists():
     except Exception as e:
         logging.error(f'An error occurred: {e}')
 
-frontend_loader = FRONTEND_BUILD_DIR / 'static' / 'loader.js'
+frontend_loader = frontend_static_dir / 'loader.js'
 
 if frontend_loader.exists():
     try:

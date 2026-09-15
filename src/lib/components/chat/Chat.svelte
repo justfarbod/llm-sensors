@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { experimentQuestionContext, promptBudgetBlocked, refreshPromptUsage, trackPromptUsage } from '$lib/stores/experimentPromptBudgets';
 	import { features as buildFeatures, constrainChatRequest } from '$lib/features';
 	import { v4 as uuidv4 } from 'uuid';
 	import { toast } from 'svelte-sonner';
@@ -222,6 +223,7 @@
 			}
 		}
 	};
+	onMount(trackPromptUsage);
 	onMount(() => {
 		const handleVisibility = () => {
 			if (document.visibilityState === 'hidden') reportActiveExperimentReveals('TAB_HIDDEN', true);
@@ -578,6 +580,7 @@
 						}
 					}, 100);
 				} else if (type === 'chat:message:error') {
+					void refreshPromptUsage();
 					message.error = data.error;
 				} else if (type === 'chat:message:follow_ups') {
 					message.followUps = data.follow_ups;
@@ -2034,6 +2037,10 @@
 	//////////////////////////
 
 	const submitPrompt = async (inputContent, inputFiles) => {
+		if ($promptBudgetBlocked) {
+			toast.error($i18n.t('No prompts are currently available for this task or question.'));
+			return;
+		}
 		const _files = structuredClone(inputFiles);
 
 		chatFiles.push(
@@ -2083,6 +2090,10 @@
 	};
 
 	const submitHandler = async (userPrompt, { _raw = false } = {}) => {
+		if ($promptBudgetBlocked) {
+			toast.error($i18n.t('No prompts are currently available for this task or question.'));
+			return;
+		}
 		console.log('submitHandler', userPrompt, $chatId);
 
 		const _selectedModels = selectedModels.map((modelId) =>
@@ -2376,6 +2387,14 @@
 			continueResponse?: boolean;
 		} = {}
 	) => {
+		if ($promptBudgetBlocked) {
+			_history.messages[responseMessageId].done = true;
+			toast.error($i18n.t('No prompts are currently available for this task or question.'));
+			return;
+		}
+		const budgetTaskId = $experimentActiveTaskId;
+		const budgetQuestionId = $experimentQuestionContext?.taskId === budgetTaskId
+			? $experimentQuestionContext.questionId : undefined;
 		const responseMessage = _history.messages[responseMessageId];
 		const userMessage = _history.messages[responseMessage.parentId];
 
@@ -2569,8 +2588,8 @@
 				session_id: $socket?.id,
 				chat_id: _chatId || undefined,
 				folder_id: $selectedFolder?.id ?? undefined,
-				metadata: $experimentActiveTaskId
-					? { experiment_session_task_id: $experimentActiveTaskId }
+				metadata: budgetTaskId
+					? { experiment_session_task_id: budgetTaskId, experiment_question_id: budgetQuestionId }
 					: undefined,
 
 				id: responseMessageId,
@@ -2788,6 +2807,10 @@
 	};
 
 	const regenerateResponse = async (message, suggestionPrompt = null) => {
+		if ($promptBudgetBlocked) {
+			toast.error($i18n.t('No prompts are currently available for this task or question.'));
+			return;
+		}
 		console.log('regenerateResponse');
 
 		if (history.currentId) {
@@ -2821,6 +2844,10 @@
 	};
 
 	const continueResponse = async () => {
+		if ($promptBudgetBlocked) {
+			toast.error($i18n.t('No prompts are currently available for this task or question.'));
+			return;
+		}
 		console.log('continueResponse');
 		const _chatId = JSON.parse(JSON.stringify($chatId));
 

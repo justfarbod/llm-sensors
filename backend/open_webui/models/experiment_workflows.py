@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from open_webui.internal.db import Base
 from open_webui.models.essays import EssayTopic
 from open_webui.models.experiment_perturbations import default_control_condition
+from open_webui.models.experiment_perturbations import ExperimentCondition
 from open_webui.models.experiment_plans import (
     EssayTopicMode,
     ExperimentChatMode,
@@ -28,6 +29,7 @@ from open_webui.models.experiment_plans import (
     ExperimentPlans,
     ProgressionMode,
 )
+from open_webui.models.experiment_prompt_budgets import LLMPromptBudget, default_prompt_budget, remap_prompt_budget
 from open_webui.models.files import File
 from open_webui.models.groups import Group
 from open_webui.models.question_tasks import (
@@ -47,7 +49,7 @@ from open_webui.storage.provider import Storage
 
 
 WORKFLOW_FORMAT = 'open-webui-experiment-workflow'
-WORKFLOW_SCHEMA_VERSION = 3
+WORKFLOW_SCHEMA_VERSION = 4
 LEGACY_WORKFLOW_SCHEMA_VERSION = 2
 MAX_ARCHIVE_BYTES = 100 * 1024 * 1024
 MAX_EXPANDED_BYTES = 250 * 1024 * 1024
@@ -154,6 +156,9 @@ def normalize_definition(definition: dict[str, Any]) -> dict[str, Any]:
     for field in ('items', 'conditions'):
         if not isinstance(normalized.get(field), list):
             raise HTTPException(status_code=422, detail=f'Workflow field {field} must be an array.')
+    for item in normalized['items']:
+        if isinstance(item, dict) and item.get('task_type') in ('ESSAY', 'QUESTION'):
+            item.setdefault('llm_prompt_budget', default_prompt_budget())
     condition_keys: set[str] = set()
     for condition in normalized['conditions']:
         if isinstance(condition, dict):
@@ -244,6 +249,7 @@ def validate_definition(definition: Any) -> list[WorkflowIssue]:
             'title': item.get('title', ''),
             'enabled': item.get('enabled', True),
             'question_task_id': item.get('question_task_id'),
+            'llm_prompt_budget': item.get('llm_prompt_budget', default_prompt_budget()),
             'essay_topic_mode': item.get('essay_topic_mode'),
             'essay_topic_id': item.get('essay_topic_id'),
             'essay_topic_ids': item.get('essay_topic_ids', []),
@@ -348,6 +354,14 @@ async def _validation_issues(
             )
             continue
         task = await QuestionTasks.get_task(task_id, db=db)
+        for index, item in enumerate(definition.get('items', [])):
+            if item.get('question_task_id') == task_id:
+                try:
+                    budget = LLMPromptBudget.model_validate(item.get('llm_prompt_budget') or default_prompt_budget())
+                    if task and budget.mode == 'PER_QUESTION' and set(budget.question_limits) != {q.id for q in task.questions}:
+                        issues.append(_issue(f'items.{index}.llm_prompt_budget', 'Prompt limits must cover exactly the selected task questions.'))
+                except ValidationError:
+                    pass  # Structural errors are already reported by validate_definition.
         if (
             not task_model_available
             and task
@@ -697,6 +711,7 @@ class ExperimentWorkflowTable:
                         'question': topic.question,
                     }
                 )
+            portable_question_ids = {}
             for task_id in sorted(question_ids):
                 row = await db.get(QuestionTask, task_id)
                 task = await QuestionTasks.get_task(task_id, db=db)
@@ -711,6 +726,9 @@ class ExperimentWorkflowTable:
                         detail='A referenced Question Task is unavailable.',
                     )
                 data = _strip_question_task(task)
+                for source_question, question in zip(task.questions, data['questions']):
+                    question['key'] = str(uuid.uuid4())
+                    portable_question_ids[source_question.id] = question['key']
                 data['key'] = question_keys[task_id]
                 for question in data.get('questions', []):
                     file_id = question.pop('image_file_id', None)
@@ -780,6 +798,13 @@ class ExperimentWorkflowTable:
                     'title': item.get('title', ''),
                     'enabled': item.get('enabled', True),
                 }
+                if item.get('task_type') in ('ESSAY', 'QUESTION'):
+                    try:
+                        portable_item['llm_prompt_budget'] = remap_prompt_budget(
+                            item.get('llm_prompt_budget'), portable_question_ids
+                        )
+                    except ValueError as error:
+                        raise HTTPException(status_code=422, detail=str(error))
                 if item.get('task_type') == 'ESSAY':
                     topic_id = item.get('essay_topic_id')
                     topic_pool = item.get('essay_topic_ids', [])
@@ -885,6 +910,7 @@ class ExperimentWorkflowTable:
             schema_version = manifest.get('schema_version')
             if manifest.get('format') != WORKFLOW_FORMAT or schema_version not in {
                 LEGACY_WORKFLOW_SCHEMA_VERSION,
+                3,
                 WORKFLOW_SCHEMA_VERSION,
             }:
                 raise HTTPException(
@@ -998,6 +1024,7 @@ class ExperimentWorkflowTable:
                 )
 
             question_ids: dict[str, str] = {}
+            imported_question_ids = {}
             referenced_asset_keys: set[str] = set()
             for key, task in keyed['question_tasks'].items():
                 task_id = str(uuid.uuid4())
@@ -1015,6 +1042,12 @@ class ExperimentWorkflowTable:
                             detail='Question Task questions must be objects.',
                         )
                     question = dict(question)
+                    question_key = question.pop('key', None)
+                    question['id'] = str(uuid.uuid4())
+                    if schema_version == WORKFLOW_SCHEMA_VERSION:
+                        if not isinstance(question_key, str) or not question_key or question_key in imported_question_ids:
+                            raise HTTPException(status_code=422, detail='Imported questions require unique keys.')
+                        imported_question_ids[question_key] = question['id']
                     asset_key = question.pop('image_asset_key', None)
                     if asset_key:
                         if asset_key not in asset_files:
@@ -1093,6 +1126,11 @@ class ExperimentWorkflowTable:
             for item in definition.get('items', []):
                 if not isinstance(item, dict):
                     continue
+                if item.get('task_type') in ('ESSAY', 'QUESTION'):
+                    try:
+                        item['llm_prompt_budget'] = remap_prompt_budget(item.get('llm_prompt_budget'), imported_question_ids)
+                    except ValueError as error:
+                        raise HTTPException(status_code=422, detail=str(error))
                 if item.get('task_type') == 'ESSAY':
                     topic_key = item.pop('essay_topic_key', None)
                     topic_keys = item.pop('essay_topic_keys', [])
@@ -1287,6 +1325,7 @@ class ExperimentWorkflowTable:
                     )
                 )
 
+            copied_question_ids = {}
             copied_files: dict[str, str] = {}
             question_ids: dict[str, str] = {}
             for source_id in sorted(question_source_ids):
@@ -1324,6 +1363,9 @@ class ExperimentWorkflowTable:
                 db.add(row)
                 await db.flush()
                 data = _strip_question_task(source)
+                for source_question, question in zip(source.questions, data['questions']):
+                    question['id'] = str(uuid.uuid4())
+                    copied_question_ids[source_question.id] = question['id']
                 for question in data.get('questions', []):
                     source_file_id = question.get('image_file_id')
                     if source_file_id and source_file_id not in copied_files:
@@ -1400,6 +1442,10 @@ class ExperimentWorkflowTable:
             ).scalar() or 0
             plan = ExperimentPlan(
                 id=str(uuid.uuid4()),
+                source_workflow_id=workflow.id,
+                source_workflow_name=workflow.name,
+                source_workflow_revision=workflow.revision,
+                workflow_origin='recorded',
                 group_id=form.group_id,
                 version=version + 1,
                 status='PUBLISHED',
@@ -1430,10 +1476,12 @@ class ExperimentWorkflowTable:
                 db.add(
                     ExperimentPlanItem(
                         id=item_id,
+                        source_step_key=item['key'],
                         plan_id=plan.id,
                         position=position,
                         task_type=item['task_type'],
                         title=item['title'].strip(),
+                        llm_prompt_budget=remap_prompt_budget(item.get('llm_prompt_budget'), copied_question_ids) if item['task_type'] != 'SURVEY' else None,
                         question_task_id=question_ids.get(
                             item.get('question_task_id')
                         ),
@@ -1484,6 +1532,7 @@ class ExperimentWorkflowTable:
                             'question_task_id': question_ids.get(
                                 item.get('question_task_id')
                             ),
+                            'llm_prompt_budget': remap_prompt_budget(item.get('llm_prompt_budget'), copied_question_ids) if item['task_type'] != 'SURVEY' else None,
                             'survey_task_id': survey_ids.get(
                                 item.get('survey_task_id')
                             ),
@@ -1513,6 +1562,13 @@ class ExperimentWorkflowTable:
                 db,
             )
             await db.flush()
+            applied_conditions = list((await db.execute(select(ExperimentCondition).where(
+                ExperimentCondition.plan_id == plan.id
+            ).order_by(ExperimentCondition.position))).scalars())
+            for applied, original in zip(applied_conditions, definition.get('conditions', [])):
+                applied.source_condition_key = original.get('key')
+            from open_webui.utils.workflow_provenance import fingerprint_plan
+            plan.configuration_fingerprint = await fingerprint_plan(db, plan.id)
             result = await ExperimentPlans.get_plan(plan.id, db=db)
             await db.commit()
             return result

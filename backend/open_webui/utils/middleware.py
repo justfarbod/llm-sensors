@@ -3539,6 +3539,8 @@ async def non_streaming_chat_response_handler(response, ctx):
                                 },
                             )
 
+                    if ctx.get('experiment_budget_run'):
+                        await ctx['experiment_budget_run'].finish(not ctx.get('experiment_generation_failed', False))
                     await background_tasks_handler(ctx)
                     ctx['assistant_message'] = {
                         'content': content,
@@ -3898,6 +3900,8 @@ async def streaming_chat_response_handler(response, ctx):
                     nonlocal prior_output
                     nonlocal last_response_id
 
+                    if ctx.get('experiment_budget_run'):
+                        response = ctx['experiment_budget_run'].observe(response)
                     response_tool_calls = []
 
                     delta_count = 0
@@ -4058,6 +4062,7 @@ async def streaming_chat_response_handler(response, ctx):
                                     if not choices:
                                         error = data.get('error', {})
                                         if error:
+                                            ctx['experiment_generation_failed'] = True
                                             log.error('Provider returned error (streaming): %s', error)
                                             try:
                                                 await Chats.upsert_message_to_chat_by_id_and_message_id(
@@ -4873,6 +4878,7 @@ async def streaming_chat_response_handler(response, ctx):
                         else:
                             break
                     except Exception as e:
+                        ctx['experiment_generation_failed'] = True
                         log.debug(e)
                         break
 
@@ -5044,6 +5050,7 @@ async def streaming_chat_response_handler(response, ctx):
                             else:
                                 break
                         except Exception as e:
+                            ctx['experiment_generation_failed'] = True
                             log.debug(e)
                             break
 
@@ -5114,6 +5121,8 @@ async def streaming_chat_response_handler(response, ctx):
                     }
                 )
 
+                if ctx.get('experiment_budget_run'):
+                    await ctx['experiment_budget_run'].finish(not ctx.get('experiment_generation_failed', False))
                 await background_tasks_handler(ctx)
                 ctx['assistant_message'] = {
                     'content': serialize_output(output),

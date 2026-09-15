@@ -13,8 +13,13 @@ export const conditionAllocationIsValid = (
 	const enabled = conditions.filter((condition) => condition.enabled);
 	const controls = enabled.filter((condition) => condition.is_control);
 	return (
+		conditions.every(
+			(condition) =>
+				Number.isInteger(condition.allocation_percent) &&
+				condition.allocation_percent >= 0 &&
+				condition.allocation_percent <= 100
+		) &&
 		controls.length === 1 &&
-		controls[0].allocation_percent > 0 &&
 		enabled.reduce((total, condition) => total + condition.allocation_percent, 0) === 100
 	);
 };

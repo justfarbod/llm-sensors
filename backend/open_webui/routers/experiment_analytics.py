@@ -79,6 +79,8 @@ from open_webui.utils.essay_text import essay_text_metrics
 from open_webui.tasks import create_task
 from open_webui.utils.question_grading import grade_response
 
+from open_webui.utils import workflow_results as wr
+
 router = APIRouter()
 NS = 1_000_000_000
 TAB_TELEMETRY_EVENT_TYPES = {
@@ -98,6 +100,10 @@ TAB_TELEMETRY_EVENT_TYPES = {
 
 
 class DashboardFilters(BaseModel):
+    workflow_id: Optional[str] = None
+    configuration_id: Optional[str] = None
+    condition_key: Optional[str] = None
+    data_kind: Literal["all", "demo", "non_demo"] = "all"
     group_id: Optional[str] = None
     topic_id: Optional[str] = None
     date_from: Optional[int] = None
@@ -769,32 +775,16 @@ async def _chats_export(
     anonymized: bool,
     file_cache: dict[str, Optional[dict]],
 ):
-    task_clause = Chat.experiment_session_task_id.in_(task_ids) if task_ids else False
-    chats = list(
-        (
-            await db.execute(
-                select(Chat)
-                .where(or_(Chat.experiment_session_id == session.id, task_clause))
-                .order_by(Chat.created_at, Chat.id)
-            )
-        )
-        .scalars()
-        .all()
-    )
+    usage = (await _usage_by_session(db, [session.id])).get(session.id, {})
+    messages = list((await db.execute(select(ChatMessage).where(ChatMessage.id.in_(usage.get('message_ids', [])))
+                                    .order_by(ChatMessage.chat_id, ChatMessage.created_at, ChatMessage.id))).scalars())
+    chat_ids = list({m.chat_id for m in messages})
+    chats = list((await db.execute(select(Chat).where(or_(Chat.id.in_(chat_ids), Chat.experiment_session_id == session.id,
+                                                        Chat.experiment_session_task_id.in_(task_ids)))
+                                  .order_by(Chat.created_at, Chat.id))).scalars())
     chat_ids = [chat.id for chat in chats]
     if not chat_ids:
         return []
-    messages = list(
-        (
-            await db.execute(
-                select(ChatMessage)
-                .where(ChatMessage.chat_id.in_(chat_ids))
-                .order_by(ChatMessage.chat_id, ChatMessage.created_at, ChatMessage.id)
-            )
-        )
-        .scalars()
-        .all()
-    )
     chat_files = list(
         (
             await db.execute(
@@ -899,6 +889,8 @@ async def _full_session_payload(db: AsyncSession, session: ExperimentSession, an
         usage,
         telemetry_summary,
         next((task for task in tasks if task.task_type == 'ESSAY'), None),
+        tasks,
+        (await _session_progress(db, [session], tasks))[session.id],
     )
     telemetry_events = list(
         (
@@ -948,6 +940,9 @@ async def _full_session_payload(db: AsyncSession, session: ExperimentSession, an
     )
     session_topic_id = session.topic_id or (topic_assignment.topic_id if topic_assignment else None)
     return {
+        'workflow': wr.identity(await db.get(ExperimentPlan, session.plan_id) if session.plan_id else None, group),
+        'is_demo': wr.demo(participant),
+        'usage': usage,
         'session': _row_payload(session, anonymized),
         'derived_summary': _derived_payload(derived, anonymized),
         'participant': _participant_payload(participant, anonymized),
@@ -1060,15 +1055,34 @@ def _enabled_groups(groups):
 
 
 async def _group_context(db: AsyncSession):
-    groups = _enabled_groups(await Groups.get_all_groups(db=db))
+    all_groups = await Groups.get_all_groups(db=db)
+    deployed = set((await db.execute(select(ExperimentPlan.group_id))).scalars())
+    deployed.update((await db.execute(select(ExperimentSession.group_id))).scalars())
+    enabled_ids = {group.id for group in _enabled_groups(all_groups)}
+    groups = [group for group in all_groups if group.id in deployed or group.id in enabled_ids]
     return groups, {group.id: group for group in groups}
 
 
 def _apply_session_filters(stmt, filters: DashboardFilters):
+    if filters.workflow_id:
+        stmt = stmt.where(ExperimentSession.plan_id.in_(select(ExperimentPlan.id).where(
+            func.coalesce(ExperimentPlan.source_workflow_id, 'legacy:' + ExperimentPlan.id) == filters.workflow_id)))
+    if filters.configuration_id:
+        stmt = stmt.where(ExperimentSession.plan_id.in_(select(ExperimentPlan.id).where(
+            func.coalesce(ExperimentPlan.configuration_fingerprint, 'legacy:' + ExperimentPlan.id) == filters.configuration_id)))
+    if filters.condition_key:
+        from sqlalchemy import String
+        stmt = stmt.where(ExperimentSession.condition_id.in_(select(ExperimentCondition.id).where(
+            func.coalesce(ExperimentCondition.source_condition_key, 'position:' + cast(ExperimentCondition.position, String)) == filters.condition_key)))
+    if filters.data_kind != 'all':
+        synthetic = func.coalesce(User.info['synthetic'].as_boolean(), False)
+        stmt = stmt.where(ExperimentSession.user_id.in_(select(User.id).where(synthetic == (filters.data_kind == 'demo'))))
+    if filters.state == 'NOT_STARTED':
+        stmt = stmt.where(False)
     if filters.group_id:
         stmt = stmt.where(ExperimentSession.group_id == filters.group_id)
     if filters.topic_id:
-        stmt = stmt.where(ExperimentSession.topic_id == filters.topic_id)
+        stmt = stmt.where(or_(ExperimentSession.topic_id == filters.topic_id, ExperimentSession.id.in_(select(ExperimentSessionTask.experiment_session_id).where(ExperimentSessionTask.essay_topic_id == filters.topic_id))))
     if filters.date_from:
         stmt = stmt.where(ExperimentSession.created_at >= filters.date_from * NS)
     if filters.date_to:
@@ -1088,54 +1102,7 @@ async def _sessions(db: AsyncSession, filters: DashboardFilters):
 
 
 async def _usage_by_session(db: AsyncSession, session_ids: list[str]):
-    if not session_ids:
-        return {}
-
-    connection = await db.connection()
-    input_tokens, output_tokens = _token_columns(connection.dialect.name)
-    start_seconds = cast(ExperimentSession.writing_started_at / NS, Integer)
-    end_ns = case(
-        (ExperimentSession.essay_submitted_at.isnot(None), ExperimentSession.essay_submitted_at),
-        (ExperimentSession.completed_at.isnot(None), ExperimentSession.completed_at),
-        else_=int(time.time_ns()),
-    )
-    end_seconds = cast(end_ns / NS, Integer)
-
-    stmt = (
-        select(
-            ExperimentSession.id.label('session_id'),
-            func.count(case((ChatMessage.role == 'user', 1))).label('prompts'),
-            func.count(case((ChatMessage.role == 'assistant', 1))).label('responses'),
-            func.coalesce(func.sum(case((ChatMessage.role == 'assistant', input_tokens), else_=0)), 0).label(
-                'input_tokens'
-            ),
-            func.coalesce(func.sum(case((ChatMessage.role == 'assistant', output_tokens), else_=0)), 0).label(
-                'output_tokens'
-            ),
-        )
-        .outerjoin(
-            ChatMessage,
-            and_(
-                ChatMessage.user_id == ExperimentSession.user_id,
-                ExperimentSession.writing_started_at.isnot(None),
-                ChatMessage.created_at >= start_seconds,
-                ChatMessage.created_at <= end_seconds,
-            ),
-        )
-        .where(ExperimentSession.id.in_(session_ids))
-        .group_by(ExperimentSession.id)
-    )
-    rows = (await db.execute(stmt)).all()
-    return {
-        row.session_id: {
-            'prompts': row.prompts or 0,
-            'responses': row.responses or 0,
-            'input_tokens': row.input_tokens or 0,
-            'output_tokens': row.output_tokens or 0,
-            'total_tokens': (row.input_tokens or 0) + (row.output_tokens or 0),
-        }
-        for row in rows
-    }
+    return await wr.usage_by_session(db, session_ids)
 
 
 async def _users_by_ids(db: AsyncSession, user_ids: list[str]):
@@ -1177,7 +1144,198 @@ def _telemetry_payload(summary):
     )
 
 
-def _session_row(session, group, user, essay, usage, telemetry=None, essay_task=None):
+def _session_task_summary(task):
+    return {
+        'session_task_id': task.id,
+        'position': task.position,
+        'task_type': task.task_type,
+        'title': task.title,
+        'status': task.status,
+        'started_at': _seconds(task.started_at),
+        'completed_at': _seconds(task.completed_at),
+        'finalized_at': _seconds(task.finalized_at),
+    }
+
+
+async def _session_task_details(db: AsyncSession, tasks: list[ExperimentSessionTask]):
+    question_ids = [task.id for task in tasks if task.task_type == 'QUESTION']
+    submissions = (
+        list(
+            (await db.execute(select(QuestionSubmission).where(QuestionSubmission.session_task_id.in_(question_ids))))
+            .scalars()
+            .all()
+        )
+        if question_ids
+        else []
+    )
+    question_map = {submission.session_task_id: submission for submission in submissions}
+    survey_cache = {}
+    payloads = []
+    task_states = await wr.native_task_states(db, tasks)
+    for task in tasks:
+        payload = _session_task_summary(task)
+        payload['native_status'] = task.status
+        payload['status'] = task_states[task.id]
+        if task.task_type == 'QUESTION':
+            submission = question_map.get(task.id)
+            payload['question_submission'] = (
+                {
+                    'submission_id': submission.id,
+                    'status': submission.status,
+                    'grading_status': submission.grading_status,
+                    'score': _json_value(submission.current_score),
+                    'provisional_score': _json_value(submission.provisional_score),
+                    'maximum_score': _json_value(submission.maximum_score),
+                    'submitted_at': _seconds(submission.submitted_at),
+                }
+                if submission
+                else None
+            )
+        elif task.task_type == 'ESSAY':
+            essay = await db.get(Essay, task.essay_id) if task.essay_id else None
+            content = essay.content if essay else task.essay_draft or ''
+            words, characters = essay_text_metrics(content)
+            payload['essay'] = {'content': content, 'topic_title': task.essay_topic_title, 'topic_question': task.essay_topic_question, 'word_count': words, 'character_count': characters, 'is_draft': essay is None}
+        elif task.task_type == 'SURVEY':
+            survey = await _survey_task_export(db, task.survey_task_id, survey_cache)
+            submission = await _survey_submission_export(db, task, survey, anonymized=False)
+            payload['required'] = task.survey_required
+            payload['survey_submission'] = (
+                {
+                    'submission_id': submission['record']['id'],
+                    'status': submission['record']['status'],
+                    'submitted_at': _seconds(submission['record']['submitted_at']),
+                    'skipped_at': _seconds(submission['record']['skipped_at']),
+                    'answers': [
+                        {
+                            'question_id': response['record']['question_id'],
+                            'prompt': (response['question'] or {})
+                            .get('record', {})
+                            .get('prompt', 'Question unavailable'),
+                            'value': (
+                                [
+                                    (selection['choice'] or {}).get('text', selection['record']['choice_id'])
+                                    for selection in response['selected_choices']
+                                ]
+                                or (response['record']['scale_answer'] if response['record']['scale_answer'] is not None else response['record']['text_answer'])
+                            ),
+                        }
+                        for response in submission['responses']
+                    ],
+                }
+                if submission
+                else None
+            )
+        payloads.append(payload)
+    return payloads
+
+
+def _session_milestones(session, tasks, survey_submissions):
+    work = [task for task in tasks if task.task_type != 'SURVEY']
+    milestones = {}
+    for phase in ('pre', 'post'):
+        surveys = [
+            task
+            for task in tasks
+            if task.task_type == 'SURVEY'
+            and work
+            and (
+                task.position < min(item.position for item in work)
+                if phase == 'pre'
+                else task.position > max(item.position for item in work)
+            )
+        ]
+        submitted_at = getattr(session, f'{phase}_survey_submitted_at', None)
+        completed = getattr(session, f'{phase}_survey', None) is not None
+        started_at = None
+        skipped_at = None
+        if surveys:
+            submissions = [survey_submissions.get(task.id) for task in surveys]
+            resolved = all(item and item.status in {'SUBMITTED', 'SKIPPED'} for item in submissions)
+            submitted = [item.submitted_at for item in submissions if item and item.status == 'SUBMITTED']
+            completed = resolved and bool(submitted)
+            submitted_at = max((value for value in submitted if value is not None), default=None) if completed else None
+            started_at = min((task.started_at for task in surveys if task.started_at is not None), default=None)
+            if resolved and not submitted:
+                skipped_at = max((item.skipped_at for item in submissions if item.skipped_at is not None), default=None)
+        milestones.update(
+            {
+                f'{phase}_survey_completed': completed,
+                f'{phase}_survey_started_at': _seconds(started_at),
+                f'{phase}_survey_submitted_at': _seconds(submitted_at),
+                f'{phase}_survey_skipped_at': _seconds(skipped_at),
+                f'{phase}_survey_duration': _duration(
+                    session.essay_submitted_at if phase == 'post' and not surveys else started_at, submitted_at
+                ),
+            }
+        )
+
+    essays = [task for task in work if task.task_type == 'ESSAY']
+    essay_submitted_at = session.essay_submitted_at
+    writing_started_at = session.writing_started_at
+    if essays:
+        writing_started_at = min((task.started_at for task in essays if task.started_at is not None), default=None)
+        essay_submitted_at = (
+            max((task.finalized_at for task in essays if task.finalized_at is not None), default=None)
+            if all(task.status == 'FINALIZED' for task in essays)
+            else None
+        )
+    task_submitted_at = getattr(session, 'task_submitted_at', None)
+    if work and all(task.status == 'FINALIZED' for task in work):
+        task_submitted_at = max((task.finalized_at for task in work if task.finalized_at is not None), default=None)
+    milestones.update(
+        {
+            'essay_submitted': (
+                all(task.status == 'FINALIZED' for task in essays) if essays else session.essay_id is not None
+            ),
+            'essay_submitted_at': _seconds(essay_submitted_at),
+            'writing_started_at': _seconds(writing_started_at),
+            'writing_duration': _duration(writing_started_at, essay_submitted_at),
+            'task_submitted_at': _seconds(task_submitted_at),
+        }
+    )
+    return milestones
+
+
+async def _session_progress(db, sessions, tasks=None):
+    if tasks is None:
+        tasks = (
+            list(
+                (
+                    await db.execute(
+                        select(ExperimentSessionTask)
+                        .where(ExperimentSessionTask.experiment_session_id.in_([session.id for session in sessions]))
+                        .order_by(ExperimentSessionTask.position)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if sessions
+            else []
+        )
+    survey_ids = [task.id for task in tasks if task.task_type == 'SURVEY']
+    submissions = (
+        list(
+            (await db.execute(select(SurveySubmission).where(SurveySubmission.session_task_id.in_(survey_ids))))
+            .scalars()
+            .all()
+        )
+        if survey_ids
+        else []
+    )
+    submission_map = {submission.session_task_id: submission for submission in submissions}
+    tasks_by_session = defaultdict(list)
+    for task in tasks:
+        tasks_by_session[task.experiment_session_id].append(task)
+    return {
+        session.id: _session_milestones(session, tasks_by_session[session.id], submission_map) for session in sessions
+    }
+
+
+def _session_row(
+    session, group, user, essay, usage, telemetry=None, essay_task=None, session_tasks=None, milestones=None
+):
     telemetry_payload = _telemetry_payload(telemetry)
     topic_id = session.topic_id or (essay_task.essay_topic_id if essay_task else None)
     topic_title = session.topic_title or (essay_task.essay_topic_title if essay_task else None)
@@ -1200,6 +1358,7 @@ def _session_row(session, group, user, essay, usage, telemetry=None, essay_task=
         'pre_survey_completed': session.pre_survey is not None,
         'essay_submitted': essay_id is not None,
         'post_survey_completed': session.post_survey is not None,
+        'tasks': [_session_task_summary(task) for task in (session_tasks or [])],
         'session_start_time': _seconds(session.created_at),
         'session_completion_time': _seconds(session.completed_at),
         'session_duration': _duration(session.created_at, session.completed_at),
@@ -1215,6 +1374,7 @@ def _session_row(session, group, user, essay, usage, telemetry=None, essay_task=
         'essay_character_count': essay.character_count if essay else None,
         **telemetry_payload,
         'telemetry_summary': telemetry_payload,
+        **(milestones or {}),
     }
 
 
@@ -1264,18 +1424,24 @@ async def _participant_rows(db: AsyncSession, filters: DashboardFilters):
             or_(ExperimentSession.id.is_(None), ExperimentSession.state != ExperimentState.COMPLETED.value)
         )
 
-    records = (await db.execute(stmt)).all()
+    records = list((await db.execute(stmt)).all())
+    # Historical runs remain visible after membership or group settings change.
+    from types import SimpleNamespace
+    existing = {record[2].id for record in records if record[2]}
+    missing = [session for session in await _sessions(db, filters) if session.id not in existing and session.group_id in group_ids]
+    historical_users = await _users_by_ids(db, [session.user_id for session in missing])
+    for session in missing:
+        participant = historical_users.get(session.user_id)
+        if participant:
+            records.append((SimpleNamespace(group_id=session.group_id), participant, session))
     sessions = [record[2] for record in records if record[2]]
     session_ids = [session.id for session in sessions]
-    essay_task_rows = (
+    session_task_rows = (
         list(
             (
                 await db.execute(
                     select(ExperimentSessionTask)
-                    .where(
-                        ExperimentSessionTask.experiment_session_id.in_(session_ids),
-                        ExperimentSessionTask.task_type == 'ESSAY',
-                    )
+                    .where(ExperimentSessionTask.experiment_session_id.in_(session_ids))
                     .order_by(ExperimentSessionTask.experiment_session_id, ExperimentSessionTask.position)
                 )
             )
@@ -1286,6 +1452,11 @@ async def _participant_rows(db: AsyncSession, filters: DashboardFilters):
         else []
     )
     essay_task_by_session = {}
+    progress = await _session_progress(db, sessions, session_task_rows)
+    tasks_by_session = defaultdict(list)
+    essay_task_rows = [task for task in session_task_rows if task.task_type == 'ESSAY']
+    for task in session_task_rows:
+        tasks_by_session[task.experiment_session_id].append(task)
     for task in essay_task_rows:
         essay_task_by_session.setdefault(task.experiment_session_id, task)
     usage = await _usage_by_session(db, [session.id for session in sessions])
@@ -1307,6 +1478,8 @@ async def _participant_rows(db: AsyncSession, filters: DashboardFilters):
                     usage.get(session.id, {}),
                     telemetry.get(session.id),
                     essay_task,
+                    tasks_by_session.get(session.id, []),
+                    progress[session.id],
                 )
             )
         else:
@@ -1327,6 +1500,7 @@ async def _participant_rows(db: AsyncSession, filters: DashboardFilters):
                     'pre_survey_completed': False,
                     'essay_submitted': False,
                     'post_survey_completed': False,
+                    'tasks': [],
                     'session_start_time': None,
                     'session_completion_time': None,
                     'session_duration': None,
@@ -1344,7 +1518,7 @@ async def _participant_rows(db: AsyncSession, filters: DashboardFilters):
                     'telemetry_summary': _telemetry_payload(None),
                 }
             )
-    return rows
+    return await wr.enrich_participants(db, rows, filters)
 
 
 def _paginate_rows(rows, page: int, limit: int, search: Optional[str], order_by: str, direction: str):
@@ -1371,6 +1545,8 @@ async def filters(user=Depends(get_admin_user), db: AsyncSession = Depends(get_a
     groups, _ = await _group_context(db)
     topics = await EssayTopics.get_topics(db=db)
     return {
+        'workflows': (await wr.workflow_list(db, DashboardFilters()))['items'],
+        'conditions': list({wr.condition_key(c): {'id': wr.condition_key(c), 'name': c.name} for c in (await wr.catalog(db))[2]}.values()),
         'groups': [{'id': group.id, 'name': group.name} for group in groups],
         'topics': [{'id': topic.id, 'title': topic.title} for topic in topics],
         'states': ['NOT_STARTED']
@@ -1380,6 +1556,10 @@ async def filters(user=Depends(get_admin_user), db: AsyncSession = Depends(get_a
 
 @router.get('/overview')
 async def overview(
+    workflow_id: Optional[str] = None,
+    configuration_id: Optional[str] = None,
+    condition_key: Optional[str] = None,
+    data_kind: Literal["all", "demo", "non_demo"] = "all",
     group_id: Optional[str] = None,
     topic_id: Optional[str] = None,
     date_from: Optional[int] = None,
@@ -1392,9 +1572,10 @@ async def overview(
     dashboard_filters = DashboardFilters(**locals())
     sessions = await _sessions(db, dashboard_filters)
     participants = await _participant_rows(db, dashboard_filters)
+    progress = await _session_progress(db, sessions)
     state_counts = Counter(session.state for session in sessions)
     dates = Counter(_date_bucket(session.created_at) for session in sessions)
-    complete = [session for session in sessions if session.completed_at]
+    complete = [session for session in sessions if session.state == ExperimentState.COMPLETED.value]
     durations_by_date = defaultdict(list)
     for session in complete:
         duration = _duration(session.created_at, session.completed_at)
@@ -1412,25 +1593,24 @@ async def overview(
             'completed_sessions': len(complete),
             'assigned_participants': len({participant['user_id'] for participant in participants}),
             'consented': sum(session.consented_at is not None for session in sessions),
-            'pre_survey_completed': sum(session.pre_survey is not None for session in sessions),
-            'essays_submitted': sum(session.essay_id is not None for session in sessions),
-            'post_survey_completed': sum(session.post_survey is not None for session in sessions),
+            'pre_survey_completed': sum(item['pre_survey_completed'] for item in progress.values()),
+            'essays_submitted': sum(item['essay_submitted'] for item in progress.values()),
+            'post_survey_completed': sum(item['post_survey_completed'] for item in progress.values()),
             'completion_rate': round((len(complete) / len(sessions)) * 100, 1) if sessions else 0,
             'average_session_duration': average(
                 _duration(session.created_at, session.completed_at) for session in complete
             ),
-            'average_time_to_essay': average(
-                _duration(session.writing_started_at, session.essay_submitted_at) for session in sessions
-            ),
-            'average_essay_to_post_survey': average(
-                _duration(session.essay_submitted_at, session.post_survey_submitted_at) for session in sessions
-            ),
+            'average_time_to_essay': average(item['writing_duration'] for item in progress.values()),
+            'average_essay_to_post_survey': average(item['post_survey_duration'] for item in progress.values()),
         },
+        'workflows': (await wr.workflow_list(db, dashboard_filters))['items'],
+        'workflow_steps': await wr.overview_steps(db, dashboard_filters),
+        'task_progress': {'total': sum(p['task_progress']['total'] for p in participants), 'completed': sum(p['task_progress']['completed'] for p in participants), 'skipped': sum(p['task_progress']['skipped'] for p in participants)},
         'funnel': [
             {'label': 'Sessions', 'value': len(sessions)},
             {'label': 'Consented', 'value': sum(session.consented_at is not None for session in sessions)},
-            {'label': 'Pre-survey', 'value': sum(session.pre_survey is not None for session in sessions)},
-            {'label': 'Essay submitted', 'value': sum(session.essay_id is not None for session in sessions)},
+            {'label': 'Pre-survey', 'value': sum(item['pre_survey_completed'] for item in progress.values())},
+            {'label': 'Essay submitted', 'value': sum(item['essay_submitted'] for item in progress.values())},
             {'label': 'Completed', 'value': len(complete)},
         ],
         'sessions_over_time': [{'label': key, 'value': value} for key, value in sorted(dates.items())],
@@ -1444,6 +1624,10 @@ async def overview(
 
 @router.get('/participants')
 async def participants(
+    workflow_id: Optional[str] = None,
+    configuration_id: Optional[str] = None,
+    condition_key: Optional[str] = None,
+    data_kind: Literal["all", "demo", "non_demo"] = "all",
     group_id: Optional[str] = None,
     topic_id: Optional[str] = None,
     date_from: Optional[int] = None,
@@ -1540,7 +1724,8 @@ async def session_detail(
     primary_essay_task = essay_task_payloads[0] if essay_task_payloads else None
     usage = (await _usage_by_session(db, [session.id])).get(session.id, {})
     telemetry = (await _telemetry_by_session(db, [session.id])).get(session.id)
-    row = _session_row(session, group, participant, essay, usage, telemetry)
+    progress = (await _session_progress(db, [session], session_tasks))[session.id]
+    row = _session_row(session, group, participant, essay, usage, telemetry, milestones=progress)
     condition = await db.get(ExperimentCondition, session.condition_id) if session.condition_id else None
     prompt_settings = await db.get(ExperimentPromptInjection, session.condition_id) if session.condition_id else None
     warning_settings = await db.get(ExperimentWarningModal, session.condition_id) if session.condition_id else None
@@ -1589,11 +1774,16 @@ async def session_detail(
             'timeline': {
                 'created_at': _seconds(session.created_at),
                 'consented_at': _seconds(session.consented_at),
-                'pre_survey_submitted_at': _seconds(session.pre_survey_submitted_at),
+                'pre_survey_started_at': progress['pre_survey_started_at'],
+                'pre_survey_submitted_at': progress['pre_survey_submitted_at'],
+                'pre_survey_skipped_at': progress['pre_survey_skipped_at'],
                 'topic_shown_at': _seconds(session.topic_shown_at),
-                'writing_started_at': _seconds(session.writing_started_at),
-                'essay_submitted_at': _seconds(session.essay_submitted_at),
-                'post_survey_submitted_at': _seconds(session.post_survey_submitted_at),
+                'writing_started_at': progress['writing_started_at'],
+                'essay_submitted_at': progress['essay_submitted_at'],
+                'task_submitted_at': progress['task_submitted_at'],
+                'post_survey_started_at': progress['post_survey_started_at'],
+                'post_survey_submitted_at': progress['post_survey_submitted_at'],
+                'post_survey_skipped_at': progress['post_survey_skipped_at'],
                 'completed_at': _seconds(session.completed_at),
                 'logout_at': None,
             },
@@ -1620,6 +1810,7 @@ async def session_detail(
                 )
             ),
             'essay_tasks': essay_task_payloads,
+            'tasks': await _session_task_details(db, session_tasks),
             'condition': (
                 {
                     'id': condition.id,
@@ -1687,6 +1878,11 @@ async def session_detail(
             ],
         }
     )
+    row.update(wr.identity(await db.get(ExperimentPlan, session.plan_id) if session.plan_id else None, group))
+    row['is_demo'] = wr.demo(participant)
+    row['usage'] = usage
+    row['unattributed_messages'] = await wr.attach_task_activity(db, session, row['tasks'], usage)
+    row['task_progress'] = {'total': len(row['tasks']), 'completed': sum(t['status'] == 'FINALIZED' for t in row['tasks']), 'skipped': sum(t['status'] == 'SKIPPED' for t in row['tasks'])}
     return row
 
 
@@ -1730,6 +1926,10 @@ async def tab_activity(
 
 @router.get('/essays')
 async def essays(
+    workflow_id: Optional[str] = None,
+    configuration_id: Optional[str] = None,
+    condition_key: Optional[str] = None,
+    data_kind: Literal["all", "demo", "non_demo"] = "all",
     group_id: Optional[str] = None,
     topic_id: Optional[str] = None,
     date_from: Optional[int] = None,
@@ -1792,6 +1992,10 @@ async def essays(
 
 @router.get('/usage')
 async def usage(
+    workflow_id: Optional[str] = None,
+    configuration_id: Optional[str] = None,
+    condition_key: Optional[str] = None,
+    data_kind: Literal["all", "demo", "non_demo"] = "all",
     group_id: Optional[str] = None,
     topic_id: Optional[str] = None,
     date_from: Optional[int] = None,
@@ -1812,19 +2016,21 @@ async def usage(
     for session in sessions:
         item = usage_map.get(session.id, {})
         group_name = group_map.get(session.group_id).name if group_map.get(session.group_id) else session.group_id
-        group_totals[group_name]['prompts'] += item.get('prompts', 0)
-        group_totals[group_name]['tokens'] += item.get('total_tokens', 0)
+        group_totals[session.group_id]['prompts'] += item.get('prompts', 0)
+        group_totals[session.group_id]['tokens'] += item.get('total_tokens', 0)
+        group_totals[session.group_id]['label'] = group_name
         topic_totals[session.topic_title]['prompts'] += item.get('prompts', 0)
         topic_totals[session.topic_title]['tokens'] += item.get('total_tokens', 0)
         participant_rows.append(
             {
                 'session_id': session.id,
                 'participant_id': _anonymous_id(session.user_id),
+                'is_demo': wr.demo(users.get(session.user_id)),
                 'name': users.get(session.user_id).name if users.get(session.user_id) else None,
                 **item,
             }
         )
-    completed_rows = [usage_map.get(session.id, {}) for session in sessions if session.essay_id]
+    completed_rows = [usage_map.get(session.id, {}) for session in sessions if session.state == 'COMPLETED']
 
     def average(key):
         return round(sum(row.get(key, 0) for row in completed_rows) / len(completed_rows), 2) if completed_rows else 0
@@ -1834,12 +2040,14 @@ async def usage(
             'total_prompts': sum(row.get('prompts', 0) for row in usage_map.values()),
             'total_responses': sum(row.get('responses', 0) for row in usage_map.values()),
             'total_tokens': sum(row.get('total_tokens', 0) for row in usage_map.values()),
-            'average_prompts_per_completed_essay': average('prompts'),
-            'average_tokens_per_completed_essay': average('total_tokens'),
+            'average_prompts_per_completed_run': average('prompts'),
+            'average_tokens_per_completed_run': average('total_tokens'),
         },
+        **await wr.usage_dimensions(db, sessions, usage_map),
         'prompt_distribution': _histogram([row.get('prompts', 0) for row in usage_map.values()]),
         'token_distribution': _histogram([row.get('total_tokens', 0) for row in usage_map.values()]),
-        'by_group': [{'label': key, **value} for key, value in group_totals.items()],
+        'by_group': [{'id': key, **value} for key, value in group_totals.items()],
+        'by_participant': participant_rows,
         'by_topic': [{'label': key, **value} for key, value in topic_totals.items()],
         'top_participants': sorted(participant_rows, key=lambda row: row.get('total_tokens', 0), reverse=True)[:20],
     }
@@ -1859,6 +2067,10 @@ def _histogram(values: list[int], buckets: int = 8):
 
 @router.get('/essay-stats')
 async def essay_stats(
+    workflow_id: Optional[str] = None,
+    configuration_id: Optional[str] = None,
+    condition_key: Optional[str] = None,
+    data_kind: Literal["all", "demo", "non_demo"] = "all",
     group_id: Optional[str] = None,
     topic_id: Optional[str] = None,
     date_from: Optional[int] = None,
@@ -1943,6 +2155,10 @@ def _distribution(sessions, field: str, survey_name: str):
 
 @router.get('/surveys')
 async def surveys(
+    workflow_id: Optional[str] = None,
+    configuration_id: Optional[str] = None,
+    condition_key: Optional[str] = None,
+    data_kind: Literal["all", "demo", "non_demo"] = "all",
     group_id: Optional[str] = None,
     topic_id: Optional[str] = None,
     date_from: Optional[int] = None,
@@ -1956,6 +2172,7 @@ async def surveys(
 ):
     dashboard_filters = DashboardFilters(**locals())
     sessions = await _sessions(db, dashboard_filters)
+    progress = await _session_progress(db, sessions)
     session_ids = [session.id for session in sessions]
     dynamic_records = (
         (
@@ -2097,8 +2314,7 @@ async def surveys(
             'session_id': session.id,
             'participant_id': _anonymous_id(session.user_id),
             'state': session.state,
-            'pre_survey_completed': session.pre_survey is not None,
-            'post_survey_completed': session.post_survey is not None,
+            **progress[session.id],
             'comments': session.post_survey.get('comments') if session.post_survey else None,
             'survey_submissions': dynamic_by_session.get(session.id, []),
         }
@@ -2216,6 +2432,7 @@ async def export_participants(
     usage = await _usage_by_session(db, [session.id for session in sessions])
     telemetry = await _telemetry_by_session(db, [session.id for session in sessions])
     _, groups = await _group_context(db)
+    progress = await _session_progress(db, sessions)
     rows = [
         _session_row(
             session,
@@ -2224,6 +2441,7 @@ async def export_participants(
             essays.get(session.essay_id),
             usage.get(session.id, {}),
             telemetry.get(session.id),
+            milestones=progress[session.id],
         )
         for session in sessions
     ]
@@ -2553,6 +2771,10 @@ class ScoreOverrideForm(BaseModel):
 
 @router.get('/question-results')
 async def question_results(
+    workflow_id: Optional[str] = None,
+    configuration_id: Optional[str] = None,
+    condition_key: Optional[str] = None,
+    data_kind: Literal["all", "demo", "non_demo"] = "all",
     group_id: Optional[str] = None,
     topic_id: Optional[str] = None,
     date_from: Optional[int] = None,
@@ -2870,3 +3092,27 @@ async def retry_question_grading(
     await create_task(request.app.state.redis, grade_response(request, user, response.id), response.submission_id)
     detail = await question_submission_detail(submission.id, user=user, db=db)
     return {'status': 'PENDING', 'attempt_id': attempt_id, 'submission': detail}
+
+
+@router.get('/workflows')
+async def workflows(filters: DashboardFilters = Depends(), user=Depends(get_admin_user), db: AsyncSession = Depends(get_async_session)):
+    return await wr.workflow_list(db, filters)
+
+
+@router.get('/workflows/{workflow_id}')
+async def workflow_detail(workflow_id: str, configuration_id: Optional[str] = None, group_id: Optional[str] = None,
+                          condition_key: Optional[str] = None, data_kind: Literal['all', 'demo', 'non_demo'] = 'all',
+                          date_from: Optional[int] = None, date_to: Optional[int] = None, state: Optional[str] = None,
+                          completed: Optional[bool] = None, topic_id: Optional[str] = None,
+                          user=Depends(get_admin_user), db: AsyncSession = Depends(get_async_session)):
+    return await wr.workflow_detail(db, workflow_id, DashboardFilters(**locals()))
+
+
+@router.get('/workflows/{workflow_id}/steps/{step_key}')
+async def workflow_step_results(workflow_id: str, step_key: str, configuration_id: Optional[str] = None,
+                                group_id: Optional[str] = None, condition_key: Optional[str] = None,
+                                data_kind: Literal['all', 'demo', 'non_demo'] = 'all', date_from: Optional[int] = None,
+                                date_to: Optional[int] = None, state: Optional[str] = None, completed: Optional[bool] = None,
+                                topic_id: Optional[str] = None, page: int = Query(1, ge=1), limit: int = Query(25, ge=1, le=100),
+                                search: Optional[str] = None, user=Depends(get_admin_user), db: AsyncSession = Depends(get_async_session)):
+    return await wr.step_results(db, workflow_id, step_key, DashboardFilters(**locals()), page, limit, search)

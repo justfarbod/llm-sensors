@@ -28,7 +28,10 @@ def _hmac_value(*parts: str) -> tuple[float, str]:
 
 
 def assign_condition(plan, user_id: str):
-    enabled = [condition for condition in (plan.conditions or []) if condition.enabled]
+    enabled = [
+        condition for condition in (plan.conditions or [])
+        if condition.enabled and condition.allocation_percent > 0
+    ]
     if not enabled:
         return None, None, None
     draw, assignment_id = _hmac_value('condition', plan.id, user_id)

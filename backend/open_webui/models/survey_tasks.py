@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 import time
 import uuid
 from enum import StrEnum
@@ -205,7 +206,8 @@ class SurveyTaskTable:
             return [await self.get_task(row.id, db=db) for row in rows]
 
     async def get_task(self, task_id: str, db: Optional[AsyncSession] = None):
-        async with get_async_db_context(db) as db:
+        # Applied workflows resolve uncommitted copied content in this transaction.
+        async with (nullcontext(db) if db is not None else get_async_db_context()) as db:
             task = await db.get(SurveyTask, task_id)
             if not task:
                 return None

@@ -1,6 +1,9 @@
+import type { LLMPromptBudget } from '$lib/utils/experimentPromptBudgets';
 import { WEBUI_API_BASE_URL } from '$lib/constants';
 
 export type PlanItem = {
+	source_step_key?: string | null;
+	llm_prompt_budget?: LLMPromptBudget | null;
 	id?: string;
 	task_type: 'ESSAY' | 'QUESTION' | 'SURVEY';
 	title: string;
@@ -73,6 +76,11 @@ export type ExperimentCondition = {
 };
 
 export type ExperimentPlan = {
+	source_workflow_id?: string | null;
+	source_workflow_name?: string | null;
+	source_workflow_revision?: number | null;
+	workflow_origin?: string | null;
+	configuration_fingerprint?: string | null;
 	id?: string;
 	group_id?: string;
 	version?: number;

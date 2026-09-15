@@ -1,4 +1,6 @@
 <script lang="ts">
+	import PromptBudgetEditor from './PromptBudgetEditor.svelte';
+	import { defaultPromptBudget, questionPromptBudget } from '$lib/utils/experimentPromptBudgets';
 	import { getContext, onMount } from 'svelte';
 	import type { Writable } from 'svelte/store';
 	import type { i18n as i18nType } from 'i18next';
@@ -112,6 +114,9 @@
 
 	const setQuestionTask = (item: PlanItem, taskId: string) => {
 		item.question_task_id = taskId;
+		item.llm_prompt_budget = item.llm_prompt_budget?.mode === 'PER_QUESTION'
+			? questionPromptBudget(questionTasks.find((task) => task.id === taskId)?.questions ?? [])
+			: item.llm_prompt_budget ?? defaultPromptBudget();
 		const task = questionTasks.find((candidate) => candidate.id === taskId);
 		if (task) item.title = task.title;
 		plan.items = [...plan.items];
@@ -154,7 +159,9 @@
 		}
 		if (!conditionAllocationIsValid(plan.conditions)) {
 			toast.error(
-				$i18n.t('Enabled condition allocations must total 100% and include one control.')
+				$i18n.t(
+					'Allocations must be whole numbers from 0% to 100%. Enabled conditions must total 100% and include exactly one control, which may have 0% allocation.'
+				)
 			);
 			return;
 		}
@@ -368,6 +375,13 @@
 								</div>
 							</div>
 						{/if}
+					{/if}
+					{#if item.task_type !== 'SURVEY'}
+						<PromptBudgetEditor
+							bind:budget={item.llm_prompt_budget}
+							taskType={item.task_type}
+							questionTaskId={item.question_task_id}
+						/>
 					{/if}
 				</div>
 			{:else}

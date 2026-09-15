@@ -1,6 +1,10 @@
 import { WEBUI_API_BASE_URL } from '$lib/constants';
 
 export type ResearchFilters = {
+	workflow_id?: string;
+	configuration_id?: string;
+	condition_key?: string;
+	data_kind?: string;
 	group_id?: string;
 	topic_id?: string;
 	date_from?: number | string;
@@ -124,3 +128,120 @@ export const exportFullResearchSessions = async (
 		disposition.match(/filename="?([^";]+)"?/i)?.[1] ?? 'experiment-full-sessions.json';
 	return { blob: await response.blob(), filename };
 };
+
+export type WorkflowConfiguration = {
+	id: string;
+	source_revision: number | null;
+	origin: string;
+	created_at: number;
+	runs: number;
+	plan_ids: string[];
+};
+export type WorkflowSummary = {
+	id: string;
+	name: string;
+	runs: number;
+	completed: number;
+	active: number;
+	configurations: WorkflowConfiguration[];
+	groups: { id: string; name: string }[];
+};
+export type WorkflowStep = {
+	key: string;
+	position: number;
+	title: string;
+	task_type: 'QUESTION' | 'ESSAY' | 'SURVEY';
+	started: number;
+	completed: number;
+	skipped: number;
+	pending: number;
+	average_elapsed_seconds: number | null;
+	average_score: number | null;
+	maximum_score: number | null;
+	pending_grades: number;
+	essay_topics: {
+		title: string;
+		question: string;
+		submissions: number;
+		average_words: number;
+		minimum_words: number;
+		maximum_words: number;
+	}[];
+	usage: { prompts: number; responses: number };
+};
+export type WorkflowDetail = WorkflowSummary & {
+	configuration_id: string;
+	progression_mode: string;
+	chat_mode: string;
+	steps: WorkflowStep[];
+	conditions: { key: string; name: string; runs: number }[];
+};
+export const getResearchWorkflow = (
+	token: string,
+	id: string,
+	filters: ResearchFilters = {},
+	signal?: AbortSignal
+): Promise<WorkflowDetail> =>
+	request(token, `/workflows/${encodeURIComponent(id)}`, filters, signal);
+export type WorkflowStepResults = {
+	step: WorkflowStep;
+	configuration_id: string;
+	items: Array<{
+		session_task_id: string;
+		session_id: string;
+		position: number;
+		title: string;
+		task_type: 'QUESTION' | 'ESSAY' | 'SURVEY';
+		status: string;
+		name: string;
+		participant_id: string;
+		is_demo: boolean;
+		group_id: string;
+		started_at: number | null;
+		completed_at: number | null;
+		finalized_at: number | null;
+		question_submission?: {
+			submission_id: string;
+			status: string;
+			grading_status: string;
+			score: number | null;
+			maximum_score: number;
+			provisional_score: number | null;
+		};
+		essay?: {
+			content: string;
+			topic_title: string;
+			topic_question: string;
+			word_count: number | null;
+			is_draft: boolean;
+		};
+		survey_submission?: {
+			submission_id: string;
+			status: string;
+			answers: Array<{ prompt: string; value: string | number | string[] | null }>;
+		};
+	}>;
+	total: number;
+	page: number;
+	limit: number;
+	survey_distributions: Array<{
+		position: number;
+		prompt: string;
+		question_type: string;
+		answered: number;
+		counts: Record<string, number>;
+	}>;
+};
+export const getWorkflowStepResults = (
+	token: string,
+	id: string,
+	step: string,
+	filters: ResearchFilters = {},
+	signal?: AbortSignal
+): Promise<WorkflowStepResults> =>
+	request(
+		token,
+		`/workflows/${encodeURIComponent(id)}/steps/${encodeURIComponent(step)}`,
+		filters,
+		signal
+	);

@@ -84,6 +84,48 @@ def test_condition_payload_rejects_removed_memory_injection():
     assert 'memory_injection' in str(error.value)
 
 
+@pytest.mark.parametrize('control', [0, 20, 100])
+def test_allocation_allows_zero_and_whole_group_conditions(control):
+    form = ExperimentPlanForm.model_validate({
+        'items': [essay_item()],
+        'conditions': [
+            {'name': 'Control', 'allocation_percent': control, 'is_control': True},
+            {'name': 'Treatment', 'allocation_percent': 100 - control},
+            {'name': 'Disabled', 'allocation_percent': 100, 'enabled': False},
+        ],
+    })
+    assert form.conditions[0].allocation_percent == control
+
+
+@pytest.mark.parametrize('allocation', [-1, 101, 0.5, float('nan'), float('inf'), None])
+def test_allocation_rejects_invalid_values(allocation):
+    with pytest.raises(ValidationError):
+        ExperimentPlanForm.model_validate({
+            'items': [essay_item()],
+            'conditions': [
+                {'name': 'Control', 'allocation_percent': allocation, 'is_control': True},
+                {'name': 'Treatment', 'allocation_percent': 100 - allocation if allocation is not None else 100},
+            ],
+        })
+
+
+@pytest.mark.parametrize('conditions', [
+    [],
+    [{'name': 'Treatment', 'allocation_percent': 100}],
+    [
+        {'name': 'Control', 'allocation_percent': 0, 'is_control': True, 'enabled': False},
+        {'name': 'Treatment', 'allocation_percent': 100},
+    ],
+    [
+        {'name': 'Control', 'allocation_percent': 0, 'is_control': True},
+        {'name': 'Second control', 'allocation_percent': 100, 'is_control': True},
+    ],
+])
+def test_allocation_requires_exactly_one_enabled_control(conditions):
+    with pytest.raises(ValidationError):
+        ExperimentPlanForm.model_validate({'items': [essay_item()], 'conditions': conditions})
+
+
 def test_timing_and_activation_validation():
     with pytest.raises(ValidationError):
         ResponseTimingForm(mode='DELAYED')
@@ -129,6 +171,40 @@ def test_condition_assignment_is_stable_and_weighted():
     assert first == second
     assert first[0] in {'control', 'treatment'}
     assert 0 <= first[2] < 1
+
+
+@pytest.mark.parametrize('draw', [0, 0.3, 0.9999999999999999, 1.0])
+@pytest.mark.parametrize('reverse', [False, True])
+def test_whole_group_assignment_never_selects_zero_or_disabled(monkeypatch, draw, reverse):
+    conditions = [
+        SimpleNamespace(id='control', enabled=True, allocation_percent=0),
+        SimpleNamespace(id='treatment', enabled=True, allocation_percent=100),
+        SimpleNamespace(id='disabled', enabled=False, allocation_percent=100),
+        SimpleNamespace(id='zero', enabled=True, allocation_percent=0),
+    ]
+    plan = SimpleNamespace(id='plan', conditions=conditions[::-1] if reverse else conditions)
+    monkeypatch.setattr('open_webui.utils.experiment_perturbations._hmac_value', lambda *args: (draw, 'assignment'))
+    assert assign_condition(plan, 'participant') == ('treatment', 'assignment', draw)
+
+
+@pytest.mark.parametrize(('draw', 'expected'), [(0, 'control'), (0.299, 'control'), (0.3, 'treatment'), (1, 'treatment')])
+def test_mixed_assignment_preserves_weighted_boundaries(monkeypatch, draw, expected):
+    plan = SimpleNamespace(id='plan', conditions=[
+        SimpleNamespace(id='control', enabled=True, allocation_percent=30),
+        SimpleNamespace(id='zero', enabled=True, allocation_percent=0),
+        SimpleNamespace(id='treatment', enabled=True, allocation_percent=70),
+        SimpleNamespace(id='trailing-zero', enabled=True, allocation_percent=0),
+    ])
+    monkeypatch.setattr('open_webui.utils.experiment_perturbations._hmac_value', lambda *args: (draw, 'assignment'))
+    assert assign_condition(plan, 'participant')[0] == expected
+
+
+def test_assignment_without_eligible_conditions():
+    plan = SimpleNamespace(id='plan', conditions=[
+        SimpleNamespace(id='zero', enabled=True, allocation_percent=0),
+        SimpleNamespace(id='disabled', enabled=False, allocation_percent=100),
+    ])
+    assert assign_condition(plan, 'participant') == (None, None, None)
 
 
 def test_request_only_injections_preserve_genuine_message():

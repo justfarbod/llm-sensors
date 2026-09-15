@@ -1809,12 +1809,24 @@ async def chat_completion(
                         status_code=409,
                         detail='A required experiment notice must be acknowledged before continuing.',
                     )
+            from open_webui.utils.experiment_prompt_budgets import resolve_scope
+            question_id = (form_data.get('metadata') or {}).get('experiment_question_id')
+            resolve_scope(session_task, question_id)
+            if question_id:
+                from open_webui.models.question_tasks import QuestionTaskQuestion
+                async with get_async_db_context() as question_db:
+                    question = await question_db.get(QuestionTaskQuestion, question_id)
+                    if not question or question.task_id != session_task.question_task_id:
+                        raise HTTPException(status_code=422, detail='Question does not belong to this task.')
+            if model_item.get('direct'):
+                raise HTTPException(status_code=403, detail='Experiment chat requires a server-managed model.')
             form_data['metadata'] = {
                 **(form_data.get('metadata') or {}),
                 'experiment_session_id': experiment_session.id,
                 'experiment_session_task_id': session_task.id,
             }
             experiment_context = {
+                'experiment_question_id': question_id,
                 'experiment_session_id': experiment_session.id,
                 'experiment_session_task_id': session_task.id,
                 'experiment_chat_task_id': (
@@ -2123,7 +2135,12 @@ async def chat_completion(
 
     async def process_chat(request, form_data, user, metadata, model, tasks=None):
         perturbation_context = None
+        budget_run = None
         try:
+            if session_task:
+                from open_webui.utils.experiment_prompt_budgets import BudgetRun
+                budget_run = BudgetRun(session_task, user.id, metadata.get('experiment_question_id'))
+                await budget_run.start()
             if experiment_session and experiment_plan and session_task:
                 from open_webui.utils.experiment_perturbations import prepare_request
 
@@ -2168,10 +2185,19 @@ async def chat_completion(
                 response = await wrap_streaming_response(response, perturbation_context)
                 response = await apply_nonstream_timing(response, perturbation_context)
 
+            if budget_run:
+                response = budget_run.observe(response)
             ctx = await build_chat_response_context(request, form_data, user, model, metadata, tasks, events)
-
-            return await process_chat_response(response, ctx)
+            ctx['experiment_budget_run'] = budget_run
+            result = await process_chat_response(response, ctx)
+            if budget_run:
+                if isinstance(result, StreamingResponse):
+                    return budget_run.wrap_delivery(result)
+                await budget_run.finish(not ctx.get('experiment_generation_failed', False))
+            return result
         except asyncio.CancelledError:
+            if budget_run:
+                await asyncio.shield(budget_run.finish(False))
             log.info('Chat processing was cancelled')
             if perturbation_context:
                 try:
@@ -2198,6 +2224,8 @@ async def chat_completion(
                 pass
             raise  # re-raise to ensure proper task cancellation handling
         except Exception as e:
+            if budget_run:
+                await budget_run.finish(False)
             if perturbation_context:
                 try:
                     from open_webui.utils.experiment_perturbations import update_request
@@ -2245,7 +2273,7 @@ async def chat_completion(
                 # a proper HTTP response; without this the function would
                 # return None which FastAPI serializes as null.  #23924
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
+                    status_code=e.status_code if isinstance(e, HTTPException) else status.HTTP_400_BAD_REQUEST,
                     detail=error_detail,
                 )
         finally:
@@ -2409,7 +2437,7 @@ async def generate_messages(
     openai_payload = convert_anthropic_to_openai_payload(form_data)
 
     # Route through the existing chat_completion handler
-    response = await chat_completion(request, openai_payload, user)
+    response = await chat_completion(request, openai_payload, user, _experiment_access=_experiment_access)
 
     # Convert response back to Anthropic format
     if isinstance(response, StreamingResponse):

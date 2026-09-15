@@ -1,3 +1,4 @@
+import type { TaskPromptUsage } from '$lib/utils/experimentPromptBudgets';
 import { WEBUI_API_BASE_URL } from '$lib/constants';
 
 export type ExperimentState =
@@ -38,6 +39,7 @@ export type ExperimentCurrent = {
 };
 
 export type ExperimentTaskSummary = {
+	llm_prompt_usage?: TaskPromptUsage | null;
 	id: string;
 	position: number;
 	task_type: 'ESSAY' | 'QUESTION' | 'SURVEY';
@@ -153,3 +155,6 @@ export const getExperimentResponseSnapshot = (token: string, requestId: string) 
 		token,
 		`/runtime/responses/${requestId}`
 	);
+
+export const getExperimentPromptUsage = (token: string, taskId: string) =>
+	request<TaskPromptUsage | null>(token, `/tasks/${taskId}/prompt-usage`);

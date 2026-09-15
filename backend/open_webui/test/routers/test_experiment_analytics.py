@@ -5,7 +5,13 @@ from types import SimpleNamespace
 
 from fastapi import HTTPException
 from fastapi.routing import APIRoute
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
+from open_webui.internal.db import Base
+from open_webui.models.groups import Group, GroupMember
+from open_webui.models.question_submissions import QuestionSubmission
+from open_webui.models.survey_submissions import SurveySubmission, SurveyResponse, SurveyResponseChoice
+from open_webui.models.survey_tasks import SurveyTask, SurveyQuestion, SurveyChoice
 from open_webui.routers import chats, tasks, users
 from open_webui.routers import experiment_analytics as experiment_analytics_router
 from open_webui.routers.experiment_analytics import (
@@ -39,6 +45,9 @@ from open_webui.utils.experiments import require_chat_access_dependency, require
 def test_dashboard_routes_are_admin_only_and_match_contract():
     routes = [route for route in router.routes if isinstance(route, APIRoute)]
     assert {route.path for route in routes} == {
+        '/workflows',
+        '/workflows/{workflow_id}',
+        '/workflows/{workflow_id}/steps/{step_key}',
         '/filters',
         '/overview',
         '/participants',
@@ -340,6 +349,253 @@ def test_session_dto_uses_ordered_essay_task_topic_and_submission():
     assert row['essay_id'] == 'essay'
     assert row['essay_submitted'] is True
     assert row['essay_word_count'] == 12
+
+
+def test_participant_list_and_detail_include_pipeline_tasks_and_survey_answers(monkeypatch):
+    monkeypatch.setattr('open_webui.internal.db.DATABASE_ENABLE_SESSION_SHARING', True)
+
+    async def check():
+        engine = create_async_engine('sqlite+aiosqlite:///:memory:')
+        try:
+            async with engine.begin() as connection:
+                await connection.run_sync(Base.metadata.create_all)
+            async with AsyncSession(engine, expire_on_commit=False) as db:
+                timestamps = {'created_at': 1_000_000_000, 'updated_at': 5_000_000_000}
+                db.add_all(
+                    [
+                        User(id='participant', name='Participant', role='user'),
+                        Group(
+                            id='group',
+                            user_id='admin',
+                            name='Study',
+                            description='',
+                            data={'config': {'experiment_mode_enabled': True}},
+                            **timestamps,
+                        ),
+                        GroupMember(id='member', group_id='group', user_id='participant'),
+                        ExperimentSession(
+                            id='session',
+                            user_id='participant',
+                            group_id='group',
+                            state='COMPLETED',
+                            completed_at=5_000_000_000,
+                            **timestamps,
+                        ),
+                        SurveyTask(id='survey-template', family_id='survey-family', title='Survey', **timestamps),
+                    ]
+                )
+                stages = []
+                for position, (task_id, task_type, title) in enumerate(
+                    [
+                        ('pre', 'SURVEY', 'Pre-survey'),
+                        ('essay', 'ESSAY', 'Essay'),
+                        ('questions', 'QUESTION', 'Knowledge task'),
+                        ('post', 'SURVEY', 'Post-survey'),
+                        ('optional', 'SURVEY', 'Optional follow-up'),
+                    ]
+                ):
+                    stage = ExperimentSessionTask(
+                        id=task_id,
+                        experiment_session_id='session',
+                        position=position,
+                        task_type=task_type,
+                        title=title,
+                        status='SKIPPED' if task_id == 'optional' else 'FINALIZED',
+                        survey_task_id='survey-template' if task_type == 'SURVEY' else None,
+                        survey_required=task_id != 'optional',
+                        started_at=1_000_000_000,
+                        finalized_at=4_000_000_000,
+                        **timestamps,
+                    )
+                    stages.append(stage)
+                db.add_all(stages)
+                db.add(
+                    QuestionSubmission(
+                        id='question-submission',
+                        session_task_id='questions',
+                        user_id='participant',
+                        status='SUBMITTED',
+                        grading_status='COMPLETED',
+                        current_score=Decimal('0'),
+                        maximum_score=Decimal('5'),
+                        submitted_at=3_000_000_000,
+                        **timestamps,
+                    )
+                )
+                for position, (question_id, question_type, prompt) in enumerate(
+                    [
+                        ('choice', 'SINGLE_CHOICE', 'Experience?'),
+                        ('scale', 'SCALE', 'Helpfulness?'),
+                        ('text', 'SHORT_TEXT', 'Comments?'),
+                    ]
+                ):
+                    db.add(
+                        SurveyQuestion(
+                            id=question_id,
+                            task_id='survey-template',
+                            question_type=question_type,
+                            prompt=prompt,
+                            position=position,
+                            **timestamps,
+                        )
+                    )
+                db.add(SurveyChoice(id='often', question_id='choice', text='Often', position=0))
+                for task_id in ('pre', 'post', 'optional'):
+                    db.add(
+                        SurveySubmission(
+                            id=f'{task_id}-submission',
+                            session_task_id=task_id,
+                            user_id='participant',
+                            status='SKIPPED' if task_id == 'optional' else 'SUBMITTED',
+                            submitted_at=None if task_id == 'optional' else 3_000_000_000,
+                            skipped_at=4_000_000_000 if task_id == 'optional' else None,
+                            **timestamps,
+                        )
+                    )
+                # Insert responses out of order: detail must follow the survey's question order.
+                for question_id, values in [
+                    ('text', {'text_answer': 'Helpful feedback'}),
+                    ('choice', {}),
+                    ('scale', {'scale_answer': 4}),
+                ]:
+                    db.add(
+                        SurveyResponse(
+                            id=f'post-{question_id}',
+                            submission_id='post-submission',
+                            question_id=question_id,
+                            is_answered=True,
+                            **values,
+                            **timestamps,
+                        )
+                    )
+                db.add(SurveyResponseChoice(response_id='post-choice', choice_id='often'))
+                await db.commit()
+
+                rows = await experiment_analytics_router._participant_rows(
+                    db, experiment_analytics_router.DashboardFilters()
+                )
+                assert len(rows) == 1
+                assert [task['title'] for task in rows[0]['tasks']] == [stage.title for stage in stages]
+                assert rows[0]['tasks'][-1]['status'] == 'SKIPPED'
+                # Pipeline answers do not live in the legacy JSON survey columns.
+                assert rows[0]['pre_survey_completed'] is True
+                assert rows[0]['post_survey_completed'] is True
+                assert rows[0]['pre_survey_submitted_at'] == 3
+                assert rows[0]['post_survey_submitted_at'] == 3
+                detail = await experiment_analytics_router.session_detail('session', user=SimpleNamespace(), db=db)
+                assert detail['pre_survey'] is None
+                assert detail['post_survey'] is None
+                assert detail['pre_survey_completed'] is True
+                assert detail['post_survey_completed'] is True
+                assert detail['timeline']['pre_survey_submitted_at'] == 3
+                assert detail['timeline']['post_survey_submitted_at'] == 3
+                assert detail['timeline']['pre_survey_started_at'] == 1
+                assert detail['timeline']['post_survey_started_at'] == 1
+                assert detail['timeline']['essay_submitted_at'] == 4
+                assert detail['timeline']['task_submitted_at'] == 4
+                assert detail['pre_survey_duration'] == 2
+                assert detail['post_survey_duration'] == 2
+                assert detail['tasks'][0]['survey_submission']['status'] == 'SUBMITTED'
+                question = detail['tasks'][2]['question_submission']
+                assert question['submission_id'] == 'question-submission'
+                assert question['score'] == 0
+                assert question['maximum_score'] == 5
+                assert question['submitted_at'] == 3
+                survey = detail['tasks'][3]['survey_submission']
+                assert [answer['prompt'] for answer in survey['answers']] == [
+                    'Experience?',
+                    'Helpfulness?',
+                    'Comments?',
+                ]
+                assert [answer['value'] for answer in survey['answers']] == [['Often'], 4, 'Helpful feedback']
+                assert detail['tasks'][4]['survey_submission']['skipped_at'] == 4
+
+                overview = await experiment_analytics_router.overview(user=SimpleNamespace(), db=db)
+                assert overview['metrics']['pre_survey_completed'] == 1
+                assert overview['metrics']['post_survey_completed'] == 1
+                assert overview['metrics']['essays_submitted'] == 1
+                survey_results = await experiment_analytics_router.surveys(
+                    page=1, limit=25, user=SimpleNamespace(), db=db
+                )
+                assert survey_results['responses']['items'][0]['pre_survey_completed'] is True
+                assert survey_results['responses']['items'][0]['post_survey_completed'] is True
+                exported = await experiment_analytics_router.export_participants(
+                    ExportRequest(ids=['session'], format='json'), user=SimpleNamespace(), db=db
+                )
+                exported_rows = json.loads(''.join([chunk async for chunk in exported.body_iterator]))
+                assert exported_rows[0]['post_survey_completed'] is True
+                assert exported_rows[0]['post_survey_submitted_at'] == 3
+
+                unfinished = ExperimentSessionTask(
+                    id='unfinished', position=0, title='Questions', task_type='QUESTION', status='LOCKED'
+                )
+                empty = await experiment_analytics_router._session_task_details(db, [unfinished])
+                assert empty[0]['question_submission'] is None
+                assert empty[0]['started_at'] is None
+        finally:
+            await engine.dispose()
+
+    asyncio.run(check())
+
+
+def test_survey_milestones_follow_positions_and_distinguish_skipped_and_unfinished_surveys():
+    session = ExperimentSession(id='session')
+    tasks = [
+        ExperimentSessionTask(id='pre-1', position=0, task_type='SURVEY', started_at=1_000_000_000),
+        ExperimentSessionTask(id='pre-2', position=1, task_type='SURVEY', started_at=2_000_000_000),
+        ExperimentSessionTask(
+            id='question', position=2, task_type='QUESTION', status='FINALIZED', finalized_at=5_000_000_000
+        ),
+        ExperimentSessionTask(id='between', position=3, task_type='SURVEY'),
+        ExperimentSessionTask(
+            id='question-2', position=4, task_type='QUESTION', status='FINALIZED', finalized_at=7_000_000_000
+        ),
+        ExperimentSessionTask(id='post', position=5, task_type='SURVEY', started_at=8_000_000_000),
+    ]
+    submissions = {
+        'pre-1': SurveySubmission(status='SUBMITTED', submitted_at=2_000_000_000),
+        'pre-2': SurveySubmission(status='DRAFT'),
+        'between': SurveySubmission(status='SUBMITTED', submitted_at=6_000_000_000),
+        'post': SurveySubmission(status='SKIPPED', skipped_at=9_000_000_000),
+    }
+    milestone = experiment_analytics_router._session_milestones(session, tasks, submissions)
+    assert milestone['pre_survey_completed'] is False
+    assert milestone['pre_survey_submitted_at'] is None
+    assert milestone['post_survey_completed'] is False
+    assert milestone['post_survey_submitted_at'] is None
+    assert milestone['post_survey_skipped_at'] == 9
+    assert milestone['essay_submitted'] is False
+    assert milestone['task_submitted_at'] == 7
+
+    submissions['pre-2'] = SurveySubmission(status='SUBMITTED', submitted_at=3_000_000_000)
+    milestone = experiment_analytics_router._session_milestones(session, tasks, submissions)
+    assert milestone['pre_survey_completed'] is True
+    assert milestone['pre_survey_submitted_at'] == 3
+    assert milestone['pre_survey_duration'] == 2
+
+    # A survey between work tasks must not become a pre- or post-survey.
+    middle_only = experiment_analytics_router._session_milestones(session, tasks[2:5], submissions)
+    assert middle_only['pre_survey_completed'] is False
+    assert middle_only['post_survey_completed'] is False
+
+
+def test_legacy_survey_completion_times_are_preserved():
+    session = ExperimentSession(
+        pre_survey={'answer': 1},
+        post_survey={'answer': 2},
+        pre_survey_submitted_at=2_000_000_000,
+        post_survey_submitted_at=8_000_000_000,
+        essay_id='essay',
+        writing_started_at=3_000_000_000,
+        essay_submitted_at=6_000_000_000,
+    )
+    milestone = experiment_analytics_router._session_milestones(session, [], {})
+    assert milestone['pre_survey_completed'] is True
+    assert milestone['post_survey_completed'] is True
+    assert milestone['pre_survey_submitted_at'] == 2
+    assert milestone['post_survey_submitted_at'] == 8
+    assert milestone['post_survey_duration'] == 2
+    assert milestone['writing_duration'] == 3
 
 
 def test_histogram_handles_empty_and_zero_usage():

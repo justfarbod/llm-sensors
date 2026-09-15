@@ -54,6 +54,7 @@ const request = async (token: string, path = '', init: RequestInit = {}) => {
 	return body;
 };
 
+export const getQuestionTask = (token: string, id: string) => request(token, `/${id}`);
 export const getQuestionTasks = (token: string) => request(token);
 export const createQuestionTask = (token: string, body: QuestionTaskForm) =>
 	request(token, '', { method: 'POST', body: JSON.stringify(body) });

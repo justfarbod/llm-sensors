@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 import random
 import time
 import uuid
@@ -6,13 +7,14 @@ from typing import Optional
 
 from fastapi import HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import BigInteger, Boolean, Column, ForeignKey, Integer, Text, delete, func, select
+from sqlalchemy import BigInteger, Boolean, Column, ForeignKey, Integer, JSON, Text, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from open_webui.internal.db import Base, get_async_db_context
 from open_webui.models.essays import EssayTopic, EssayTopicModel
+from open_webui.models.experiment_prompt_budgets import LLMPromptBudget, default_prompt_budget
 from open_webui.models.groups import Group
-from open_webui.models.question_tasks import QuestionTask, QuestionTaskStatus
+from open_webui.models.question_tasks import QuestionTask, QuestionTaskStatus, QuestionTaskQuestion
 from open_webui.models.survey_tasks import SurveyTask, SurveyTaskStatus
 from open_webui.models.experiment_perturbations import (
     ExperimentCondition,
@@ -62,6 +64,11 @@ class ExperimentPlan(Base):
     __tablename__ = 'experiment_plan'
 
     id = Column(Text, primary_key=True)
+    source_workflow_id = Column(Text, nullable=True)
+    source_workflow_name = Column(Text, nullable=True)
+    source_workflow_revision = Column(Integer, nullable=True)
+    workflow_origin = Column(Text, nullable=True)
+    configuration_fingerprint = Column(Text, nullable=True)
     group_id = Column(Text, ForeignKey('group.id', ondelete='CASCADE'), nullable=False)
     version = Column(Integer, nullable=False, default=1)
     status = Column(Text, nullable=False, default='DRAFT')
@@ -78,10 +85,12 @@ class ExperimentPlanItem(Base):
     __tablename__ = 'experiment_plan_item'
 
     id = Column(Text, primary_key=True)
+    source_step_key = Column(Text, nullable=True)
     plan_id = Column(Text, ForeignKey('experiment_plan.id', ondelete='CASCADE'), nullable=False)
     position = Column(Integer, nullable=False)
     task_type = Column(Text, nullable=False)
     title = Column(Text, nullable=False)
+    llm_prompt_budget = Column(JSON, nullable=True, default=default_prompt_budget)
     question_task_id = Column(Text, ForeignKey('question_task.id', ondelete='RESTRICT'), nullable=True)
     essay_topic_mode = Column(Text, nullable=True)
     essay_topic_id = Column(Text, ForeignKey('essay_topic.id', ondelete='RESTRICT'), nullable=True)
@@ -106,6 +115,7 @@ class ExperimentSessionTask(Base):
     position = Column(Integer, nullable=False)
     task_type = Column(Text, nullable=False)
     title = Column(Text, nullable=False)
+    llm_prompt_budget = Column(JSON, nullable=True, default=default_prompt_budget)
     status = Column(Text, nullable=False)
     essay_topic_id = Column(Text, nullable=True)
     essay_topic_title = Column(Text, nullable=True)
@@ -126,6 +136,7 @@ class PlanItemForm(BaseModel):
     id: Optional[str] = None
     task_type: ExperimentTaskType
     title: str = Field(min_length=1, max_length=500)
+    llm_prompt_budget: LLMPromptBudget | None = Field(default_factory=LLMPromptBudget)
     question_task_id: Optional[str] = None
     essay_topic_mode: Optional[EssayTopicMode] = None
     essay_topic_id: Optional[str] = None
@@ -137,6 +148,12 @@ class PlanItemForm(BaseModel):
     @model_validator(mode='after')
     def validate_item(self):
         self.title = self.title.strip()
+        if self.task_type == ExperimentTaskType.SURVEY:
+            self.llm_prompt_budget = None
+        else:
+            self.llm_prompt_budget = self.llm_prompt_budget or LLMPromptBudget()
+            if self.task_type == ExperimentTaskType.ESSAY and self.llm_prompt_budget.mode != 'TASK':
+                raise ValueError('Essay tasks require a task-wide prompt budget.')
         if self.task_type == ExperimentTaskType.QUESTION:
             if not self.question_task_id:
                 raise ValueError('Question Task is required.')
@@ -179,8 +196,6 @@ class ExperimentPlanForm(BaseModel):
         controls = [condition for condition in enabled_conditions if condition.is_control]
         if len(controls) != 1:
             raise ValueError('An experiment plan must contain exactly one enabled control condition.')
-        if controls[0].allocation_percent < 1:
-            raise ValueError('The control condition must receive at least one percent allocation.')
         if sum(condition.allocation_percent for condition in enabled_conditions) != 100:
             raise ValueError('Enabled condition allocation percentages must total 100.')
         item_ids = {item.id for item in self.items if item.id}
@@ -194,10 +209,12 @@ class ExperimentPlanForm(BaseModel):
 
 
 class PlanItemModel(BaseModel):
+    source_step_key: Optional[str] = None
     id: str
     position: int
     task_type: ExperimentTaskType
     title: str
+    llm_prompt_budget: LLMPromptBudget | None = Field(default_factory=LLMPromptBudget)
     question_task_id: Optional[str] = None
     essay_topic_mode: Optional[EssayTopicMode] = None
     essay_topic_id: Optional[str] = None
@@ -208,6 +225,11 @@ class PlanItemModel(BaseModel):
 
 
 class ExperimentPlanModel(BaseModel):
+    source_workflow_id: Optional[str] = None
+    source_workflow_name: Optional[str] = None
+    source_workflow_revision: Optional[int] = None
+    workflow_origin: Optional[str] = None
+    configuration_fingerprint: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -237,6 +259,7 @@ class SessionTaskModel(BaseModel):
     essay_topic_id: Optional[str] = None
     essay_topic_title: Optional[str] = None
     essay_topic_question: Optional[str] = None
+    llm_prompt_budget: LLMPromptBudget | None = Field(default_factory=LLMPromptBudget)
     question_task_id: Optional[str] = None
     survey_task_id: Optional[str] = None
     survey_required: bool = True
@@ -249,7 +272,8 @@ class SessionTaskModel(BaseModel):
 
 class ExperimentPlanTable:
     async def get_plan(self, plan_id: str, db: Optional[AsyncSession] = None):
-        async with get_async_db_context(db) as db:
+        # Applied workflows resolve uncommitted copied content in this transaction.
+        async with (nullcontext(db) if db is not None else get_async_db_context()) as db:
             plan = await db.get(ExperimentPlan, plan_id)
             if not plan:
                 return None
@@ -365,6 +389,7 @@ class ExperimentPlanTable:
                 **{
                     column: getattr(plan, column)
                     for column in (
+                        'source_workflow_id', 'source_workflow_name', 'source_workflow_revision', 'workflow_origin', 'configuration_fingerprint',
                         'id',
                         'group_id',
                         'version',
@@ -380,10 +405,12 @@ class ExperimentPlanTable:
                 },
                 items=[
                     PlanItemModel(
+                        source_step_key=item.source_step_key,
                         id=item.id,
                         position=item.position,
                         task_type=item.task_type,
                         title=item.title,
+                        llm_prompt_budget=item.llm_prompt_budget,
                         question_task_id=item.question_task_id,
                         essay_topic_mode=item.essay_topic_mode,
                         essay_topic_id=item.essay_topic_id,
@@ -433,6 +460,12 @@ class ExperimentPlanTable:
                         raise HTTPException(
                             status_code=422, detail='Every Question Task item must reference a published task.'
                         )
+                    if item.llm_prompt_budget.mode == 'PER_QUESTION':
+                        ids = set((await db.execute(select(QuestionTaskQuestion.id).where(
+                            QuestionTaskQuestion.task_id == task.id
+                        ))).scalars())
+                        if set(item.llm_prompt_budget.question_limits) != ids:
+                            raise HTTPException(status_code=422, detail='Prompt limits must cover exactly the selected task questions.')
                 elif item.task_type == ExperimentTaskType.SURVEY:
                     task = survey_tasks.get(item.survey_task_id)
                     if not task or task.status != SurveyTaskStatus.PUBLISHED.value:
@@ -515,6 +548,7 @@ class ExperimentPlanTable:
                         position=position,
                         task_type=form_item.task_type.value,
                         title=form_item.title,
+                        llm_prompt_budget=form_item.llm_prompt_budget.model_dump() if form_item.llm_prompt_budget else None,
                         question_task_id=(
                             form_item.question_task_id if form_item.task_type == ExperimentTaskType.QUESTION else None
                         ),
@@ -710,6 +744,7 @@ class ExperimentPlanTable:
                 position=session_position,
                 task_type=item.task_type.value,
                 title=item.title,
+                llm_prompt_budget=item.llm_prompt_budget.model_dump() if item.llm_prompt_budget else None,
                 status=SessionTaskStatus.LOCKED.value,
                 essay_topic_id=topic.id if topic else None,
                 essay_topic_title=topic.title if topic else None,

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { ExperimentTaskSummary } from '$lib/apis/experiments';
 
 import {
 	allowsPromptSuggestions,
@@ -6,6 +7,7 @@ import {
 	createExperimentStateLoader,
 	experimentAllowsApp,
 	experimentNeedsGate,
+	experimentTaskAfterSurvey,
 	firstUnlockedExperimentTask,
 	isExperimentParticipant,
 	sameExperimentState,
@@ -14,6 +16,66 @@ import {
 } from './experiments';
 
 describe('experiment task selection', () => {
+	const betweenSurvey: ExperimentTaskSummary[] = [
+		{ id: 'essay', task_type: 'ESSAY', position: 0, title: 'Essay', status: 'FINALIZED' },
+		{ id: 'survey', task_type: 'SURVEY', position: 1, title: 'Survey', status: 'ACTIVE' },
+		{ id: 'question', task_type: 'QUESTION', position: 2, title: 'Question', status: 'LOCKED' }
+	];
+
+	it.each(['FINALIZED', 'SKIPPED'] as const)(
+		'advances from the submitted essay to questions when the survey is %s',
+		(status) => {
+			const afterSurvey: ExperimentTaskSummary[] = [
+				betweenSurvey[0],
+				{ ...betweenSurvey[1], status },
+				{ ...betweenSurvey[2], status: 'ACTIVE' }
+			];
+			expect(experimentTaskAfterSurvey(betweenSurvey, afterSurvey)?.id).toBe('question');
+			// Subsequent refreshes must allow the participant to review earlier tasks.
+			expect(experimentTaskAfterSurvey(afterSurvey, afterSurvey)).toBeUndefined();
+		}
+	);
+
+	it('selects an available task after a survey unlocks a task block', () => {
+		expect(
+			experimentTaskAfterSurvey(betweenSurvey, [
+				{ ...betweenSurvey[0], status: 'COMPLETED' },
+				{ ...betweenSurvey[1], status: 'FINALIZED' },
+				{ ...betweenSurvey[2], status: 'AVAILABLE' }
+			])?.id
+		).toBe('question');
+	});
+
+	it('waits while the survey is still active', () => {
+		expect(experimentTaskAfterSurvey(betweenSurvey, betweenSurvey)).toBeUndefined();
+	});
+
+	it('waits for consecutive surveys before advancing to the next task', () => {
+		const nextSurvey: ExperimentTaskSummary[] = [
+			betweenSurvey[0],
+			{ ...betweenSurvey[1], status: 'FINALIZED' },
+			{ ...betweenSurvey[1], id: 'second-survey', position: 2 },
+			{ ...betweenSurvey[2], position: 3 }
+		];
+		expect(experimentTaskAfterSurvey(betweenSurvey, nextSurvey)).toBeUndefined();
+		expect(
+			experimentTaskAfterSurvey(nextSurvey, [
+				...nextSurvey.slice(0, 2),
+				{ ...nextSurvey[2], status: 'FINALIZED' },
+				{ ...nextSurvey[3], status: 'ACTIVE' }
+			])?.id
+		).toBe('question');
+	});
+
+	it('does not select an earlier task after the final survey', () => {
+		expect(
+			experimentTaskAfterSurvey(betweenSurvey.slice(0, 2), [
+				betweenSurvey[0],
+				{ ...betweenSurvey[1], status: 'FINALIZED' }
+			])
+		).toBeUndefined();
+	});
+
 	it('selects the first task as soon as a prefix survey unlocks it', () => {
 		const tasks = [
 			{ id: 'survey', task_type: 'SURVEY', position: 0, title: 'Pre', status: 'FINALIZED' },

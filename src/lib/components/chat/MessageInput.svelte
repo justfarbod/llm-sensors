@@ -1,4 +1,6 @@
 <script lang="ts">
+	import PromptBudget from '$lib/components/experiment/PromptBudget.svelte';
+	import { promptBudgetBlocked } from '$lib/stores/experimentPromptBudgets';
 	import { features as buildFeatures } from '$lib/features';
 	import DOMPurify from 'dompurify';
 	import { toast } from 'svelte-sonner';
@@ -1127,6 +1129,8 @@
 	});
 </script>
 
+<PromptBudget />
+
 <ToolServersModal bind:show={showTools} {selectedToolIds} />
 
 <InputVariablesModal
@@ -1246,7 +1250,8 @@
 								document.getElementById('chat-input')?.focus();
 
 								if ($settings?.speechAutoSend ?? false) {
-									dispatch('submit', prompt);
+									if ($promptBudgetBlocked) return;
+							dispatch('submit', prompt);
 								}
 							}}
 						/>
@@ -2086,7 +2091,7 @@
 															? 'bg-black text-white hover:bg-gray-900 dark:bg-white dark:text-black dark:hover:bg-gray-100 '
 															: 'text-white bg-gray-200 dark:text-gray-900 dark:bg-gray-700 disabled'} transition rounded-full p-1.5 self-center"
 														type="submit"
-														disabled={(prompt === '' && files.length === 0) || uploadPending}
+														disabled={$promptBudgetBlocked || (prompt === '' && files.length === 0) || uploadPending}
 													>
 														{#if uploadPending}
 															<Spinner className="size-5" />

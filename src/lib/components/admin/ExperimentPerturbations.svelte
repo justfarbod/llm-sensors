@@ -235,7 +235,12 @@
 			<h3 class="font-medium">{$i18n.t('LLM behavior and response perturbations')}</h3>
 			<p class="mt-1 text-xs text-gray-500">
 				{$i18n.t(
-					'Conditions are assigned once per participant. Hidden prompt instructions are applied only on the server.'
+					'Conditions are assigned once per participant. Set one condition to 100% and all others, including control, to 0% to give every new participant in the group the same condition. Existing sessions keep their assigned condition.'
+				)}
+			</p>
+			<p class="mt-1 text-xs text-gray-500">
+				{$i18n.t(
+					'Behaviors within a condition work together. For example, enable the reliability-warning modal and delayed responses in the same condition: warnings follow their configured cadence and delays apply to every response. Hidden prompt instructions are applied only on the server.'
 				)}
 			</p>
 		</div>
@@ -262,6 +267,7 @@
 						type="number"
 						min="0"
 						max="100"
+						step="1"
 						bind:value={condition.allocation_percent}
 					/>
 				</label>

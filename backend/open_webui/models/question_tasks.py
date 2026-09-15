@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 import re
 import time
 import uuid
@@ -353,7 +354,8 @@ class QuestionTaskTable:
             return [await self.get_task(task.id, db=db) for task in tasks]
 
     async def get_task(self, task_id: str, db: Optional[AsyncSession] = None) -> Optional[QuestionTaskModel]:
-        async with get_async_db_context(db) as db:
+        # Applied workflows resolve uncommitted copied content in this transaction.
+        async with (nullcontext(db) if db is not None else get_async_db_context()) as db:
             task = await db.get(QuestionTask, task_id)
             if not task:
                 return None

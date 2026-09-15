@@ -221,6 +221,7 @@ class ExperimentCondition(Base):
     __tablename__ = 'experiment_condition'
 
     id = Column(Text, primary_key=True)
+    source_condition_key = Column(Text, nullable=True)
     plan_id = Column(Text, ForeignKey('experiment_plan.id', ondelete='CASCADE'), nullable=False)
     name = Column(Text, nullable=False)
     position = Column(Integer, nullable=False)
