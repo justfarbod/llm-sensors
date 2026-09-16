@@ -242,7 +242,7 @@ Python 3.11 or newer is required.
 
 ## Admin Panel Guide
 
-For a complete guide on how to use the Admin Panel to manage studies, workflows, and participants, please refer to the [Admin Panel Guide](ADMIN_PANEL_GUIDE.md).
+For a complete guide on how to use the Admin Panel to manage studies, workflows, and participants, please refer to the [Admin Panel Guide](ADMIN_PANEL_GUIDE.md). You can also download an [example workflow zip file](https://drive.google.com/file/d/1o3GPGC1hqfreddtL3Q9bhgC8dqeHnB_B/view?usp=sharing) to import and explore.
 
 ## Upstream Open WebUI
 

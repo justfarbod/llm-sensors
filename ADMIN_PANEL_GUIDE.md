@@ -122,7 +122,7 @@ Behaviors within a condition operate together. Separate groups can each use a di
 
 ## 6. Downloading and Uploading Workflows
 
-Workflows can be easily saved to your computer or shared with others.
+Workflows can be easily saved to your computer or shared with others. You can download an [example workflow zip file](https://drive.google.com/file/d/1o3GPGC1hqfreddtL3Q9bhgC8dqeHnB_B/view?usp=sharing) to test the import functionality.
 
 - **Downloading (Exporting)**: From the Workflow Library or the Workflow Editor, click the **Export** button. This will download a `.zip` file containing your workflow and all of its associated tasks.
 - **Uploading (Importing)**: In the Workflow Library, click the **Import** button and upload a `.zip` file to instantly restore a workflow and all of its tasks.
