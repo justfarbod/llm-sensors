@@ -27,8 +27,8 @@
 
 	const tabs = [
 		{ id: 'overview', label: 'Overview' },
-		{ id: 'workflows', label: 'Workflows' },
 		{ id: 'participants', label: 'Participants' },
+		{ id: 'workflows', label: 'Workflows' },
 		{ id: 'usage', label: 'LLM Usage' }
 	];
 	const i18n: Writable<i18nType> = getContext('i18n');
@@ -606,6 +606,7 @@
 			onToggle={toggleSelected}
 			onSort={sortBy}
 			{fmtDuration}
+			{fmtDate}
 		/>
 	{:else if activeTab === 'usage'}
 		<Usage {data} onOpen={openDetail} />

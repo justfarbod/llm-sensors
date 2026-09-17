@@ -9,6 +9,7 @@
 	export let onToggle: (id: string) => void;
 	export let onSort: (key: string) => void;
 	export let fmtDuration: (n: number) => string;
+	export let fmtDate: (n: any) => string;
 </script>
 
 <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
@@ -18,6 +19,8 @@
 				><th>Select</th><th><button on:click={() => onSort('name')}>Participant</button></th><th
 					>Workflow / configuration</th
 				><th>Group / condition</th><th>Status / progress</th><th
+					><button on:click={() => onSort('session_start_time')}>Start / end time</button></th
+				><th
 					><button on:click={() => onSort('session_duration')}>Duration</button></th
 				><th><button on:click={() => onSort('prompts')}>Whole-run AI</button></th></tr
 			></thead
@@ -62,14 +65,17 @@
 							/ {row.task_progress?.total ?? 0}
 						</div></td
 					>
-					<td class="whitespace-nowrap">{fmtDuration(row.session_duration)}</td><td
+					<td class="whitespace-nowrap"
+						>{fmtDate(row.session_start_time)}
+						<div class="mt-1">– {fmtDate(row.session_completion_time)}</div></td
+					><td class="whitespace-nowrap">{fmtDuration(row.session_duration)}</td><td
 						>{row.prompts} prompts
 						<div class="mt-1 text-xs text-gray-500">
 							{row.responses} responses · {row.total_tokens} tokens
 						</div></td
 					>
 				</tr>{:else}<tr
-					><td colspan="7" class="py-12 text-center text-gray-500"
+					><td colspan="8" class="py-12 text-center text-gray-500"
 						>No participants match these filters.</td
 					></tr
 				>{/each}</tbody
