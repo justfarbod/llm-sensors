@@ -166,6 +166,7 @@ class TelemetryEventForm(BaseModel):
     question_id: Optional[str] = None
     submission_id: Optional[str] = None
     key_class: Optional[str] = None
+    key_value: Optional[str] = Field(default=None, min_length=1, max_length=40)
     inter_key_interval_ms: Optional[int] = Field(default=None, ge=0, le=3_600_000)
     hold_duration_ms: Optional[int] = Field(default=None, ge=0, le=600_000)
     modifiers: Optional[ModifierFlags] = None
@@ -198,7 +199,7 @@ class TelemetryEventForm(BaseModel):
             raise ValueError('Unsupported telemetry event type.')
         present = set(self.model_fields_set) - {'event_id', 'type', 'timestamp', 'field', 'session_task_id', 'question_id', 'submission_id'}
         allowed = {
-            'keystroke': {'key_class', 'inter_key_interval_ms', 'hold_duration_ms', 'modifiers'},
+            'keystroke': {'key_class', 'inter_key_interval_ms', 'hold_duration_ms', 'modifiers', 'key_value'},
             'copy': {'text_length', 'line_count'},
             'cut': {'text_length', 'line_count'},
             'paste': {'text_length', 'line_count'},
@@ -225,8 +226,10 @@ class TelemetryEventForm(BaseModel):
         }[self.type]
         if present - allowed:
             raise ValueError('Event contains fields that are not valid for its type.')
-        if self.type == 'keystroke' and (self.key_class not in KEY_CLASSES or self.modifiers is None):
-            raise ValueError('Keystroke events require a valid key class and modifier flags.')
+        if self.type == 'keystroke' and (
+            self.key_class not in KEY_CLASSES or self.modifiers is None or not self.key_value
+        ):
+            raise ValueError('Keystroke events require a valid key class, key value, and modifier flags.')
         if self.type == 'visibility_change' and self.visibility is None:
             raise ValueError('Visibility events require a visibility state.')
         if self.type == 'focus_return' and self.away_duration_ms is None:

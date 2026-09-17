@@ -38,6 +38,7 @@ def event(event_type='keystroke', **values):
         base.update(
             {
                 'key_class': 'printable',
+                'key_value': 'a',
                 'inter_key_interval_ms': 2500,
                 'hold_duration_ms': 80,
                 'modifiers': {'ctrl': False, 'shift': False, 'alt': False, 'meta': False},
@@ -159,6 +160,25 @@ def test_schema_rejects_raw_text_unknown_fields_and_batch_limits():
         )
 
 
+def test_keystroke_requires_key_value_within_length_bounds():
+    with pytest.raises(ValidationError):
+        TelemetryBatchForm.model_validate(
+            {'experiment_session_id': 'session', 'events': [event(key_value=None)]}
+        )
+    with pytest.raises(ValidationError):
+        TelemetryBatchForm.model_validate(
+            {'experiment_session_id': 'session', 'events': [event(key_value='')]}
+        )
+    with pytest.raises(ValidationError):
+        TelemetryBatchForm.model_validate(
+            {'experiment_session_id': 'session', 'events': [event(key_value='x' * 41)]}
+        )
+    valid = TelemetryBatchForm.model_validate(
+        {'experiment_session_id': 'session', 'events': [event(key_value='ArrowLeft')]}
+    )
+    assert valid.events[0].key_value == 'ArrowLeft'
+
+
 def test_schema_v2_accepts_complete_tab_metadata_and_rejects_v1_or_incognito():
     valid = tab_event()
     form = TelemetryBatchForm.model_validate(
@@ -196,7 +216,7 @@ def test_heartbeat_derives_session_and_checks_identity_permissions_and_version(m
         form = ExtensionHeartbeatForm(
             extension_version=version,
             extension_id=extension_id,
-            schema_version=2,
+            schema_version=3,
             tabs_permission=tabs_permission,
             incognito_allowed=False,
             origin='https://research.test',

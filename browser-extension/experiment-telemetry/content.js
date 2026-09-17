@@ -180,6 +180,7 @@
 				const telemetryEvent = {
 					...eventBase('keystroke', context),
 					key_class: classification,
+					key_value: event.key,
 					modifiers: modifiers(event)
 				};
 				if (lastKeydown?.contextKey === contextKey)

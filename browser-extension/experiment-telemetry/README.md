@@ -1,8 +1,10 @@
 # Open WebUI Experiment Telemetry Extension
 
-This Manifest V3 Chrome extension records privacy-bounded writing interaction metadata and the full lifecycle metadata of every non-incognito tab in normal browser windows while an authenticated Open WebUI experiment is `IN_PROGRESS`.
+This Manifest V3 Chrome extension records writing interaction metadata and the full lifecycle metadata of every non-incognito tab in normal browser windows while an authenticated Open WebUI experiment is `IN_PROGRESS`.
 
-It does **not** record typed text, answer text, clipboard contents, screenshots, cookies, request bodies, historical browsing history, or incognito tabs. It does record complete current-tab URLs (including paths, queries, and fragments), titles, favicon URLs, tab state, and tab lifecycle events. Chrome therefore displays its **Read your browsing history** permission warning.
+It records the exact key pressed for every keystroke in a tracked field (essay, question, and chat inputs), along with key-hold duration, inter-key timing, and modifier state. It does **not** record keystrokes in password-type inputs, which are excluded entirely. It also does not record clipboard contents (only the length and line count of copied, cut, or pasted text), screenshots, cookies, request bodies, or historical browsing history, and it excludes incognito tabs. It does record complete current-tab URLs (including paths, queries, and fragments), titles, favicon URLs, tab state, and tab lifecycle events. Chrome therefore displays its **Read your browsing history** permission warning.
+
+Because literal keystrokes are recorded for tracked fields, this data can reconstruct the text a participant typed there. The participant disclosure and institutional data-handling policy (e.g. IRB/consent materials) must reflect this plainly, not just the tab-URL retention noted below.
 
 ## Fixed-origin build
 
@@ -76,6 +78,15 @@ participants have received the update. Schema version and permissions are unchan
 Version 2.0.2 reads the local origin during builds and shows the built origin in the toolbar tooltip.
 The version number alone does not identify the origin: after any rebuild, reload the unpacked
 extension in `chrome://extensions`, then check its tooltip matches the experiment tab's address.
+
+Version 2.1.0 adds the literal key value (`key_value`) to every keystroke event and raises the
+schema version to 3, which the server now requires for keystroke telemetry. The extension's
+minimum-version gate (`EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION`) must also be raised to `2.1.0`
+so the server continues to require it. Rebuild and redeploy the extension together with this
+server configuration change; a 2.0.x extension connecting to a server already requiring schema
+version 3 will have its keystroke batches rejected, and the start gate will report the extension
+as not ready until participants update. Reload existing experiment pages once after upgrading, as
+with the 2.0.0 to 2.0.1 upgrade.
 
 ## Verification
 
