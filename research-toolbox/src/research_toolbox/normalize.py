@@ -13,6 +13,9 @@ from .errors import ExportValidationError
 TABLE_COLUMNS: dict[str, list[str]] = {
     "sessions": ["session_id"],
     "session_summaries": ["session_id"],
+    "session_workflows": ["session_id", "workflow_id", "configuration_id"],
+    "session_usage": ["session_id"],
+    "task_usage": ["session_id", "task_id"],
     "participants": ["participant_id"],
     "groups": ["group_id"],
     "memberships": ["session_id", "group_id", "participant_id"],
@@ -570,10 +573,13 @@ def _collect_chats(collector: _Collector, chats: Any, session_id: str | None, se
         )
         for message_order, message in enumerate(_items(wrapper.get("messages"))):
             message_id = _definition_id(message)
+            message_task_id = (_record(message) or {}).get("experiment_session_task_id") or task_id
             collector.add(
                 "messages",
                 message,
-                context={**context, "message_id": message_id, "_parent_order": message_order},
+                context={
+                    **context, "task_id": message_task_id, "message_id": message_id, "_parent_order": message_order
+                },
                 session_order=session_order,
             )
         for attachment_order, attachment in enumerate(_items(wrapper.get("attachments"))):
@@ -650,9 +656,20 @@ def _collect_session(collector: _Collector, value: Any, session_order: int) -> N
     collector.add(
         "sessions",
         session_record,
-        context={"session_id": session_id},
+        context={"session_id": session_id, **({"is_demo": wrapper["is_demo"]} if "is_demo" in wrapper else {})},
         session_order=session_order,
     )
+    # These sections were added without changing the schema major version.
+    # Keep them optional so older exports continue to load in strict mode.
+    for table, key in (("session_workflows", "workflow"), ("session_usage", "usage")):
+        if wrapper.get(key) is not None:
+            collector.add(table, wrapper[key], context={"session_id": session_id}, session_order=session_order)
+    usage = _mapping(wrapper.get("usage")) or {}
+    for task_id, task_usage in (_mapping(usage.get("by_task")) or {}).items():
+        collector.add(
+            "task_usage", task_usage, context={"session_id": session_id, "task_id": task_id},
+            session_order=session_order,
+        )
     if wrapper.get("derived_summary") is not None:
         collector.add(
             "session_summaries",

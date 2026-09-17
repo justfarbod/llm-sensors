@@ -25,6 +25,11 @@ export default defineConfig({
 		APP_BUILD_HASH: JSON.stringify(process.env.APP_BUILD_HASH || 'dev-build')
 	},
 	server: {
+		allowedHosts: process.env.CODESPACES === 'true'
+        ? [
+            `${process.env.CODESPACE_NAME}-5173.${process.env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}`
+          ]
+        : [],
 		proxy: {
 			// Keep development traffic same-origin so local clients and temporary
 			// reverse proxies only need to expose the Vite port.

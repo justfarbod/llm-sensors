@@ -20,6 +20,11 @@ def session_overview(dataset: ExperimentDataset) -> pd.DataFrame:
         drop = [column for column in ("_session_order", "_record_order") if column in summaries]
         sessions = sessions.merge(summaries.drop(columns=drop), on="session_id", how="left", suffixes=("", "_summary"))
 
+    workflows = dataset.session_workflows
+    if not workflows.empty:
+        columns = [column for column in workflows if not column.startswith("_")]
+        sessions = sessions.merge(workflows[columns], on="session_id", how="left", suffixes=("", "_workflow"))
+
     groups = dataset.groups
     if not groups.empty and "group_id" in sessions:
         group_columns = _available(groups, ["group_id", "name"])

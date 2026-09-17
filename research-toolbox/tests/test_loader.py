@@ -121,3 +121,45 @@ def test_identified_export_emits_privacy_warning(fixture_path):
         data = load_export(document)
     assert any("identified" in warning for warning in data.validation_warnings)
     assert data.participants.loc[0, "email"] == "person@example.test"
+
+
+def test_current_workflow_and_usage_sections(fixture_path, tmp_path):
+    data = load_export(fixture_path, strict=True)
+    assert data.sessions["is_demo"].tolist() == [True, True]
+    assert data.session_workflows.loc[0, "workflow_id"] == "workflow-transport"
+    assert data.session_usage.loc[0, "attribution"] == "linked"
+    assert data.session_usage.loc[0, "unattributed"]["total_tokens"] == 0
+    assert data.task_usage.loc[0, "task_id"] == "task-essay"
+    assert data.task_usage.loc[0, "total_tokens"] == 50
+    assert "title" in data.questions and "prompt" not in data.questions
+    overview = data.session_overview()
+    assert overview.loc[0, "workflow_name"] == "Transport study"
+    assert overview.loc[0, "configuration_id"] == "configuration-transport-v3"
+    manifest = data.materialize(tmp_path, tables=["session_workflows", "session_usage", "task_usage"])
+    assert "by_task" in manifest["tables"]["session_usage"]["json_encoded_columns"]
+
+
+def test_older_exports_do_not_require_workflow_or_usage(fixture_path):
+    document = json.loads(fixture_path.read_text())
+    for session in document["sessions"]:
+        for key in ("workflow", "usage", "is_demo"):
+            session.pop(key)
+    data = load_export(document, strict=True)
+    assert data.session_workflows.empty
+    assert data.session_usage.empty
+    assert data.task_usage.empty
+    assert len(data.session_overview()) == 2
+
+
+def test_message_task_attribution_overrides_chat_task(fixture_path):
+    document = json.loads(fixture_path.read_text())
+    chat = document["sessions"][0]["chats"][0]
+    # A chat can span multiple tasks; current messages carry their own provenance.
+    chat["messages"][0]["experiment_session_task_id"] = "task-question"
+    data = load_export(document, strict=True)
+    assert data.messages.loc[0, "task_id"] == "task-question"
+    assert data.messages.loc[1, "task_id"] == "task-essay"
+    chat["record"]["experiment_session_task_id"] = None
+    data = load_export(document, strict=True)
+    assert data.messages.loc[0, "task_id"] == "task-question"
+    assert pd.isna(data.messages.loc[1, "task_id"])

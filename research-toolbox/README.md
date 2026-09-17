@@ -5,6 +5,13 @@ analysis-ready pandas tables. It retains the original document, preserves open-e
 dictionaries/lists, and adds explicit lineage columns so records can be joined without reconstructing database
 relationships from reference IDs.
 
+Use the participant dashboard's full session export (`/export/sessions`), not its flat participant summary
+CSV/JSON. The notebook supports current schema 1.x exports, including workflow identity, demo status, and
+session/task usage attribution, as well as historical exports without those sections. Set `EXPORT_PATH`
+in the notebook (or `RESEARCH_EXPORT_PATH` before launching Jupyter) to analyze your own file. Timelines
+default to the first exported session; change `SESSION_ID` to inspect another run. Empty and incomplete
+sessions, including runs without essays, questions, chats, or telemetry, are supported.
+
 The toolbox is a standalone source package. It runs separately from the Open WebUI development servers and should be
 installed in its own Python 3.11-or-newer environment.
 
@@ -63,7 +70,8 @@ attribute such as `data.telemetry_events`.
 
 | Area | Tables |
 | --- | --- |
-| Session context | `sessions`, `session_summaries`, `participants`, `groups`, `memberships`, `topics`, `topic_assignments` |
+| Session context | `sessions`, `session_summaries`, `session_workflows`, `participants`, `groups`, `memberships`, `topics`, `topic_assignments` |
+| Exported usage | `session_usage`, `task_usage` |
 | Plans and conditions | `plans`, `plan_items`, `plan_item_topics`, `conditions`, `session_conditions`, `condition_task_scopes`, `prompt_injections`, `warning_modals`, `response_timings` |
 | Definitions | `question_tasks`, `questions`, `question_choices`, `question_blanks`, `accepted_blank_answers`, `free_text_configs`, `survey_tasks`, `survey_questions`, `survey_choices` |
 | Work and responses | `session_tasks`, `essays`, `question_submissions`, `question_responses`, `question_response_choices`, `question_blank_answers`, `grading_attempts`, `score_overrides`, `survey_submissions`, `survey_responses`, `survey_response_choices` |
@@ -78,6 +86,14 @@ being expanded into unstable, export-specific columns.
 Shared definitions are deduplicated by ID. If repeated definitions conflict, tolerant mode keeps the first and records
 a warning; strict mode raises. Materialization writes one file per selected table and a `manifest.json`. Nested columns
 are encoded as canonical JSON strings in files and listed in the manifest.
+
+`sessions.is_demo` preserves the export's demo flag when present. `session_workflows` stores workflow and
+configuration identity per session, and `session_overview()` includes these fields. `session_usage` preserves
+the exported totals, attribution method, message IDs, nested `by_task` map, and `unattributed` totals;
+`task_usage` exposes one row per entry in `by_task`. Message `task_id` uses message-level provenance when
+available, falling back to the chat's task. Question definitions use `title` and `description`; the notebook
+also accepts the older example's `prompt` field. Conditions remain grouped by assigned `condition_id`,
+so different plans' conditions are not automatically pooled across workflow configurations.
 
 ## Analysis helpers
 

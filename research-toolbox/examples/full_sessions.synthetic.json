@@ -9,6 +9,9 @@
   },
   "sessions": [
     {
+      "workflow": {"workflow_id": "workflow-transport", "workflow_name": "Transport study", "configuration_id": "configuration-transport-v3", "source_revision": 3, "workflow_origin": "workflow", "plan_version": 3},
+      "is_demo": true,
+      "usage": {"prompts": 1, "responses": 1, "input_tokens": 20, "output_tokens": 30, "total_tokens": 50, "by_task": {"task-essay": {"prompts": 1, "responses": 1, "input_tokens": 20, "output_tokens": 30, "total_tokens": 50}}, "unattributed": {"prompts": 0, "responses": 0, "input_tokens": 0, "output_tokens": 0, "total_tokens": 0}, "attribution": "linked", "message_ids": ["message-user-1", "message-assistant-1"]},
       "session": {
         "id": "session-complete",
         "user_id": "P-ALPHA",
@@ -133,7 +136,7 @@
               "record": {"id": "question-task-1", "family_id": "question-family-1", "version": 1, "title": "Transport knowledge", "status": "PUBLISHED", "created_at": 1699600000000000000, "updated_at": 1699600000000000000},
               "questions": [
                 {
-                  "record": {"id": "question-1", "task_id": "question-task-1", "position": 0, "prompt": "Choose the sustainable mode", "question_type": "SINGLE_CHOICE", "max_score": 1.0, "created_at": 1699600000000000000, "updated_at": 1699600000000000000},
+                  "record": {"id": "question-1", "task_id": "question-task-1", "position": 0, "title": "Choose the sustainable mode", "description": "Select one answer.", "question_type": "SINGLE_CHOICE", "max_score": 1.0, "created_at": 1699600000000000000, "updated_at": 1699600000000000000},
                   "choices": [
                     {"id": "choice-bike", "question_id": "question-1", "position": 0, "text": "Bicycle", "is_correct": true},
                     {"id": "choice-car", "question_id": "question-1", "position": 1, "text": "Private car", "is_correct": false}
@@ -143,7 +146,7 @@
                   "image": {"id": "file-question-image", "filename": "transport.png", "hash": "sha256-image", "content_type": "image/png", "size": 1024, "meta": {"content_type": "image/png", "size": 1024}, "created_at": 1699600000, "updated_at": 1699600000}
                 },
                 {
-                  "record": {"id": "question-2", "task_id": "question-task-1", "position": 1, "prompt": "Complete: Public ___", "question_type": "FILL_BLANKS", "max_score": 1.0, "created_at": 1699600000000000000, "updated_at": 1699600000000000000},
+                  "record": {"id": "question-2", "task_id": "question-task-1", "position": 1, "title": "Complete: Public ___", "description": "Fill in the missing word.", "question_type": "FILL_BLANK", "max_score": 1.0, "created_at": 1699600000000000000, "updated_at": 1699600000000000000},
                   "choices": [],
                   "blanks": [{"record": {"id": "blank-1", "question_id": "question-2", "position": 0}, "accepted_answers": [{"id": "accepted-1", "blank_id": "blank-1", "position": 0, "answer": "transport"}]}],
                   "free_text_config": {"question_id": "question-2", "grading_mode": "EXACT", "case_sensitive": false},
@@ -209,7 +212,7 @@
             "responses": [
               {
                 "record": {"id": "question-response-1", "submission_id": "question-submission-1", "question_id": "question-1", "is_answered": true, "grading_status": "COMPLETED", "generated_score": 1.0, "effective_score": 1.0, "grading_method": "DETERMINISTIC", "created_at": 1700000041000000000, "updated_at": 1700000045000000000},
-                "question": {"record": {"id": "question-1", "task_id": "question-task-1", "position": 0, "prompt": "Choose the sustainable mode", "question_type": "SINGLE_CHOICE", "max_score": 1.0, "created_at": 1699600000000000000, "updated_at": 1699600000000000000}, "choices": [{"id": "choice-bike", "question_id": "question-1", "position": 0, "text": "Bicycle", "is_correct": true}, {"id": "choice-car", "question_id": "question-1", "position": 1, "text": "Private car", "is_correct": false}], "blanks": [], "free_text_config": null, "image": null},
+                "question": {"record": {"id": "question-1", "task_id": "question-task-1", "position": 0, "title": "Choose the sustainable mode", "description": "Select one answer.", "question_type": "SINGLE_CHOICE", "max_score": 1.0, "created_at": 1699600000000000000, "updated_at": 1699600000000000000}, "choices": [{"id": "choice-bike", "question_id": "question-1", "position": 0, "text": "Bicycle", "is_correct": true}, {"id": "choice-car", "question_id": "question-1", "position": 1, "text": "Private car", "is_correct": false}], "blanks": [], "free_text_config": null, "image": null},
                 "selected_choices": [{"record": {"response_id": "question-response-1", "choice_id": "choice-bike"}, "choice": {"id": "choice-bike", "question_id": "question-1", "position": 0, "text": "Bicycle", "is_correct": true}}],
                 "blank_answers": [],
                 "grading_attempts": [{"id": "grading-attempt-1", "response_id": "question-response-1", "method": "DETERMINISTIC", "status": "COMPLETED", "awarded_score": 1.0, "started_at": 1700000044000000000, "completed_at": 1700000044100000000, "created_at": 1700000044000000000}],
@@ -268,6 +271,9 @@
       }
     },
     {
+      "workflow": {"workflow_id": null, "workflow_name": "Historical experiment", "configuration_id": null, "source_revision": null, "workflow_origin": "unknown", "plan_version": null},
+      "is_demo": true,
+      "usage": {"prompts": 0, "responses": 0, "input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "by_task": {}, "unattributed": {"prompts": 0, "responses": 0, "input_tokens": 0, "output_tokens": 0, "total_tokens": 0}, "attribution": "none", "message_ids": []},
       "session": {"id": "session-incomplete", "user_id": "P-BETA", "group_id": "group-1", "state": "TASK_REQUIRED", "created_at": 1700100000000000000, "updated_at": 1700100010000000000, "plan_id": null, "condition_id": null},
       "derived_summary": {"session_id": "session-incomplete", "participant_id": "P-BETA", "group_id": "group-1", "group_name": "Synthetic research group", "condition_id": null, "state": "TASK_REQUIRED", "session_start_time": 1700100000, "session_completion_time": null, "session_duration": null, "prompts": 0, "responses": 0, "total_tokens": 0, "essay_word_count": null, "total_keystrokes": 0, "total_time_away_ms": 0, "telemetry_summary": {}},
       "participant": {"id": "P-BETA", "participant_id": "P-BETA", "role": "user", "last_active_at": 1700100010, "created_at": 1699000100, "updated_at": 1700100010},
