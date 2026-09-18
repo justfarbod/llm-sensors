@@ -30,17 +30,11 @@ router = APIRouter()
 
 
 async def validate_experiment_group(form_data: GroupForm, db: AsyncSession, group_id: Optional[str] = None):
-    config = (form_data.data or {}).get('config', {})
-    if not config.get('experiment_mode_enabled', False):
-        return
     if group_id and await ExperimentPlans.get_active_for_group(group_id, db=db):
         return
     topics = await EssayTopics.get_topics(db=db)
     if not topics:
         raise HTTPException(status_code=422, detail='Experiment Mode requires at least one essay topic.')
-    if config.get('essay_topic_mode', 'random') == 'specific':
-        if config.get('essay_topic_id') not in {topic.id for topic in topics}:
-            raise HTTPException(status_code=422, detail='Experiment Mode requires a valid specific essay topic.')
 
 ############################
 # GetFunctions

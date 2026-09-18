@@ -1050,16 +1050,8 @@ def _date_bucket(value: int) -> str:
     return datetime.fromtimestamp(value / NS).strftime('%Y-%m-%d')
 
 
-def _enabled_groups(groups):
-    return [group for group in groups if (group.data or {}).get('config', {}).get('experiment_mode_enabled', False)]
-
-
 async def _group_context(db: AsyncSession):
-    all_groups = await Groups.get_all_groups(db=db)
-    deployed = set((await db.execute(select(ExperimentPlan.group_id))).scalars())
-    deployed.update((await db.execute(select(ExperimentSession.group_id))).scalars())
-    enabled_ids = {group.id for group in _enabled_groups(all_groups)}
-    groups = [group for group in all_groups if group.id in deployed or group.id in enabled_ids]
+    groups = await Groups.get_all_groups(db=db)
     return groups, {group.id: group for group in groups}
 
 

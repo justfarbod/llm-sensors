@@ -6,11 +6,9 @@
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import Modal from '$lib/components/common/Modal.svelte';
 	import General from './General.svelte';
-	import Permissions from './Permissions.svelte';
 	import Users from './Users.svelte';
 	import { DEFAULT_PERMISSIONS } from '$lib/constants/permissions';
 	import UserPlusSolid from '$lib/components/icons/UserPlusSolid.svelte';
-	import WrenchSolid from '$lib/components/icons/WrenchSolid.svelte';
 	import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 	import XMark from '$lib/components/icons/XMark.svelte';
 
@@ -21,11 +19,8 @@
 	export let edit = false;
 
 	export let group = null;
-	export let defaultPermissions = {};
 
-	export let custom = true;
-
-	export let tabs = ['general', 'permissions', 'users'];
+	export let tabs = ['general', 'users'];
 
 	let selectedTab = 'general';
 	let loading = false;
@@ -97,14 +92,10 @@
 	<div>
 		<div class=" flex justify-between dark:text-gray-100 px-5 pt-4 mb-1.5">
 			<div class=" text-lg font-medium self-center font-primary">
-				{#if custom}
-					{#if edit}
-						{$i18n.t('Edit User Group')}
-					{:else}
-						{$i18n.t('Add User Group')}
-					{/if}
+				{#if edit}
+					{$i18n.t('Edit User Group')}
 				{:else}
-					{$i18n.t('Edit Default Permissions')}
+					{$i18n.t('Add User Group')}
 				{/if}
 			</div>
 			<button
@@ -160,24 +151,6 @@
 								</button>
 							{/if}
 
-							{#if tabs.includes('permissions')}
-								<button
-									class="px-0.5 py-1 max-w-fit w-fit rounded-lg flex-1 lg:flex-none flex text-right transition {selectedTab ===
-									'permissions'
-										? ''
-										: ' text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'}"
-									on:click={() => {
-										selectedTab = 'permissions';
-									}}
-									type="button"
-								>
-									<div class=" self-center mr-2">
-										<WrenchSolid />
-									</div>
-									<div class=" self-center">{$i18n.t('Permissions')}</div>
-								</button>
-							{/if}
-
 							{#if tabs.includes('users')}
 								<button
 									class="px-0.5 py-1 max-w-fit w-fit rounded-lg flex-1 lg:flex-none flex text-right transition {selectedTab ===
@@ -209,14 +182,12 @@
 											showDeleteConfirmDialog = true;
 										}}
 									/>
-								{:else if selectedTab == 'permissions'}
-									<Permissions bind:permissions bind:data {defaultPermissions} {custom} />
 								{:else if selectedTab == 'users'}
 									<Users bind:userCount groupId={group?.id} />
 								{/if}
 							</div>
 
-							{#if ['general', 'permissions'].includes(selectedTab)}
+							{#if selectedTab === 'general'}
 								<div class="flex justify-end pt-3 text-sm font-medium gap-1.5">
 									<button
 										class="px-3.5 py-1.5 text-sm font-medium bg-black hover:bg-gray-900 text-white dark:bg-white dark:text-black dark:hover:bg-gray-100 transition rounded-full flex items-center gap-2 whitespace-nowrap {loading

@@ -9,7 +9,7 @@ from sqlalchemy import BigInteger, Column, Float, Index, Text, UniqueConstraint,
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from open_webui.internal.db import Base, JSONField, get_async_db_context
-from open_webui.models.essays import Essay, EssayModel, EssayTopicModel, EssayTopics, resolve_topic_for_group
+from open_webui.models.essays import Essay, EssayModel, EssayTopicModel, resolve_topic_for_group
 from open_webui.models.experiment_plans import (
     ExperimentPlan,
     ExperimentPlans,
@@ -174,9 +174,7 @@ class ExperimentTable:
 
         async with get_async_db_context(db) as db:
             groups = await Groups.get_groups_by_member_id(user.id, db=db)
-            enabled = [
-                group for group in groups if (group.data or {}).get('config', {}).get('experiment_mode_enabled', False)
-            ]
+            enabled = groups
             if len(enabled) > 1:
                 return (
                     ExperimentState.CONFIGURATION_ERROR,
@@ -200,14 +198,9 @@ class ExperimentTable:
             if existing:
                 return ExperimentState(existing.state), ExperimentSessionModel.model_validate(existing), None
 
-            config = (group.data or {}).get('config', {})
             plan = await ExperimentPlans.get_active_for_group(group.id, db=db)
             topic = None
             if plan is None:
-                if config.get('essay_topic_mode', 'random') == 'specific':
-                    topic_id = config.get('essay_topic_id')
-                    if not topic_id or await EssayTopics.get_topic_by_id(topic_id, db=db) is None:
-                        return ExperimentState.CONFIGURATION_ERROR, None, 'The configured essay topic is unavailable.'
                 topic = await resolve_topic_for_group(user.id, group, db=db)
                 if topic is None:
                     return ExperimentState.CONFIGURATION_ERROR, None, 'No essay topic is available for this experiment.'

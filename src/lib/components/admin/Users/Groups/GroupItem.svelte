@@ -14,7 +14,6 @@
 		name: 'Admins',
 		user_ids: [1, 2, 3]
 	};
-	export let defaultPermissions = {};
 
 	export let setGroups = () => {};
 
@@ -56,7 +55,6 @@
 	bind:show={showEdit}
 	edit
 	{group}
-	{defaultPermissions}
 	onSubmit={updateHandler}
 	onDelete={deleteHandler}
 />

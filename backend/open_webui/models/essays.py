@@ -252,10 +252,6 @@ async def resolve_topic_for_group(
     if not topics:
         return None
     topic_by_id = {topic.id: topic for topic in topics}
-    config = (group.data or {}).get('config', {})
-    topic_id = config.get('essay_topic_id')
-    if config.get('essay_topic_mode', 'random') == 'specific' and topic_id in topic_by_id:
-        return topic_by_id[topic_id]
     assignment = await EssayTopicAssignments.get_assignment(user_id, group.id, db=db)
     if assignment and assignment.topic_id in topic_by_id:
         return topic_by_id[assignment.topic_id]
@@ -266,20 +262,11 @@ async def resolve_topic_for_group(
 
 async def resolve_user_topic(user, db: Optional[AsyncSession] = None) -> Optional[EssayTopicModel]:
     if user.role == 'admin':
-        return await resolve_topic_for_group(
-            user.id, SimpleNamespace(id='__admin__', data={'config': {'essay_topic_mode': 'random'}}), db=db
-        )
+        return await resolve_topic_for_group(user.id, SimpleNamespace(id='__admin__'), db=db)
     groups = await Groups.get_groups_by_member_id(user.id, db=db)
-    eligible = [
-        group for group in groups if (group.data or {}).get('config', {}).get('experiment_mode_enabled', False)
-    ]
-    eligible.sort(key=lambda group: group.id)
-    configured = [
-        group for group in eligible
-        if (group.data or {}).get('config', {}).get('essay_topic_mode') in ('random', 'specific')
-    ]
+    eligible = sorted(groups, key=lambda group: group.id)
     if eligible:
-        return await resolve_topic_for_group(user.id, (configured or eligible)[0], db=db)
+        return await resolve_topic_for_group(user.id, eligible[0], db=db)
     return await resolve_topic_for_group(
-        user.id, SimpleNamespace(id='__default__', data={'config': {'essay_topic_mode': 'random'}}), db=db
+        user.id, SimpleNamespace(id='__default__'), db=db
     )

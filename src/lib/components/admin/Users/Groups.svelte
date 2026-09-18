@@ -91,7 +91,7 @@
 	<EditGroupModal
 		bind:show={showAddGroupModal}
 		edit={false}
-		tabs={['general', 'permissions']}
+		tabs={['general']}
 		permissions={defaultPermissions}
 		onSubmit={addGroupHandler}
 	/>
@@ -182,7 +182,7 @@
 		{#if filteredGroups.length !== 0}
 			<div class="my-2 px-3 grid grid-cols-1 gap-1">
 				{#each filteredGroups as group}
-					<GroupItem {group} {setGroups} {defaultPermissions} />
+					<GroupItem {group} {setGroups} />
 				{/each}
 			</div>
 		{:else}
