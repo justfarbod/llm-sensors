@@ -33,8 +33,6 @@ async def validate_experiment_group(form_data: GroupForm, db: AsyncSession, grou
     config = (form_data.data or {}).get('config', {})
     if not config.get('experiment_mode_enabled', False):
         return
-    if not (form_data.permissions or {}).get('features', {}).get('essay_sidebar', False):
-        raise HTTPException(status_code=422, detail='Experiment Mode requires Essay Sidebar permission.')
     if group_id and await ExperimentPlans.get_active_for_group(group_id, db=db):
         return
     topics = await EssayTopics.get_topics(db=db)

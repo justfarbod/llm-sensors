@@ -1353,7 +1353,7 @@ DEFAULT_MODEL_PARAMS = PersistentConfig(
 DEFAULT_USER_ROLE = PersistentConfig(
     'DEFAULT_USER_ROLE',
     'ui.default_user_role',
-    os.getenv('DEFAULT_USER_ROLE', 'pending'),
+    os.getenv('DEFAULT_USER_ROLE', 'user'),
 )
 
 DEFAULT_GROUP_ID = PersistentConfig(
@@ -1481,57 +1481,57 @@ USER_PERMISSIONS_CALENDAR_ALLOW_PUBLIC_SHARING = (
 )
 
 USER_PERMISSIONS_ACCESS_GRANTS_ALLOW_USERS = (
-    os.environ.get('USER_PERMISSIONS_ACCESS_GRANTS_ALLOW_USERS', 'True').lower() == 'true'
+    os.environ.get('USER_PERMISSIONS_ACCESS_GRANTS_ALLOW_USERS', 'False').lower() == 'true'
 )
 
 
-USER_PERMISSIONS_CHAT_CONTROLS = os.environ.get('USER_PERMISSIONS_CHAT_CONTROLS', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_CONTROLS = os.environ.get('USER_PERMISSIONS_CHAT_CONTROLS', 'False').lower() == 'true'
 
-USER_PERMISSIONS_CHAT_VALVES = os.environ.get('USER_PERMISSIONS_CHAT_VALVES', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_VALVES = os.environ.get('USER_PERMISSIONS_CHAT_VALVES', 'False').lower() == 'true'
 
-USER_PERMISSIONS_CHAT_SYSTEM_PROMPT = os.environ.get('USER_PERMISSIONS_CHAT_SYSTEM_PROMPT', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_SYSTEM_PROMPT = os.environ.get('USER_PERMISSIONS_CHAT_SYSTEM_PROMPT', 'False').lower() == 'true'
 
-USER_PERMISSIONS_CHAT_PARAMS = os.environ.get('USER_PERMISSIONS_CHAT_PARAMS', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_PARAMS = os.environ.get('USER_PERMISSIONS_CHAT_PARAMS', 'False').lower() == 'true'
 
-USER_PERMISSIONS_CHAT_FILE_UPLOAD = os.environ.get('USER_PERMISSIONS_CHAT_FILE_UPLOAD', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_FILE_UPLOAD = os.environ.get('USER_PERMISSIONS_CHAT_FILE_UPLOAD', 'False').lower() == 'true'
 
-USER_PERMISSIONS_CHAT_WEB_UPLOAD = os.environ.get('USER_PERMISSIONS_CHAT_WEB_UPLOAD', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_WEB_UPLOAD = os.environ.get('USER_PERMISSIONS_CHAT_WEB_UPLOAD', 'False').lower() == 'true'
 
-USER_PERMISSIONS_CHAT_DELETE = os.environ.get('USER_PERMISSIONS_CHAT_DELETE', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_DELETE = os.environ.get('USER_PERMISSIONS_CHAT_DELETE', 'False').lower() == 'true'
 
-USER_PERMISSIONS_CHAT_DELETE_MESSAGE = os.environ.get('USER_PERMISSIONS_CHAT_DELETE_MESSAGE', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_DELETE_MESSAGE = os.environ.get('USER_PERMISSIONS_CHAT_DELETE_MESSAGE', 'False').lower() == 'true'
 
 USER_PERMISSIONS_CHAT_CONTINUE_RESPONSE = (
-    os.environ.get('USER_PERMISSIONS_CHAT_CONTINUE_RESPONSE', 'True').lower() == 'true'
+    os.environ.get('USER_PERMISSIONS_CHAT_CONTINUE_RESPONSE', 'False').lower() == 'true'
 )
 
 USER_PERMISSIONS_CHAT_REGENERATE_RESPONSE = (
-    os.environ.get('USER_PERMISSIONS_CHAT_REGENERATE_RESPONSE', 'True').lower() == 'true'
+    os.environ.get('USER_PERMISSIONS_CHAT_REGENERATE_RESPONSE', 'False').lower() == 'true'
 )
 
-USER_PERMISSIONS_CHAT_RATE_RESPONSE = os.environ.get('USER_PERMISSIONS_CHAT_RATE_RESPONSE', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_RATE_RESPONSE = os.environ.get('USER_PERMISSIONS_CHAT_RATE_RESPONSE', 'False').lower() == 'true'
 
-USER_PERMISSIONS_CHAT_EDIT = os.environ.get('USER_PERMISSIONS_CHAT_EDIT', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_EDIT = os.environ.get('USER_PERMISSIONS_CHAT_EDIT', 'False').lower() == 'true'
 
-USER_PERMISSIONS_CHAT_SHARE = os.environ.get('USER_PERMISSIONS_CHAT_SHARE', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_SHARE = os.environ.get('USER_PERMISSIONS_CHAT_SHARE', 'False').lower() == 'true'
 
 USER_PERMISSIONS_CHAT_ALLOW_PUBLIC_SHARING = (
     os.environ.get('USER_PERMISSIONS_CHAT_ALLOW_PUBLIC_SHARING', 'False').lower() == 'true'
 )
 
-USER_PERMISSIONS_CHAT_EXPORT = os.environ.get('USER_PERMISSIONS_CHAT_EXPORT', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_EXPORT = os.environ.get('USER_PERMISSIONS_CHAT_EXPORT', 'False').lower() == 'true'
 
-USER_PERMISSIONS_CHAT_STT = os.environ.get('USER_PERMISSIONS_CHAT_STT', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_STT = os.environ.get('USER_PERMISSIONS_CHAT_STT', 'False').lower() == 'true'
 
-USER_PERMISSIONS_CHAT_TTS = os.environ.get('USER_PERMISSIONS_CHAT_TTS', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_TTS = os.environ.get('USER_PERMISSIONS_CHAT_TTS', 'False').lower() == 'true'
 
-USER_PERMISSIONS_CHAT_CALL = os.environ.get('USER_PERMISSIONS_CHAT_CALL', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_CALL = os.environ.get('USER_PERMISSIONS_CHAT_CALL', 'False').lower() == 'true'
 
 USER_PERMISSIONS_CHAT_MULTIPLE_MODELS = (
-    os.environ.get('USER_PERMISSIONS_CHAT_MULTIPLE_MODELS', 'True').lower() == 'true'
+    os.environ.get('USER_PERMISSIONS_CHAT_MULTIPLE_MODELS', 'False').lower() == 'true'
 )
 
-USER_PERMISSIONS_CHAT_TEMPORARY = os.environ.get('USER_PERMISSIONS_CHAT_TEMPORARY', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_TEMPORARY = os.environ.get('USER_PERMISSIONS_CHAT_TEMPORARY', 'False').lower() == 'true'
 
 USER_PERMISSIONS_CHAT_TEMPORARY_ENFORCED = (
     os.environ.get('USER_PERMISSIONS_CHAT_TEMPORARY_ENFORCED', 'False').lower() == 'true'
@@ -1542,38 +1542,38 @@ USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS = (
     os.environ.get('USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS', 'False').lower() == 'true'
 )
 
-USER_PERMISSIONS_FEATURES_WEB_SEARCH = os.environ.get('USER_PERMISSIONS_FEATURES_WEB_SEARCH', 'True').lower() == 'true'
+USER_PERMISSIONS_FEATURES_WEB_SEARCH = os.environ.get('USER_PERMISSIONS_FEATURES_WEB_SEARCH', 'False').lower() == 'true'
 
 USER_PERMISSIONS_FEATURES_IMAGE_GENERATION = (
-    os.environ.get('USER_PERMISSIONS_FEATURES_IMAGE_GENERATION', 'True').lower() == 'true'
+    os.environ.get('USER_PERMISSIONS_FEATURES_IMAGE_GENERATION', 'False').lower() == 'true'
 )
 
 USER_PERMISSIONS_FEATURES_CODE_INTERPRETER = (
-    os.environ.get('USER_PERMISSIONS_FEATURES_CODE_INTERPRETER', 'True').lower() == 'true'
+    os.environ.get('USER_PERMISSIONS_FEATURES_CODE_INTERPRETER', 'False').lower() == 'true'
 )
 
-USER_PERMISSIONS_FEATURES_FOLDERS = os.environ.get('USER_PERMISSIONS_FEATURES_FOLDERS', 'True').lower() == 'true'
+USER_PERMISSIONS_FEATURES_FOLDERS = os.environ.get('USER_PERMISSIONS_FEATURES_FOLDERS', 'False').lower() == 'true'
 
-USER_PERMISSIONS_FEATURES_NOTES = os.environ.get('USER_PERMISSIONS_FEATURES_NOTES', 'True').lower() == 'true'
+USER_PERMISSIONS_FEATURES_NOTES = os.environ.get('USER_PERMISSIONS_FEATURES_NOTES', 'False').lower() == 'true'
 
 USER_PERMISSIONS_FEATURES_ESSAY_SIDEBAR = (
     os.environ.get('USER_PERMISSIONS_FEATURES_ESSAY_SIDEBAR', 'False').lower() == 'true'
 )
 
-USER_PERMISSIONS_FEATURES_CHANNELS = os.environ.get('USER_PERMISSIONS_FEATURES_CHANNELS', 'True').lower() == 'true'
+USER_PERMISSIONS_FEATURES_CHANNELS = os.environ.get('USER_PERMISSIONS_FEATURES_CHANNELS', 'False').lower() == 'true'
 
 USER_PERMISSIONS_FEATURES_API_KEYS = os.environ.get('USER_PERMISSIONS_FEATURES_API_KEYS', 'False').lower() == 'true'
 
-USER_PERMISSIONS_FEATURES_MEMORIES = os.environ.get('USER_PERMISSIONS_FEATURES_MEMORIES', 'True').lower() == 'true'
+USER_PERMISSIONS_FEATURES_MEMORIES = os.environ.get('USER_PERMISSIONS_FEATURES_MEMORIES', 'False').lower() == 'true'
 
 USER_PERMISSIONS_FEATURES_AUTOMATIONS = (
     os.environ.get('USER_PERMISSIONS_FEATURES_AUTOMATIONS', 'False').lower() == 'true'
 )
 
-USER_PERMISSIONS_FEATURES_CALENDAR = os.environ.get('USER_PERMISSIONS_FEATURES_CALENDAR', 'True').lower() == 'true'
+USER_PERMISSIONS_FEATURES_CALENDAR = os.environ.get('USER_PERMISSIONS_FEATURES_CALENDAR', 'False').lower() == 'true'
 
 
-USER_PERMISSIONS_SETTINGS_INTERFACE = os.environ.get('USER_PERMISSIONS_SETTINGS_INTERFACE', 'True').lower() == 'true'
+USER_PERMISSIONS_SETTINGS_INTERFACE = os.environ.get('USER_PERMISSIONS_SETTINGS_INTERFACE', 'False').lower() == 'true'
 
 
 DEFAULT_USER_PERMISSIONS = {

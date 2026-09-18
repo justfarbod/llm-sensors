@@ -28,7 +28,6 @@
 	type Group = {
 		id: string;
 		name: string;
-		permissions?: { features?: { essay_sidebar?: boolean } };
 	};
 	type EssayTopic = { id: string; title: string; question: string };
 
@@ -269,7 +268,7 @@
 	};
 
 	const openApplyReview = async () => {
-		selectedGroupId = groups.find((group) => group.permissions?.features?.essay_sidebar)?.id ?? '';
+		selectedGroupId = groups[0]?.id ?? '';
 		await refreshApplyReview();
 		showApply = true;
 	};
@@ -709,7 +708,7 @@
 					bind:value={selectedGroupId}
 					on:change={refreshApplyReview}
 				>
-					{#each groups.filter((group) => group.permissions?.features?.essay_sidebar) as group}
+					{#each groups as group}
 						<option value={group.id}>{group.name}</option>
 					{/each}
 				</select>

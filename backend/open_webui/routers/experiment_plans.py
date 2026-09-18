@@ -37,6 +37,4 @@ async def save_group_experiment_plan(
     group = await Groups.get_group_by_id(group_id, db=db)
     if not group:
         raise HTTPException(status_code=404, detail='Group not found.')
-    if not (group.permissions or {}).get('features', {}).get('essay_sidebar', False):
-        raise HTTPException(status_code=422, detail='Experiment Task Sidebar permission is required.')
     return await ExperimentPlans.save_for_group(group_id, form, db=db)

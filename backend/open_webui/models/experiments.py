@@ -200,8 +200,6 @@ class ExperimentTable:
             if existing:
                 return ExperimentState(existing.state), ExperimentSessionModel.model_validate(existing), None
 
-            if not (group.permissions or {}).get('features', {}).get('essay_sidebar', False):
-                return ExperimentState.CONFIGURATION_ERROR, None, 'Experiment Mode requires Essay Sidebar access.'
             config = (group.data or {}).get('config', {})
             plan = await ExperimentPlans.get_active_for_group(group.id, db=db)
             topic = None

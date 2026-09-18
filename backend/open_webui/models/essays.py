@@ -271,7 +271,7 @@ async def resolve_user_topic(user, db: Optional[AsyncSession] = None) -> Optiona
         )
     groups = await Groups.get_groups_by_member_id(user.id, db=db)
     eligible = [
-        group for group in groups if (group.permissions or {}).get('features', {}).get('essay_sidebar', False)
+        group for group in groups if (group.data or {}).get('config', {}).get('experiment_mode_enabled', False)
     ]
     eligible.sort(key=lambda group: group.id)
     configured = [

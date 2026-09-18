@@ -1263,13 +1263,6 @@ class ExperimentWorkflowTable:
         ).scalar_one_or_none()
         if not group:
             raise HTTPException(status_code=404, detail='Group not found.')
-        if not (group.permissions or {}).get('features', {}).get(
-            'essay_sidebar', False
-        ):
-            raise HTTPException(
-                status_code=422,
-                detail='Experiment Task Sidebar permission is required.',
-            )
         current = (
             (
                 await db.execute(

@@ -136,11 +136,6 @@
 	let controlPaneComponent: ChatControls | undefined;
 	let essayPaneComponent: EssaySidebar | ExperimentTaskSidebar | undefined;
 
-	$: essaySidebarAvailable =
-		$user?.role === 'admin' || ($user?.permissions?.features?.essay_sidebar ?? false);
-	$: if (!essaySidebarAvailable && $showEssaySidebar) {
-		showEssaySidebar.set(false);
-	}
 	const getVisibleChatList = (pageValue: number) =>
 		getChatList(
 			localStorage.token,
@@ -3412,38 +3407,36 @@
 				</PaneGroup>
 			</div>
 
-			{#if essaySidebarAvailable}
-				{#if $experimentCurrent?.plan_id}
-					<ExperimentTaskSidebar
-						bind:this={essayPaneComponent}
-						onTaskChange={async (taskId, previousTaskId) => {
-							const scopedChats =
-								$experimentCurrent?.chat_mode === 'FRESH_PER_TASK'
-									? await getVisibleChatList(1)
-									: null;
-							if (
-								$experimentCurrent?.chat_mode === 'FRESH_PER_TASK' &&
-								$chatId &&
-								(previousTaskId || chat?.experiment_session_task_id !== taskId)
-							) {
-								const existingTaskChat = scopedChats?.find((item: any) => item.id !== $chatId);
-								if (existingTaskChat) {
-									currentChatPage.set(1);
-									await chats.set(scopedChats);
-									await goto(`/c/${existingTaskChat.id}`);
-									return;
-								}
-								await initNewChat();
-							}
-							if ($experimentCurrent?.chat_mode === 'FRESH_PER_TASK') {
+			{#if $experimentCurrent?.plan_id}
+				<ExperimentTaskSidebar
+					bind:this={essayPaneComponent}
+					onTaskChange={async (taskId, previousTaskId) => {
+						const scopedChats =
+							$experimentCurrent?.chat_mode === 'FRESH_PER_TASK'
+								? await getVisibleChatList(1)
+								: null;
+						if (
+							$experimentCurrent?.chat_mode === 'FRESH_PER_TASK' &&
+							$chatId &&
+							(previousTaskId || chat?.experiment_session_task_id !== taskId)
+						) {
+							const existingTaskChat = scopedChats?.find((item: any) => item.id !== $chatId);
+							if (existingTaskChat) {
 								currentChatPage.set(1);
-								await chats.set(scopedChats ?? []);
+								await chats.set(scopedChats);
+								await goto(`/c/${existingTaskChat.id}`);
+								return;
 							}
-						}}
-					/>
-				{:else}
-					<EssaySidebar bind:this={essayPaneComponent} />
-				{/if}
+							await initNewChat();
+						}
+						if ($experimentCurrent?.chat_mode === 'FRESH_PER_TASK') {
+							currentChatPage.set(1);
+							await chats.set(scopedChats ?? []);
+						}
+					}}
+				/>
+			{:else}
+				<EssaySidebar bind:this={essayPaneComponent} />
 			{/if}
 		</div>
 	{:else if loading}

@@ -22,8 +22,6 @@
 	type Group = {
 		id: string;
 		name: string;
-		permissions?: { features?: { essay_sidebar?: boolean } };
-		data?: { experiment_mode_enabled?: boolean };
 	};
 	type EssayTopic = { id: string; title: string; question: string };
 
@@ -418,13 +416,6 @@
 			</div>
 		</div>
 
-		{#if groups.find((group) => group.id === selectedGroupId)?.permissions?.features?.essay_sidebar !== true}
-			<p
-				class="rounded-xl bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
-			>
-				{$i18n.t('Enable the Experiment Task Sidebar permission for this group before publishing.')}
-			</p>
-		{/if}
 		{#if invalidSurveyPlacement()}<p
 				class="rounded-xl bg-red-50 p-3 text-xs text-red-700 dark:bg-red-950/20 dark:text-red-200"
 			>

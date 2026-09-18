@@ -20,20 +20,9 @@ from open_webui.models.essays import (
 from open_webui.models.experiments import Experiments, require_experiment_chat_access
 from open_webui.models.experiments import ExperimentState
 from open_webui.models.experiment_plans import ExperimentPlan, ExperimentPlanItem, ExperimentPlanItemTopic
-from open_webui.utils.access_control import has_permission
 from open_webui.utils.auth import get_admin_user, get_verified_user
 
 router = APIRouter()
-
-
-async def require_essay_sidebar_access(request: Request, user, db: AsyncSession):
-    if user.role != 'admin' and not await has_permission(
-        user.id, 'features.essay_sidebar', request.app.state.config.USER_PERMISSIONS, db=db
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
-        )
 
 
 class EssayWorkspaceResponse(BaseModel):
@@ -48,7 +37,6 @@ async def get_essay_workspace(
     db: AsyncSession = Depends(get_async_session),
 ):
     await require_experiment_chat_access(user, db=db)
-    await require_essay_sidebar_access(request, user, db)
     experiment_state, experiment_session, _ = await Experiments.get_current(user, db=db)
     return EssayWorkspaceResponse(
         topic=(
@@ -68,7 +56,6 @@ async def submit_essay(
     db: AsyncSession = Depends(get_async_session),
 ):
     await require_experiment_chat_access(user, db=db)
-    await require_essay_sidebar_access(request, user, db)
 
     content = form_data.content.strip()
     if not content:

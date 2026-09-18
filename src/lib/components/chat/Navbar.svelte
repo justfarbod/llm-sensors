@@ -265,8 +265,7 @@
 						</Tooltip>
 					{/if}
 
-					{#if $user?.role === 'admin' || ($user?.permissions?.features?.essay_sidebar ?? false)}
-						<div class="relative">
+					<div class="relative">
 						<Tooltip content={taskPaneLabel}>
 								<button
 									class="flex cursor-pointer rounded-xl px-2 py-2 transition hover:bg-gray-50 dark:hover:bg-gray-850 {$showEssaySidebar
@@ -295,8 +294,7 @@
 									{$experimentCurrent?.plan_id ? $i18n.t('Continue experiment task') : $i18n.t('Continue writing')}
 								</button>
 							{/if}
-						</div>
-					{/if}
+					</div>
 
 					{#if $user !== undefined && $user !== null}
 						<UserMenu
