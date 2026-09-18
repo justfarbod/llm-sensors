@@ -1,5 +1,7 @@
 import asyncio
 import re
+import secrets
+import string
 import uuid
 import time
 import datetime
@@ -12,6 +14,10 @@ from open_webui.models.auths import (
     AddUserForm,
     ApiKey,
     Auths,
+    BulkGenerateUsersFailure,
+    BulkGenerateUsersForm,
+    BulkGenerateUsersResponse,
+    GeneratedUserCredential,
     Token,
     LdapForm,
     SigninForm,
@@ -957,6 +963,116 @@ async def add_user(
     except Exception as err:
         log.error(f'Add user error: {str(err)}')
         raise HTTPException(500, detail='An internal error occurred while adding the user.')
+
+
+############################
+# BulkGenerateUsers
+############################
+
+
+MAX_BULK_GENERATE_USERS_COUNT = 200
+
+
+def _generate_secure_password(length: int) -> str:
+    length = max(8, length)
+    required_groups = [
+        string.ascii_lowercase,
+        string.ascii_uppercase,
+        string.digits,
+        '!@#$%^&*()-_=+',
+    ]
+    alphabet = ''.join(required_groups)
+
+    for _ in range(20):
+        password_chars = [secrets.choice(group) for group in required_groups]
+        password_chars += [secrets.choice(alphabet) for _ in range(length - len(password_chars))]
+        secrets.SystemRandom().shuffle(password_chars)
+        password = ''.join(password_chars)
+
+        try:
+            validate_password(password)
+            return password
+        except Exception:
+            continue
+
+    raise Exception('Failed to generate a valid password.')
+
+
+@router.post('/bulk-add', response_model=BulkGenerateUsersResponse)
+async def bulk_generate_users(
+    request: Request,
+    form_data: BulkGenerateUsersForm,
+    user=Depends(get_admin_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    if form_data.count < 1 or form_data.count > MAX_BULK_GENERATE_USERS_COUNT:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail=f'count must be between 1 and {MAX_BULK_GENERATE_USERS_COUNT}.',
+        )
+
+    prefix = form_data.prefix.strip()
+    domain = form_data.domain.strip().lower()
+
+    if not re.fullmatch(r'[A-Za-z0-9_-]{1,40}', prefix):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail='Invalid prefix format.')
+
+    if not re.fullmatch(r'[A-Za-z0-9.-]{1,255}', domain):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail='Invalid domain format.')
+
+    if form_data.role not in ['pending', 'user', 'admin']:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail='Invalid role.')
+
+    if form_data.group_id and not await Groups.get_group_by_id(form_data.group_id, db=db):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.NOT_FOUND)
+
+    start_index = max(1, form_data.start_index)
+    pad = len(str(start_index + form_data.count - 1))
+
+    created: list[GeneratedUserCredential] = []
+    failed: list[BulkGenerateUsersFailure] = []
+
+    for i in range(start_index, start_index + form_data.count):
+        name = f'{prefix}{str(i).zfill(pad)}'
+        email = f'{name}@{domain}'.lower()
+
+        if not validate_email_format(email):
+            failed.append(BulkGenerateUsersFailure(index=i, name=name, reason='Invalid email format.'))
+            continue
+
+        if await Users.get_user_by_email(email, db=db):
+            failed.append(BulkGenerateUsersFailure(index=i, name=name, reason='Email already taken.'))
+            continue
+
+        try:
+            password = _generate_secure_password(form_data.password_length)
+            hashed = get_password_hash(password)
+            new_user = await Auths.insert_new_auth(email, hashed, name, '/user.png', form_data.role, db=db)
+        except Exception as e:
+            failed.append(BulkGenerateUsersFailure(index=i, name=name, reason=str(e)))
+            continue
+
+        if not new_user:
+            failed.append(BulkGenerateUsersFailure(index=i, name=name, reason='Failed to create user.'))
+            continue
+
+        created.append(
+            GeneratedUserCredential(
+                id=new_user.id,
+                name=new_user.name,
+                email=new_user.email,
+                password=password,
+                role=new_user.role,
+            )
+        )
+
+    if form_data.group_id and created:
+        try:
+            await Groups.add_users_to_group(form_data.group_id, [u.id for u in created], db=db)
+        except Exception as e:
+            log.exception(f'Error adding generated users to group {form_data.group_id}: {e}')
+
+    return BulkGenerateUsersResponse(created=created, failed=failed, group_id=form_data.group_id)
 
 
 ############################

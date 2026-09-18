@@ -414,6 +414,15 @@ class UsersTable:
                         )
                     )
 
+                if filter.get('no_group'):
+                    stmt = stmt.filter(
+                        ~exists(
+                            select(GroupMember.id).where(
+                                GroupMember.user_id == User.id,
+                            )
+                        )
+                    )
+
                 roles = filter.get('roles')
                 if roles:
                     include_roles = [role for role in roles if not role.startswith('!')]

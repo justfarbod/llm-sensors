@@ -352,6 +352,51 @@ export const userSignOut = async () => {
 	return res;
 };
 
+export const bulkAddUsers = async (
+	token: string,
+	prefix: string,
+	count: number,
+	domain: string,
+	role: string = 'user',
+	groupId: string | null = null,
+	startIndex: number = 1,
+	passwordLength: number = 12
+) => {
+	let error = null;
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/auths/bulk-add`, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+			...(token && { authorization: `Bearer ${token}` })
+		},
+		body: JSON.stringify({
+			prefix: prefix,
+			count: count,
+			domain: domain,
+			role: role,
+			start_index: startIndex,
+			password_length: passwordLength,
+			...(groupId && { group_id: groupId })
+		})
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			console.error(err);
+			error = err.detail;
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
 export const addUser = async (
 	token: string,
 	name: string,

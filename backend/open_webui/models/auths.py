@@ -88,6 +88,36 @@ class AddUserForm(SignupForm):
     role: Optional[str] = 'pending'
 
 
+class BulkGenerateUsersForm(BaseModel):
+    prefix: str
+    count: int
+    start_index: int = 1
+    password_length: int = 12
+    role: str = 'user'
+    domain: str
+    group_id: Optional[str] = None
+
+
+class GeneratedUserCredential(BaseModel):
+    id: str
+    name: str
+    email: str
+    password: str
+    role: str
+
+
+class BulkGenerateUsersFailure(BaseModel):
+    index: int
+    name: str
+    reason: str
+
+
+class BulkGenerateUsersResponse(BaseModel):
+    created: list[GeneratedUserCredential] = []
+    failed: list[BulkGenerateUsersFailure] = []
+    group_id: Optional[str] = None
+
+
 class AuthsTable:
     async def insert_new_auth(
         self,

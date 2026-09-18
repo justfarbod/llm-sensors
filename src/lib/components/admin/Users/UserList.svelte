@@ -21,12 +21,16 @@
 	import EditUserModal from '$lib/components/admin/Users/UserList/EditUserModal.svelte';
 	import UserChatsModal from '$lib/components/admin/Users/UserList/UserChatsModal.svelte';
 	import AddUserModal from '$lib/components/admin/Users/UserList/AddUserModal.svelte';
+	import GenerateUsersModal from '$lib/components/admin/Users/UserList/GenerateUsersModal.svelte';
+	import ExportUsersModal from '$lib/components/admin/Users/UserList/ExportUsersModal.svelte';
 
 	import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 	import RoleUpdateConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 
 	import Badge from '$lib/components/common/Badge.svelte';
 	import Plus from '$lib/components/icons/Plus.svelte';
+	import UserGroup from '$lib/components/icons/UserGroup.svelte';
+	import ArrowDownTray from '$lib/components/icons/ArrowDownTray.svelte';
 	import ChevronUp from '$lib/components/icons/ChevronUp.svelte';
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte';
 	import About from '$lib/components/chat/Settings/About.svelte';
@@ -51,6 +55,8 @@
 
 	let showDeleteConfirmDialog = false;
 	let showAddUserModal = false;
+	let showGenerateUsersModal = false;
+	let showExportUsersModal = false;
 
 	let showUserChatsModal = false;
 	let showEditUserModal = false;
@@ -128,6 +134,15 @@
 		getUserList();
 	}}
 />
+
+<GenerateUsersModal
+	bind:show={showGenerateUsersModal}
+	on:save={async () => {
+		getUserList();
+	}}
+/>
+
+<ExportUsersModal bind:show={showExportUsersModal} />
 
 <EditUserModal
 	bind:show={showEditUserModal}
@@ -222,6 +237,32 @@
 							}}
 						>
 							<Plus className="size-3.5" />
+						</button>
+					</Tooltip>
+				</div>
+
+				<div>
+					<Tooltip content={$i18n.t('Generate Users')}>
+						<button
+							class=" p-2 rounded-xl hover:bg-gray-100 dark:bg-gray-900 dark:hover:bg-gray-850 transition font-medium text-sm flex items-center space-x-1"
+							on:click={() => {
+								showGenerateUsersModal = !showGenerateUsersModal;
+							}}
+						>
+							<UserGroup className="size-3.5" />
+						</button>
+					</Tooltip>
+				</div>
+
+				<div>
+					<Tooltip content={$i18n.t('Export Users')}>
+						<button
+							class=" p-2 rounded-xl hover:bg-gray-100 dark:bg-gray-900 dark:hover:bg-gray-850 transition font-medium text-sm flex items-center space-x-1"
+							on:click={() => {
+								showExportUsersModal = !showExportUsersModal;
+							}}
+						>
+							<ArrowDownTray className="size-3.5" />
 						</button>
 					</Tooltip>
 				</div>

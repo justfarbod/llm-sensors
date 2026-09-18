@@ -166,6 +166,46 @@ export const getUsers = async (
 	return res;
 };
 
+export const exportUsers = async (
+	token: string,
+	groupId?: string | null,
+	noGroup: boolean = false
+) => {
+	let error = null;
+	let res = null;
+
+	const searchParams = new URLSearchParams();
+
+	if (groupId) {
+		searchParams.set('group_id', groupId);
+	} else if (noGroup) {
+		searchParams.set('no_group', 'true');
+	}
+
+	res = await fetch(`${WEBUI_API_BASE_URL}/users/export?${searchParams.toString()}`, {
+		method: 'GET',
+		headers: {
+			'Content-Type': 'application/json',
+			Authorization: `Bearer ${token}`
+		}
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			console.error(err);
+			error = err.detail;
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
 export const searchUsers = async (
 	token: string,
 	query?: string,

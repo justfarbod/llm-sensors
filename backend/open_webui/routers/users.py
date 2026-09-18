@@ -113,6 +113,45 @@ async def get_all_users(
     return await Users.get_users(db=db)
 
 
+############################
+# ExportUsers
+############################
+
+
+class UserExportResponse(BaseModel):
+    id: str
+    name: str
+    email: str
+    role: str
+    created_at: int
+
+
+@router.get('/export', response_model=list[UserExportResponse])
+async def export_users(
+    group_id: Optional[str] = None,
+    no_group: bool = False,
+    user=Depends(get_admin_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    filter = {}
+    if group_id:
+        filter['group_ids'] = [group_id]
+    elif no_group:
+        filter['no_group'] = True
+
+    result = await Users.get_users(filter=filter, db=db)
+    return [
+        UserExportResponse(
+            id=u.id,
+            name=u.name,
+            email=u.email,
+            role=u.role,
+            created_at=u.created_at,
+        )
+        for u in result['users']
+    ]
+
+
 @router.get('/search', response_model=UserInfoListResponse)
 async def search_users(
     query: Optional[str] = None,

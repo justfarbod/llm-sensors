@@ -1999,3 +1999,28 @@ export const displayFileHandler = (
 		stores.showFileNavPath.set(path);
 	}
 };
+
+const csvEscape = (value: unknown): string => {
+	const str = value === null || value === undefined ? '' : String(value);
+	if (/[",\n]/.test(str)) {
+		return `"${str.replace(/"/g, '""')}"`;
+	}
+	return str;
+};
+
+export const downloadCSV = (
+	filename: string,
+	headers: string[],
+	rows: Array<Array<unknown>>
+) => {
+	const csv = [headers, ...rows].map((row) => row.map(csvEscape).join(',')).join('\n');
+	const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+	const url = URL.createObjectURL(blob);
+	const link = document.createElement('a');
+	link.href = url;
+	link.download = filename;
+	document.body.appendChild(link);
+	link.click();
+	link.remove();
+	setTimeout(() => URL.revokeObjectURL(url), 0);
+};
