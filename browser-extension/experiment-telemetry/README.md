@@ -2,9 +2,11 @@
 
 This Manifest V3 Chrome extension records writing interaction metadata and the full lifecycle metadata of every non-incognito tab in normal browser windows while an authenticated Open WebUI experiment is `IN_PROGRESS`.
 
-It records the exact key pressed for every keystroke in a tracked field (essay, question, and chat inputs), along with key-hold duration, inter-key timing, and modifier state. It does **not** record keystrokes in password-type inputs, which are excluded entirely. It also does not record clipboard contents (only the length and line count of copied, cut, or pasted text), screenshots, cookies, request bodies, or historical browsing history, and it excludes incognito tabs. It does record complete current-tab URLs (including paths, queries, and fragments), titles, favicon URLs, tab state, and tab lifecycle events. Chrome therefore displays its **Read your browsing history** permission warning.
+It records the exact key pressed for every keystroke in a tracked field (essay, question, and chat inputs), along with key-hold duration, inter-key timing, and modifier state. It does **not** record keystrokes in password-type inputs, which are excluded entirely. It also does not record screenshots, cookies, request bodies, or historical browsing history, and it excludes incognito tabs. It does record complete current-tab URLs (including paths, queries, and fragments), titles, favicon URLs, tab state, and tab lifecycle events. Chrome therefore displays its **Read your browsing history** permission warning.
 
 Because literal keystrokes are recorded for tracked fields, this data can reconstruct the text a participant typed there. The participant disclosure and institutional data-handling policy (e.g. IRB/consent materials) must reflect this plainly, not just the tab-URL retention noted below.
+
+It also records the literal text involved in copy, cut, and paste actions in tracked fields (essay, question, and chat inputs) — the copied/cut selection text, or the pasted clipboard text — truncated to 20,000 characters per event, in addition to the previously recorded text length and line count. As with keystroke capture, this can reconstruct sensitive content a participant copied, cut, or pasted into a tracked field, including content that originated outside Open WebUI (e.g. pasted from another application or document). The participant disclosure and institutional data-handling policy (e.g. IRB/consent materials) must reflect this plainly, alongside the keystroke disclosure above.
 
 ## Fixed-origin build
 
@@ -87,6 +89,16 @@ server configuration change; a 2.0.x extension connecting to a server already re
 version 3 will have its keystroke batches rejected, and the start gate will report the extension
 as not ready until participants update. Reload existing experiment pages once after upgrading, as
 with the 2.0.0 to 2.0.1 upgrade.
+
+Version 2.2.0 adds the literal copied/cut selection text and pasted clipboard text (`text_value`,
+truncated to 20,000 characters) to copy, cut, and paste events, and raises the schema version to
+4, which the server now requires for copy/cut/paste telemetry. The extension's minimum-version
+gate (`EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION`) must also be raised to `2.2.0` so the server
+continues to require it. Rebuild and redeploy the extension together with this server
+configuration change; a 2.1.x extension connecting to a server already requiring schema version 4
+will have its copy/cut/paste batches rejected, and the start gate will report the extension as not
+ready until participants update. Reload existing experiment pages once after upgrading, as with
+prior upgrades.
 
 ## Verification
 

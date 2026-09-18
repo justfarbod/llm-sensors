@@ -50,7 +50,7 @@
 				href="/admin/analytics/overview"
 				class="mr-1 shrink-0 rounded-lg px-2 py-1 text-sm font-semibold text-gray-900 hover:bg-gray-100 dark:text-white dark:hover:bg-gray-850"
 			>
-				AI-Assisted Writing Study
+				LLMScribe
 			</a>
 
 			<nav

@@ -81,7 +81,11 @@ attribute such as `data.telemetry_events`.
 All exported `record` keys become columns. Parent identifiers and `_session_order`, `_parent_order`, and
 `_record_order` preserve lineage and deterministic traversal order. Raw timestamps remain unchanged; recognized
 timestamp fields gain a `<field>_dt` UTC companion. Arbitrary payload/configuration fields remain nested rather than
-being expanded into unstable, export-specific columns.
+being expanded into unstable, export-specific columns. In particular, `telemetry_events` keeps each event's
+type-specific fields inside its nested `payload_json` rather than flattening them: `keystroke` events carry the
+literal key pressed as `payload_json["key_value"]`, and `copy`/`cut`/`paste` events carry the literal selected or
+pasted text (truncated to 20,000 characters) as `payload_json["text_value"]`, alongside the existing `text_length`
+and `line_count` fields.
 
 Shared definitions are deduplicated by ID. If repeated definitions conflict, tolerant mode keeps the first and records
 a warning; strict mode raises. Materialization writes one file per selected table and a `manifest.json`. Nested columns

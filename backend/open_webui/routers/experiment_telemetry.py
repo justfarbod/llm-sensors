@@ -172,6 +172,7 @@ class TelemetryEventForm(BaseModel):
     modifiers: Optional[ModifierFlags] = None
     text_length: Optional[int] = Field(default=None, ge=0, le=10_000_000)
     line_count: Optional[int] = Field(default=None, ge=0, le=1_000_000)
+    text_value: Optional[str] = Field(default=None, max_length=20_000)
     visibility: Optional[Literal['hidden', 'visible']] = None
     away_duration_ms: Optional[int] = Field(default=None, ge=0, le=86_400_000)
     control_type: Optional[Literal['single_choice', 'multiple_select', 'fill_blank', 'free_text']] = None
@@ -200,9 +201,9 @@ class TelemetryEventForm(BaseModel):
         present = set(self.model_fields_set) - {'event_id', 'type', 'timestamp', 'field', 'session_task_id', 'question_id', 'submission_id'}
         allowed = {
             'keystroke': {'key_class', 'inter_key_interval_ms', 'hold_duration_ms', 'modifiers', 'key_value'},
-            'copy': {'text_length', 'line_count'},
-            'cut': {'text_length', 'line_count'},
-            'paste': {'text_length', 'line_count'},
+            'copy': {'text_length', 'line_count', 'text_value'},
+            'cut': {'text_length', 'line_count', 'text_value'},
+            'paste': {'text_length', 'line_count', 'text_value'},
             'visibility_change': {'visibility'},
             'window_blur': set(),
             'window_focus': set(),

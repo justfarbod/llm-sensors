@@ -1,6 +1,7 @@
 (() => {
 	const CONFIG = globalThis.OPEN_WEBUI_EXPERIMENT_EXTENSION_CONFIG;
 	if (!CONFIG || location.origin !== CONFIG.origin) return;
+	const MAX_CAPTURED_TEXT_LENGTH = 20000;
 	const previous = globalThis.__openWebUIExperimentTelemetry;
 	if (previous?.isAlive()) {
 		void previous.check();
@@ -148,11 +149,19 @@
 		)
 			value = target.value.slice(target.selectionStart, target.selectionEnd);
 		else value = window.getSelection()?.toString() ?? '';
-		return { text_length: value.length, line_count: value ? value.split(/\r\n|\r|\n/).length : 0 };
+		return {
+			text_length: value.length,
+			line_count: value ? value.split(/\r\n|\r|\n/).length : 0,
+			text_value: value.slice(0, MAX_CAPTURED_TEXT_LENGTH)
+		};
 	};
 	const clipboardMetadata = (event) => {
 		const value = event.clipboardData?.getData('text/plain') ?? '';
-		return { text_length: value.length, line_count: value ? value.split(/\r\n|\r|\n/).length : 0 };
+		return {
+			text_length: value.length,
+			line_count: value ? value.split(/\r\n|\r|\n/).length : 0,
+			text_value: value.slice(0, MAX_CAPTURED_TEXT_LENGTH)
+		};
 	};
 
 	const markAway = () => {

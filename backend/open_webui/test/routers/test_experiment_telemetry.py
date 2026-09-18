@@ -44,8 +44,8 @@ def event(event_type='keystroke', **values):
                 'modifiers': {'ctrl': False, 'shift': False, 'alt': False, 'meta': False},
             }
         )
-    elif event_type == 'paste':
-        base.update({'text_length': 42, 'line_count': 2})
+    elif event_type in ('copy', 'cut', 'paste'):
+        base.update({'text_length': 42, 'line_count': 2, 'text_value': 'lorem ipsum'})
     elif event_type == 'focus_return':
         base.update({'field': 'unknown', 'away_duration_ms': 95000})
     elif event_type == 'focus_away':
@@ -179,6 +179,45 @@ def test_keystroke_requires_key_value_within_length_bounds():
     assert valid.events[0].key_value == 'ArrowLeft'
 
 
+def test_copy_cut_paste_text_value_within_length_bounds():
+    for event_type in ('copy', 'cut', 'paste'):
+        valid_max = TelemetryBatchForm.model_validate(
+            {
+                'experiment_session_id': 'session',
+                'events': [event(event_type, text_value='x' * 20000)],
+            }
+        )
+        assert valid_max.events[0].text_value == 'x' * 20000
+
+        with pytest.raises(ValidationError):
+            TelemetryBatchForm.model_validate(
+                {
+                    'experiment_session_id': 'session',
+                    'events': [event(event_type, text_value='x' * 20001)],
+                }
+            )
+
+        empty = TelemetryBatchForm.model_validate(
+            {'experiment_session_id': 'session', 'events': [event(event_type, text_value='')]}
+        )
+        assert empty.events[0].text_value == ''
+
+        without_field = dict(event(event_type))
+        without_field.pop('text_value')
+        omitted = TelemetryBatchForm.model_validate(
+            {'experiment_session_id': 'session', 'events': [without_field]}
+        )
+        assert omitted.events[0].text_value is None
+
+
+def test_text_value_is_not_a_forbidden_key():
+    assert 'text_value' not in telemetry_module.FORBIDDEN_KEYS
+    valid = TelemetryBatchForm.model_validate(
+        {'experiment_session_id': 'session', 'events': [event('paste', text_value='clip text')]}
+    )
+    assert valid.events[0].text_value == 'clip text'
+
+
 def test_schema_v2_accepts_complete_tab_metadata_and_rejects_v1_or_incognito():
     valid = tab_event()
     form = TelemetryBatchForm.model_validate(
@@ -216,7 +255,7 @@ def test_heartbeat_derives_session_and_checks_identity_permissions_and_version(m
         form = ExtensionHeartbeatForm(
             extension_version=version,
             extension_id=extension_id,
-            schema_version=3,
+            schema_version=telemetry_module.EXPERIMENT_TELEMETRY_SCHEMA_VERSION,
             tabs_permission=tabs_permission,
             incognito_allowed=False,
             origin='https://research.test',
