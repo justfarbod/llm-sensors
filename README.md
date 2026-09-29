@@ -1,5 +1,8 @@
 # LLM Research and Experiment Platform
 
+> **Deploying on a server with Docker?** Follow the [Server Deployment Guide (PDF)](docs/DEPLOYMENT_GUIDE.pdf) instead of
+> the instructions below. It covers the server, HTTPS, Ollama Cloud and the telemetry extension step by step.
+
 This project is a self-hosted environment for conducting structured studies with large language models. It supports
 participant accounts, controlled research tasks, surveys, essays, chats, experiment telemetry, full-session exports,
 and reproducible analysis without coupling the analysis tools to the running application.
