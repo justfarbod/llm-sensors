@@ -1,5 +1,7 @@
 # LLM Research and Experiment Platform
 
+**LLMScribe** — *LLM Study, Chat & Research Interface for Behavioral Experiments*
+
 > **Deploying on a server with Docker?** Follow the [Server Deployment Guide (PDF)](docs/DEPLOYMENT_GUIDE.pdf) instead of
 > the instructions below. It covers the server, HTTPS, Ollama Cloud and the telemetry extension step by step.
 
