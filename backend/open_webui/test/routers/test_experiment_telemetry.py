@@ -275,6 +275,47 @@ def test_heartbeat_derives_session_and_checks_identity_permissions_and_version(m
     assert run(scenario(extension_id='wrong'))[0] == 403
 
 
+def test_heartbeat_checks_name_only_when_no_extension_id_is_configured(monkeypatch):
+    session = SimpleNamespace(id='session')
+    monkeypatch.setattr(telemetry_module, 'EXPERIMENT_TELEMETRY_EXTENSION_ENABLED', True)
+    monkeypatch.setattr(telemetry_module, 'EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN', 'https://research.test')
+    monkeypatch.setattr(telemetry_module, 'EXPERIMENT_TELEMETRY_EXTENSION_ID', '')
+    monkeypatch.setattr(telemetry_module, 'EXPERIMENT_TELEMETRY_EXTENSION_NAME', 'Open WebUI Experiment Telemetry')
+    monkeypatch.setattr(telemetry_module, 'EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION', '2.0.0')
+    monkeypatch.setattr(
+        Experiments,
+        'get_current',
+        AsyncMock(return_value=(ExperimentState.TOPIC_REQUIRED, session, None)),
+    )
+
+    async def scenario(extension_name='Open WebUI Experiment Telemetry', extension_id='any-local-id'):
+        db = AsyncMock()
+        db.add = MagicMock()
+        db.get.return_value = None
+        form = ExtensionHeartbeatForm(
+            extension_version='2.0.0',
+            extension_id=extension_id,
+            extension_name=extension_name,
+            schema_version=telemetry_module.EXPERIMENT_TELEMETRY_SCHEMA_VERSION,
+            tabs_permission=True,
+            incognito_allowed=False,
+            origin='https://research.test',
+        )
+        try:
+            return (await extension_heartbeat(form, SimpleNamespace(id='user', role='user'), db))['ready']
+        except HTTPException as error:
+            return error.status_code
+
+    assert run(scenario()) is True
+    assert run(scenario(extension_name='Another Extension')) == 403
+    assert run(scenario(extension_name=None)) == 403
+
+    # A configured ID takes precedence: the name is then not checked at all.
+    monkeypatch.setattr(telemetry_module, 'EXPERIMENT_TELEMETRY_EXTENSION_ID', 'expected-id')
+    assert run(scenario(extension_name='Another Extension', extension_id='expected-id')) is True
+    assert run(scenario(extension_id='any-local-id')) == 403
+
+
 def test_start_is_blocked_server_side_without_fresh_extension(monkeypatch):
     session = SimpleNamespace(id='session')
     monkeypatch.setattr(experiments_router, 'EXPERIMENT_TELEMETRY_EXTENSION_ENABLED', True)
@@ -305,6 +346,25 @@ def test_manual_loopback_configuration_does_not_require_store_listing(monkeypatc
 
     monkeypatch.setattr(experiments_router, 'EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN', 'http://research.test')
     assert experiments_router._extension_configuration_error() is not None
+
+
+def test_non_loopback_configuration_requires_id_or_name_and_https_download_url(monkeypatch):
+    monkeypatch.setattr(experiments_router, 'EXPERIMENT_TELEMETRY_EXTENSION_ENABLED', True)
+    monkeypatch.setattr(experiments_router, 'EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN', 'https://research.test')
+    monkeypatch.setattr(experiments_router, 'EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION', '2.0.0')
+
+    def error(extension_id='', name='', store_url=''):
+        monkeypatch.setattr(experiments_router, 'EXPERIMENT_TELEMETRY_EXTENSION_ID', extension_id)
+        monkeypatch.setattr(experiments_router, 'EXPERIMENT_TELEMETRY_EXTENSION_NAME', name)
+        monkeypatch.setattr(experiments_router, 'EXPERIMENT_TELEMETRY_EXTENSION_STORE_URL', store_url)
+        return experiments_router._extension_configuration_error()
+
+    download = 'https://research.test/extension.zip'
+    assert error(extension_id='expected-id', store_url=download) is None
+    assert error(name='Open WebUI Experiment Telemetry', store_url=download) is None
+    assert error(store_url=download) is not None
+    assert error(name='Open WebUI Experiment Telemetry') is not None
+    assert error(name='Open WebUI Experiment Telemetry', store_url='http://research.test/extension.zip') is not None
 
 
 def test_valid_batch_is_idempotent_and_updates_summary():

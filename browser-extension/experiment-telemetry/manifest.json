@@ -4,19 +4,19 @@
 	"version": "2.2.0",
 	"description": "Records experiment interactions and normal-window tab lifecycle metadata during active research sessions.",
 	"permissions": ["alarms", "scripting", "storage", "tabs"],
-	"host_permissions": ["__OPEN_WEBUI_ORIGIN__/*"],
+	"host_permissions": ["http://localhost:5173/*"],
 	"incognito": "not_allowed",
 	"background": {
 		"service_worker": "background.js"
 	},
 	"content_scripts": [
 		{
-			"matches": ["__OPEN_WEBUI_ORIGIN__/*"],
+			"matches": ["http://localhost:5173/*"],
 			"js": ["deployment-config.js", "content.js"],
 			"run_at": "document_idle"
 		}
 	],
 	"action": {
-		"default_title": "Connect to your experiment at __OPEN_WEBUI_ORIGIN__"
+		"default_title": "Connect to your experiment at http://localhost:5173"
 	}
 }

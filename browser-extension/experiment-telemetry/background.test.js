@@ -7,15 +7,25 @@ const event = () => {
 	const listeners = [];
 	return {
 		addListener: (listener) => listeners.push(listener),
-		fire: () => listeners.forEach((listener) => listener())
+		fire: (...args) => listeners.map((listener) => listener(...args))
 	};
 };
 const harness = (tabs) => {
 	const chrome = {
-		runtime: { onInstalled: event(), onMessage: event() },
+		runtime: {
+			id: 'extension-1',
+			getManifest: () => ({
+				name: 'Open WebUI Experiment Telemetry',
+				version: '2.2.0',
+				host_permissions: [`${origin}/*`]
+			}),
+			onInstalled: event(),
+			onMessage: event()
+		},
+		extension: { isAllowedIncognitoAccess: vi.fn().mockResolvedValue(false) },
+		permissions: { onRemoved: event(), contains: vi.fn().mockResolvedValue(true) },
 		action: { onClicked: event() },
 		alarms: { onAlarm: event() },
-		permissions: { onRemoved: event() },
 		windows: { onFocusChanged: event() },
 		tabs: {
 			...Object.fromEntries(
@@ -37,18 +47,10 @@ const harness = (tabs) => {
 		},
 		scripting: { executeScript: vi.fn().mockResolvedValue([]) }
 	};
-	const context = createContext({
-		chrome,
-		URL,
-		TextEncoder,
-		console,
-		OPEN_WEBUI_EXPERIMENT_EXTENSION_CONFIG: { origin, schemaVersion: 2 }
-	});
+	const context = createContext({ chrome, URL, TextEncoder, console });
 	context.importScripts = (...files) => {
-		for (const file of files) {
-			if (file === 'deployment-config.js') continue;
+		for (const file of files)
 			runInContext(readFileSync(new URL(file, import.meta.url), 'utf8'), context);
-		}
 	};
 	runInContext(readFileSync(new URL('./background.js', import.meta.url), 'utf8'), context);
 	return chrome;
@@ -76,5 +78,21 @@ describe('extension worker connection recovery', () => {
 		await vi.waitFor(() => expect(chrome.scripting.executeScript).toHaveBeenCalledTimes(2));
 		expect(chrome.tabs.query).toHaveBeenCalledTimes(1);
 		expect(chrome.tabs.create).not.toHaveBeenCalled();
+	});
+
+	it('reports the manifest origin, name, and identity in its capabilities', async () => {
+		const chrome = harness([]);
+		const response = await new Promise((resolve) =>
+			chrome.runtime.onMessage.fire({ type: 'extension-capabilities' }, {}, resolve)
+		);
+		expect(response).toEqual({
+			extension_version: '2.2.0',
+			extension_id: 'extension-1',
+			extension_name: 'Open WebUI Experiment Telemetry',
+			schema_version: 4,
+			tabs_permission: true,
+			incognito_allowed: false,
+			origin
+		});
 	});
 });

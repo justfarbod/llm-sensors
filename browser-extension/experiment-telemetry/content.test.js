@@ -3,6 +3,7 @@ import { createContext, runInContext } from 'node:vm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const source = readFileSync(new URL('./content.js', import.meta.url), 'utf8');
+const config = readFileSync(new URL('./deployment-config.js', import.meta.url), 'utf8');
 const origin = 'https://research.test';
 
 describe('extension content connection lifecycle', () => {
@@ -30,7 +31,6 @@ describe('extension content connection lifecycle', () => {
 		runtimeListeners = new Set();
 		presence = { ready: true, experiment_session_id: 'session-1', state: 'TASK_REQUIRED' };
 		context = createContext({
-			OPEN_WEBUI_EXPERIMENT_EXTENSION_CONFIG: { origin, schemaVersion: 2 },
 			window: new EventTarget(),
 			document: Object.assign(new EventTarget(), { hidden: false, hasFocus: () => true }),
 			location: { origin, pathname: '/auth' },
@@ -38,6 +38,7 @@ describe('extension content connection lifecycle', () => {
 			chrome: {
 				runtime: {
 					id: 'extension-1',
+					getManifest: () => ({ host_permissions: [`${origin}/*`] }),
 					sendMessage: vi.fn().mockResolvedValue({ ok: true }),
 					onMessage: {
 						addListener: (listener) => runtimeListeners.add(listener),
@@ -57,6 +58,7 @@ describe('extension content connection lifecycle', () => {
 							}
 			})),
 			AbortController,
+			URL,
 			CustomEvent,
 			crypto,
 			setTimeout,
@@ -64,6 +66,7 @@ describe('extension content connection lifecycle', () => {
 			setInterval,
 			clearInterval
 		});
+		runInContext(config, context);
 		runInContext(source, context);
 	});
 	afterEach(() => {

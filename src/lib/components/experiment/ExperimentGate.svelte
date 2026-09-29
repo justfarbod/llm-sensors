@@ -434,7 +434,7 @@
 										class="mt-4 inline-flex rounded-xl bg-black px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-black"
 										href={telemetryExtension.store_url}
 										target="_blank"
-										rel="noopener noreferrer">Install from Chrome Web Store</a
+										rel="noopener noreferrer">Download extension</a
 									>
 								{:else}
 									<p class="mt-3 text-sm text-gray-600 dark:text-gray-300">

@@ -21,6 +21,7 @@ from open_webui.config import (
     EXPERIMENT_TELEMETRY_EXTENSION_ENABLED,
     EXPERIMENT_TELEMETRY_EXTENSION_ID,
     EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION,
+    EXPERIMENT_TELEMETRY_EXTENSION_NAME,
     EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN,
     EXPERIMENT_TELEMETRY_EXTENSION_STALE_SECONDS,
     EXPERIMENT_TELEMETRY_SCHEMA_VERSION,
@@ -297,6 +298,7 @@ class ExtensionHeartbeatForm(BaseModel):
 
     extension_version: str = Field(min_length=1, max_length=32)
     extension_id: str = Field(min_length=1, max_length=64)
+    extension_name: Optional[str] = Field(default=None, max_length=128)
     schema_version: int = Field(ge=EXPERIMENT_TELEMETRY_SCHEMA_VERSION, le=EXPERIMENT_TELEMETRY_SCHEMA_VERSION)
     tabs_permission: bool
     incognito_allowed: bool
@@ -433,8 +435,11 @@ async def extension_heartbeat(
         )
     if EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN and normalized_origin != EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN:
         raise HTTPException(status_code=403, detail='Extension origin does not match this deployment.')
-    if EXPERIMENT_TELEMETRY_EXTENSION_ID and form.extension_id != EXPERIMENT_TELEMETRY_EXTENSION_ID:
-        raise HTTPException(status_code=403, detail='Unexpected telemetry extension identity.')
+    if EXPERIMENT_TELEMETRY_EXTENSION_ID:
+        if form.extension_id != EXPERIMENT_TELEMETRY_EXTENSION_ID:
+            raise HTTPException(status_code=403, detail='Unexpected telemetry extension identity.')
+    elif EXPERIMENT_TELEMETRY_EXTENSION_NAME and form.extension_name != EXPERIMENT_TELEMETRY_EXTENSION_NAME:
+        raise HTTPException(status_code=403, detail='Unexpected telemetry extension name.')
     now = time.time_ns()
     presence = await db.get(ExperimentTelemetryExtensionPresence, session.id)
     if presence is None:

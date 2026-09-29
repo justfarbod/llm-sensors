@@ -15,6 +15,7 @@ from open_webui.config import (
     EXPERIMENT_TELEMETRY_EXTENSION_ENABLED,
     EXPERIMENT_TELEMETRY_EXTENSION_ID,
     EXPERIMENT_TELEMETRY_EXTENSION_MIN_VERSION,
+    EXPERIMENT_TELEMETRY_EXTENSION_NAME,
     EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN,
     EXPERIMENT_TELEMETRY_EXTENSION_STALE_SECONDS,
     EXPERIMENT_TELEMETRY_EXTENSION_STORE_URL,
@@ -378,9 +379,10 @@ def _extension_configuration_error() -> Optional[str]:
     ):
         return 'Extension origin must be fixed HTTPS, or HTTP loopback for development.'
     if not loopback and (
-        not EXPERIMENT_TELEMETRY_EXTENSION_ID or not EXPERIMENT_TELEMETRY_EXTENSION_STORE_URL
+        not (EXPERIMENT_TELEMETRY_EXTENSION_ID or EXPERIMENT_TELEMETRY_EXTENSION_NAME)
+        or not EXPERIMENT_TELEMETRY_EXTENSION_STORE_URL
     ):
-        return 'Chrome telemetry extension ID and store URL must be configured.'
+        return 'Telemetry extension ID or name, and its download URL, must be configured.'
     if (
         EXPERIMENT_TELEMETRY_EXTENSION_STORE_URL
         and not EXPERIMENT_TELEMETRY_EXTENSION_STORE_URL.startswith('https://')

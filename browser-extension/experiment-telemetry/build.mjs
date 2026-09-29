@@ -1,33 +1,24 @@
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { loadEnv } from 'vite';
+import { setOrigin } from './set-origin.mjs';
 
 const root = resolve(import.meta.dirname);
 const output = resolve(process.env.EXPERIMENT_TELEMETRY_EXTENSION_OUTPUT ?? resolve(root, 'dist'));
 if (output === root || output === resolve('/'))
 	throw new Error('Refusing to overwrite an unsafe output path.');
-// Share the frontend's local configuration instead of requiring a separate,
-// easily mismatched origin on every extension build. Explicit environment
-// variables still take precedence for production and isolated test builds.
+// The origin is optional: without it the build keeps the manifest's default
+// origin, and any built folder can be retargeted later with set-origin.mjs.
+// When set (in the frontend's local .env or the environment, which takes
+// precedence), it is applied to the built manifest.
 const settings = loadEnv('development', resolve(root, '../..'), 'EXPERIMENT_TELEMETRY_EXTENSION_');
 const rawOrigin = settings.EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN ?? '';
-if (!rawOrigin)
-	throw new Error('Set EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN in .env or the build environment.');
-const parsedOrigin = new URL(rawOrigin);
-const origin = parsedOrigin.origin;
-const loopback = ['localhost', '127.0.0.1', '::1'].includes(parsedOrigin.hostname);
-if (
-	(!origin.startsWith('https://') && !(parsedOrigin.protocol === 'http:' && loopback)) ||
-	origin !== rawOrigin.replace(/\/$/, '')
-) {
-	throw new Error(
-		'EXPERIMENT_TELEMETRY_EXTENSION_ORIGIN must be one exact HTTPS origin, or an HTTP loopback origin for development.'
-	);
-}
 
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
 for (const name of [
+	'manifest.json',
+	'deployment-config.js',
 	'background.js',
 	'content.js',
 	'connection.js',
@@ -35,9 +26,11 @@ for (const name of [
 	'README.md'
 ])
 	await cp(resolve(root, name), resolve(output, name));
-for (const name of ['manifest.json', 'deployment-config.js']) {
-	const source = await readFile(resolve(root, name), 'utf8');
-	await writeFile(resolve(output, name), source.replaceAll('__OPEN_WEBUI_ORIGIN__', origin));
+if (rawOrigin) {
+	const origin = await setOrigin(output, rawOrigin);
+	console.log(`Built extension in ${output} for ${origin}`);
+} else {
+	console.log(`Built extension in ${output} with the manifest's default origin.`);
+	console.log(`Retarget it with: node ${resolve(root, 'set-origin.mjs')} ${output} https://domain`);
 }
-console.log(`Built fixed-origin extension in ${output} for ${origin}`);
 console.log('Reload the unpacked extension in chrome://extensions to activate this build.');

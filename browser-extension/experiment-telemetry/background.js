@@ -307,6 +307,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 			sendResponse({
 				extension_version: chrome.runtime.getManifest().version,
 				extension_id: chrome.runtime.id,
+				extension_name: chrome.runtime.getManifest().name,
 				schema_version: CONFIG.schemaVersion,
 				tabs_permission: tabsPermission,
 				incognito_allowed: incognitoAllowed,
