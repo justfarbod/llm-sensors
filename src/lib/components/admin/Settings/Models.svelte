@@ -70,6 +70,8 @@
 	const perPage = 30;
 	let currentPage = 1;
 
+	const PUBLIC_ACCESS_GRANTS = [{ principal_type: 'user', principal_id: '*', permission: 'read' }];
+
 	const isPublicModel = (model) => {
 		return (model?.access_grants ?? []).some(
 			(g) => g.principal_type === 'user' && g.principal_id === '*' && g.permission === 'read'
@@ -191,7 +193,8 @@
 					...m,
 					id: m.id,
 					name: m.name,
-
+					// Models without a record are public by default.
+					access_grants: PUBLIC_ACCESS_GRANTS,
 					is_active: true
 				};
 			}
@@ -223,7 +226,7 @@
 				name: model.name,
 				base_model_id: null,
 				params: {},
-				access_grants: [],
+				access_grants: PUBLIC_ACCESS_GRANTS,
 				...model
 			}).catch((error) => {
 				return null;
@@ -244,7 +247,7 @@
 				base_model_id: null,
 				meta: {},
 				params: {},
-				access_grants: [],
+				access_grants: PUBLIC_ACCESS_GRANTS,
 				is_active: model.is_active
 			}).catch((error) => {
 				return null;

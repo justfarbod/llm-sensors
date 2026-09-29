@@ -78,6 +78,47 @@ async def get_all_base_models(request: Request, user: UserModel = None):
     return function_models + openai_models + ollama_models
 
 
+def _default_model_candidates(request, models) -> list[str]:
+    """Active, visible, non-arena model IDs in the admin's configured display order."""
+    candidates = [
+        model
+        for model in models
+        if not model.get('arena') and not ((model.get('info') or {}).get('meta') or {}).get('hidden', False)
+    ]
+    order = {model_id: i for i, model_id in enumerate(request.app.state.config.MODEL_ORDER_LIST or [])}
+    candidates.sort(key=lambda model: (order.get(model['id'], float('inf')), model.get('name') or ''))
+    return [model['id'] for model in candidates]
+
+
+def get_effective_default_models(request, models=None) -> str:
+    """
+    The global default models, restricted to active models. Falls back to the
+    first active model when none of the configured defaults are available.
+    """
+    if models is None:
+        models = list((request.app.state.MODELS or {}).values())
+    candidates = _default_model_candidates(request, models)
+    configured = [
+        model_id.strip() for model_id in (request.app.state.config.DEFAULT_MODELS or '').split(',') if model_id.strip()
+    ]
+    active = [model_id for model_id in configured if model_id in candidates]
+    if active:
+        return ','.join(active)
+    return candidates[0] if candidates else ''
+
+
+def ensure_default_model(request, models) -> None:
+    # Only fill an empty setting. Configured defaults that are temporarily
+    # unavailable (e.g. a connection is down) are kept, and
+    # get_effective_default_models serves an active fallback meanwhile.
+    if (request.app.state.config.DEFAULT_MODELS or '').strip():
+        return
+    candidates = _default_model_candidates(request, models)
+    if candidates:
+        request.app.state.config.DEFAULT_MODELS = candidates[0]
+        log.info(f'Automatically selected {candidates[0]} as the default model')
+
+
 async def get_all_models(request, refresh: bool = False, user: UserModel = None):
     if (
         request.app.state.MODELS
@@ -381,6 +422,7 @@ async def get_all_models(request, refresh: bool = False, user: UserModel = None)
     else:
         request.app.state.MODELS = models_dict
 
+    ensure_default_model(request, models)
     return models
 
 
@@ -398,7 +440,8 @@ async def check_model_access(user, model, db=None):
     else:
         model_info = await Models.get_model_by_id(model.get('id'), db=db)
         if not model_info:
-            raise Exception('Model not found')
+            # Unregistered models have no access control and are public.
+            return
         elif not (
             user.id == model_info.user_id
             or await AccessGrants.has_access(
@@ -463,9 +506,9 @@ async def get_filtered_models(models, user, db=None):
                     or model['id'] in accessible_model_ids
                 ):
                     filtered_models.append(model)
-            elif user.role == 'admin':
+            else:
                 # No DB entry means no access control configured yet;
-                # only admins can see unconfigured models.
+                # such models are public by default.
                 filtered_models.append(model)
 
         return filtered_models

@@ -71,6 +71,7 @@ from open_webui.utils.auth import (
     invalidate_token,
     create_api_key,
     create_token,
+    require_group_member,
     get_admin_user,
     get_verified_user,
     get_current_user,
@@ -117,6 +118,9 @@ async def create_session_response(
         response: FastAPI response object (required if set_cookie is True)
         set_cookie: Whether to set the auth cookie on the response
     """
+    # Never issue a session to a non-admin account that belongs to no group.
+    await require_group_member(user, db=db)
+
     expires_delta = parse_duration(request.app.state.config.JWT_EXPIRES_IN)
     expires_at = None
     if expires_delta:

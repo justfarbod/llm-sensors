@@ -82,7 +82,7 @@ from open_webui.env import (
     REDIS_KEY_PREFIX,
 )
 from open_webui.utils.misc import parse_duration
-from open_webui.utils.auth import get_password_hash, create_token
+from open_webui.utils.auth import get_password_hash, create_token, require_group_member
 from open_webui.utils.webhook import post_webhook
 from open_webui.utils.groups import apply_default_group_assignment
 from open_webui.retrieval.web.utils import validate_url
@@ -1743,10 +1743,6 @@ class OAuthManager:
                         detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
                     )
 
-            jwt_token = create_token(
-                data={'id': user.id},
-                expires_delta=parse_duration(auth_manager_config.JWT_EXPIRES_IN),
-            )
             if auth_manager_config.ENABLE_OAUTH_GROUP_MANAGEMENT:
                 await self.update_user_groups(
                     user=user,
@@ -1754,6 +1750,12 @@ class OAuthManager:
                     default_permissions=request.app.state.config.USER_PERMISSIONS,
                     db=db,
                 )
+            # Checked after the OAuth group sync so provider-assigned groups count.
+            await require_group_member(user, db=db)
+            jwt_token = create_token(
+                data={'id': user.id},
+                expires_delta=parse_duration(auth_manager_config.JWT_EXPIRES_IN),
+            )
 
         except Exception as e:
             log.error(f'Error during OAuth process: {e}')

@@ -555,6 +555,7 @@ from open_webui.utils.models import (
     get_all_base_models,
     check_model_access,
     get_filtered_models,
+    get_effective_default_models,
 )
 from open_webui.utils.chat import (
     generate_chat_completion as chat_completion_handler,
@@ -1871,7 +1872,7 @@ async def chat_completion(
             base_model_id = model_info.base_model_id
             if base_model_id not in request.app.state.MODELS:
                 if ENABLE_CUSTOM_MODEL_FALLBACK:
-                    default_models = (request.app.state.config.DEFAULT_MODELS or '').split(',')
+                    default_models = get_effective_default_models(request).split(',')
 
                     fallback_model_id = default_models[0].strip() if default_models[0] else None
 
@@ -2649,7 +2650,7 @@ async def get_app_config(request: Request):
         },
         **(
             {
-                'default_models': app.state.config.DEFAULT_MODELS,
+                'default_models': get_effective_default_models(request),
                 'default_pinned_models': app.state.config.DEFAULT_PINNED_MODELS,
                 'default_prompt_suggestions': app.state.config.DEFAULT_PROMPT_SUGGESTIONS,
                 'user_count': user_count,

@@ -183,6 +183,11 @@ def normalize_access_grants(access_grants: Optional[list]) -> list[dict]:
     return list(deduped.values())
 
 
+def public_read_access_grants() -> list[dict]:
+    """The grant list that makes a resource readable by every user."""
+    return [{'principal_type': 'user', 'principal_id': '*', 'permission': 'read'}]
+
+
 def has_public_read_access_grant(access_grants: Optional[list]) -> bool:
     """
     Returns True when a direct grant list includes wildcard public-read.

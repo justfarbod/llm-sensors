@@ -23,6 +23,7 @@ from typing import Optional, Union, List, Dict
 from open_webui.utils.access_control import has_permission
 from open_webui.models.users import Users
 from open_webui.models.auths import Auths
+from open_webui.models.groups import Groups
 
 
 from open_webui.constants import ERROR_MESSAGES
@@ -294,6 +295,16 @@ def get_http_authorization_cred(auth_header: Optional[str]):
         return None
 
 
+async def user_is_group_member(user, db=None) -> bool:
+    # Admins manage groups themselves, so only non-admin accounts must belong to one.
+    return user.role == 'admin' or await Groups.has_any_group(user.id, db=db)
+
+
+async def require_group_member(user, db=None):
+    if not await user_is_group_member(user, db=db):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=ERROR_MESSAGES.NO_GROUP)
+
+
 async def get_current_user(
     request: Request,
     response: Response,
@@ -322,6 +333,7 @@ async def get_current_user(
     # auth by api key
     if token.startswith('sk-'):
         user = await get_current_user_by_api_key(request, token)
+        await require_group_member(user)
 
         # Add user info to current span
         if ENABLE_OTEL:
@@ -367,6 +379,9 @@ async def get_current_user(
                             status_code=status.HTTP_401_UNAUTHORIZED,
                             detail='User mismatch. Please sign in again.',
                         )
+
+                # Existing sessions end as soon as a user has no group.
+                await require_group_member(user)
 
                 # Add user info to current span
                 if ENABLE_OTEL:

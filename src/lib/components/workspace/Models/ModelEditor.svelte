@@ -103,7 +103,8 @@
 	let builtinTools = {};
 
 	let actionIds = [];
-	let accessGrants = [];
+	// New models are public by default.
+	let accessGrants = [{ principal_type: 'user', principal_id: '*', permission: 'read' }];
 	let terminalId = '';
 	let tts = { voice: '' };
 
@@ -330,7 +331,7 @@
 			terminalId = model?.meta?.terminalId ?? '';
 			tts = { voice: model?.meta?.tts?.voice ?? '' };
 
-			accessGrants = model?.access_grants ?? [];
+			accessGrants = model?.access_grants ?? [{ principal_type: 'user', principal_id: '*', permission: 'read' }];
 
 			info = {
 				...info,

@@ -39,7 +39,7 @@ from open_webui.env import (
     WEBSOCKET_SERVER_ENGINEIO_LOGGING,
     WEBSOCKET_EVENT_CALLER_TIMEOUT,
 )
-from open_webui.utils.auth import decode_token
+from open_webui.utils.auth import decode_token, user_is_group_member
 from open_webui.socket.utils import RedisDict, RedisLock, YdocManager
 from open_webui.tasks import create_task, stop_item_tasks
 from open_webui.utils.redis import get_redis_connection
@@ -353,7 +353,7 @@ async def connect(sid, environ, auth):
         if data is not None and 'id' in data:
             user = await Users.get_user_by_id(data['id'])
 
-        if user:
+        if user and await user_is_group_member(user):
             SESSION_POOL[sid] = {
                 **user.model_dump(
                     exclude=[
@@ -380,7 +380,7 @@ async def user_join(sid, data):
         return
 
     user = await Users.get_user_by_id(data['id'])
-    if not user:
+    if not user or not await user_is_group_member(user):
         return
 
     SESSION_POOL[sid] = {

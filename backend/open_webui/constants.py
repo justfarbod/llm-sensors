@@ -45,6 +45,7 @@ class ERROR_MESSAGES(str, Enum):
     EXISTING_USERS = "You can't turn off authentication because there are existing users. If you want to disable WEBUI_AUTH, make sure your web interface doesn't have any existing users and is a fresh installation."
 
     UNAUTHORIZED = '401 Unauthorized'
+    NO_GROUP = 'Your account is not assigned to a group yet. Please contact your administrator.'
     ACCESS_PROHIBITED = (
         'You do not have permission to access this resource. Please contact your administrator for assistance.'
     )

@@ -296,6 +296,11 @@ class GroupTable:
                 'total': total,
             }
 
+    async def has_any_group(self, user_id: str, db: Optional[AsyncSession] = None) -> bool:
+        async with get_async_db_context(db) as db:
+            result = await db.execute(select(GroupMember.id).filter(GroupMember.user_id == user_id).limit(1))
+            return result.first() is not None
+
     async def get_groups_by_member_id(self, user_id: str, db: Optional[AsyncSession] = None) -> list[GroupModel]:
         async with get_async_db_context(db) as db:
             result = await db.execute(

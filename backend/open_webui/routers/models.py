@@ -19,7 +19,7 @@ from open_webui.models.models import (
     ModelAccessResponse,
     Models,
 )
-from open_webui.models.access_grants import AccessGrants
+from open_webui.models.access_grants import AccessGrants, public_read_access_grants
 
 from pydantic import BaseModel
 from open_webui.constants import ERROR_MESSAGES
@@ -221,6 +221,9 @@ async def create_new_model(
         )
 
     else:
+        # Models are public unless the request sets its own access grants.
+        if form_data.access_grants is None:
+            form_data.access_grants = public_read_access_grants()
         form_data.access_grants = await filter_allowed_access_grants(
             request.app.state.config.USER_PERMISSIONS,
             user.id,
@@ -364,6 +367,8 @@ async def import_models(
                         model_data['meta'] = model_data.get('meta', {})
                         model_data['params'] = model_data.get('params', {})
                         new_model = ModelForm(**model_data)
+                        if new_model.access_grants is None:
+                            new_model.access_grants = public_read_access_grants()
                         new_model.access_grants = await filter_allowed_access_grants(
                             request.app.state.config.USER_PERMISSIONS,
                             user.id,
