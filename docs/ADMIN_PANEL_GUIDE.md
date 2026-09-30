@@ -1,138 +1,256 @@
-# Open WebUI Admin Panel Guide
+# LLMScribe Admin Panel Guide
 
-Welcome to the Admin Panel! This guide will walk you through the essential tools you need to create experiment workflows, manage user groups, and analyze participant sessions.
+Welcome to the **LLMScribe** Admin Panel (built on Open WebUI)! This guide provides researchers and study administrators with a complete walkthrough of essential tools: managing participants and cohorts, authoring modular experiment tasks, configuring prompt allowances and behavioral perturbations, assembling end-to-end experiment workflows, and analyzing rich session telemetry.
+
+---
 
 ## 1. Admin Panel Tour & Navigation
 
-The Admin Panel is your central hub for managing studies and participants. 
+The Admin Panel serves as your central command center for deploying studies, monitoring real-time participant activity, and inspecting research data.
 
 ![Admin Panel Tour](images/admin_guide/01_admin_panel_tour.png)
 
-At the top of the page, you'll find the primary navigation bar:
-- **Research Dashboard**: View study progress, participant activity, and overall results. You can switch between different tabs like Overview, Workflows, Participants, and LLM Usage to get specific insights. You can also filter these views by User Group or Experiment State.
-- **Users**: Manage participant accounts and create User Groups to organize them.
-- **Experiment Tasks**: Create the individual tasks (essays, questions, surveys) and assemble them into full experiment workflows.
+### Primary Navigation Bar
+Across the top header, the main navigation links provide access to all core sections:
+- **Research Dashboard**: The primary interface for tracking overall study progress, participant milestones, session timelines, and LLM telemetry.
+- **Users**: Manage participant accounts, generate user credentials in bulk, export user rosters to CSV, and organize participants into User Groups.
+- **Experiment Tasks**: Author and maintain modular study components (Essays, Questions, and Surveys) and assemble them into full Experiment Workflows.
+- **Advanced**: Access administrative system controls, platform configurations, model connection endpoints, and API settings.
+
+### Dashboard Sub-Navigation Tabs
+Under the **Research Dashboard**, switch between specialized monitoring views:
+- **Overview**: High-level key performance indicator (KPI) cards displaying enrolled participant counts, active vs. completed sessions, average study duration, and aggregate LLM interactions.
+- **Participants**: A detailed roster of participants showing live session progression, clean formatted start and completion timestamps, and export actions.
+- **Workflows**: Visual breakdown of deployed workflows, stage configurations, and active participant cohorts.
+- **LLM Usage**: Aggregate and granular tracking of student model queries, token usage, latency, and prompt distribution across tasks.
+
+### Study Filter Controls
+Refine any dashboard view using the global filter bar:
+- **Workflow / Version**: Focus telemetry on a specific experiment workflow or published configuration version.
+- **User Group**: Isolate data for specific participant cohorts (e.g., Control Group vs. Test Group).
+- **Experiment State**: Filter by session progress—view all participants, only active sessions, or completed runs.
 
 ---
 
 ## 2. Researcher Dashboard & Participant Sessions
 
-The Researcher Dashboard organizes results by the workflow configuration participants received. Workflows show ordered steps with progress, elapsed time, question grades, essay texts and length statistics, or survey answers. The latest deployed configuration with runs opens by default; older configurations remain selectable even after library edits or deletion. Unmatched deployments appear as historical workflows.
+The Researcher Dashboard organizes data around the exact workflow version received by participants. Workflows display ordered task steps alongside completion progress, elapsed time, automated question scores, essay submissions, and survey responses.
 
-All data is included by default. Synthetic runs carry a **Synthetic demo** label and can be filtered separately. LLM Usage counts the whole run and separates messages without a step assignment. Historical runs without an applied plan may use explicitly labeled time-window attribution.
+The most recently deployed workflow configuration with active runs opens by default; older configuration snapshots remain fully selectable even after workflow modifications or deletions. Historical runs without an assigned plan retain time-window attribution. Synthetic runs carry a visible **Synthetic demo** badge and can be filtered separately.
 
 ### Exporting Sessions
-Navigate to **Research Dashboard** &rarr; **Participants** to see a list of everyone assigned to your studies.
+Navigate to **Research Dashboard** &rarr; **Participants** to view all participants assigned to your studies.
 
 ![Dashboard Session Exports](images/admin_guide/02_dashboard_export_sessions.png)
 
-- Select the participants whose completed or active sessions you want to export.
-- If you need to protect participant privacy, toggle the **Anonymize account identifiers** option to hide emails and usernames.
-- Click **Export full sessions (JSON)** to download the data for the selected participants.
+- **Participant Roster**: Displays participant identifiers, usernames, emails, assigned groups, experiment states (`Active`, `Completed`), visual progress bars, **Started At** and **Completed At** formatted timestamps, and total time spent.
+- **Selection**: Select individual participant checkboxes or click the header checkbox to batch-select participants for export.
+- **Anonymize Account Identifiers**: Check this toggle before exporting to automatically redact participant emails and usernames, ensuring privacy compliance for IRB and open-science data sharing.
+- **Export Full Sessions (JSON)**: Click this button to download complete longitudinal session packages containing prompt histories, model generations, perturbation events, stage transitions, and interaction telemetry.
 
 ### Session Inspector
-Click a participant's name to open the Session Inspector within the current workflow context.
+Click any participant's name in the roster to open the slide-over **Session Inspector** drawer.
 
 ![Participant Session Detail](images/admin_guide/03_participant_session_detail.png)
 
-The ordered task timeline contains essays, question submissions and grading actions, survey responses, task conversations, and telemetry. Pending grades stay pending; optional skipped surveys remain distinct from completed ones. Whole-run elapsed duration is separate from interaction telemetry. Full exports include workflow/configuration identity and retain existing fields. Account anonymization does not redact free text or sensitive tab URLs.
+- **Ordered Task Timeline**: Displays the participant's step-by-step progression through each essay, question set, and survey in the workflow.
+- **Response Review & Grading**: Inspect submitted essay drafts with word-count statistics, view automated scoring for objective questions, grade free-text answers manually, and evaluate survey responses.
+- **Telemetry & Transcripts**: Access full chat logs, AI prompt exchanges, perturbation warnings shown, and millisecond-accurate event timestamps.
+- **Individual Session Export**: Export the focused participant's complete data record directly from the inspector header.
 
 ---
 
-## 3. User Groups
+## 3. User Management & User Groups
 
-User Groups allow you to organize participants into different study conditions or cohorts (e.g., a Control Group and a Test Group).
+LLMScribe provides comprehensive participant onboarding tools, ranging from single account provisioning and bulk credential generation to flexible cohort organization.
 
-![User Groups Management](images/admin_guide/04_user_groups_management.png)
+### User Management Overview
+Navigate to **Users** &rarr; **Overview** (`/admin/users/overview`) to view the complete participant roster.
 
-Navigate to **Users** &rarr; **Groups** to view all your existing groups. 
+![User Management Overview](images/admin_guide/04_user_management_overview.png)
 
-![Configure User Group Modal](images/admin_guide/05_configure_user_group_modal.png)
+- **User Search**: Quickly locate participant accounts by typing a name or email address into the search field.
+- **Role & Status Badges**: View account permissions (`user` vs. `admin`) and active account statuses at a glance.
+- **Action Toolbar**:
+  - **Add User (`+`)**: Create a single participant account manually by specifying a name, email address, initial password, and role.
+  - **Generate Users**: Open the bulk generator modal to create dozens or hundreds of numbered participant accounts in seconds.
+  - **Export Users**: Export the current participant roster as a CSV spreadsheet for attendance tracking or cohort auditing.
+  - **Row Action Controls**: Edit user profiles, reassign user groups, reset passwords, or delete accounts.
 
-To create a new group, click **+ New Group**. Give the group a clear name and description. You can also adjust specific permissions for the group and assign users to it directly from this menu.
+### Bulk User Generation
+Click the **Generate Users** button to open the bulk account generator modal. This is especially useful for classroom experiments, lab studies, and proctored evaluations where pre-seeded accounts are needed.
+
+![Generate Users Modal](images/admin_guide/05_generate_users_modal.png)
+
+Configure the generation parameters:
+- **Username Prefix**: The base identifier for accounts (e.g., `participant_` creates `participant_1`, `participant_2`, etc.).
+- **Number of Users**: Total quantity of accounts to generate in this batch (e.g., `25`).
+- **Start Number**: Starting integer index (e.g., set to `1` for a new cohort, or `26` to append to an existing pool).
+- **Email Domain**: Domain appended to generated usernames (e.g., `study.local` yields `participant_1@study.local`).
+- **Role**: Permission level assigned to generated accounts (defaults to `user`).
+- **Password Length**: Number of characters for secure randomly generated initial passwords (e.g., `12`).
+- **Group**: Target User Group to which all generated accounts are automatically assigned upon creation.
+
+> [!TIP]
+> Immediately upon clicking **Generate**, LLMScribe generates the accounts and automatically triggers a download of a CSV file containing usernames, emails, initial passwords, and assigned groups. Securely distribute these credentials to your participants prior to the study session.
+
+### User Groups Management
+Navigate to **Users** &rarr; **Groups** (`/admin/users/groups`) to organize participants into study conditions or experimental cohorts (e.g., `Cohort Alpha - Control`, `Cohort Beta - Scaffolding`).
+
+![User Groups Management](images/admin_guide/06_user_groups_management.png)
+
+- Review all active cohorts, enrolled participant counts, and creation dates.
+- Click **+ New Group** to establish a new cohort.
+- Click the edit icon on any existing group to modify its configuration.
+
+### Configuring User Groups
+The **Edit Group** modal features a streamlined, two-tab layout designed for straightforward cohort administration:
+
+![Configure User Group Modal](images/admin_guide/07_configure_user_group_modal.png)
+
+- **General Tab**: Update the group's display Name and Description.
+- **Users Tab**: Search for existing users and add them to the group, or remove current members.
+
+> [!NOTE]
+> **Streamlined Group Management**: In current versions of the platform, the legacy *Permissions* tab has been removed from the user group modal. Participant capabilities are governed globally by account roles (`user` vs. `admin`), while task and study access is determined by the specific Experiment Workflow applied to the group.
 
 ---
 
 ## 4. Creating Experiment Tasks
 
-Before you can build a complete study workflow, you need to create the individual tasks. Navigate to **Experiment Tasks** to get started.
+Before building a study pipeline, author the individual modular tasks under **Experiment Tasks**.
 
 ### Essay Tasks
-Essay tasks define the writing prompts and instructions for your participants.
+Essay tasks present participants with writing prompts, background reading materials, and composition instructions.
 
-![Essay Tasks Authoring](images/admin_guide/06_task_authoring_essay.png)
+![Essay Tasks Authoring](images/admin_guide/08_task_authoring_essay.png)
 
-Give your topic a title and use the text editor to write out the prompt, background context, and guidelines. You can use the **Preview** tab to see how it will look to participants before saving.
+- **Task Details**: Define a descriptive title and topic summary.
+- **Rich Markdown Editor & Preview**: Compose comprehensive prompts using full Markdown formatting (headings, bullet points, callouts). Toggle the **Preview** tab to verify formatting exactly as participants will experience it.
+- **Word Limits & Constraints**: Specify minimum and maximum word counts and composition guidelines.
+- **Task Library Roster**: Search, duplicate, edit, or delete existing essay prompts in your library.
 
 ### Question Tasks
-Question tasks let you create comprehension or knowledge tests.
+Question tasks evaluate comprehension, knowledge retention, or problem-solving skills.
 
-![Question Tasks Authoring](images/admin_guide/07_task_authoring_question.png)
+![Question Tasks Authoring](images/admin_guide/09_task_authoring_question.png)
 
-You can choose from several formats, including Single Choice, Multiple Select, Fill in the Blank, or Free Text. You can also assign point values and attach images to your questions.
+- **Flexible Question Types**: Select from Single Choice (radio), Multiple Select (checkboxes), Fill in the Blank, or Free Text / Short Answer.
+- **Scoring & Rubrics**: Assign point values to each question, specify correct answer keys for automated grading, and provide rubric guidance for manual evaluation.
+- **Rich Media**: Attach diagrams, charts, or images to supplement question prompts.
+- **Question Bank Roster**: Organize and maintain your repository of assessment questions.
 
 ### Survey Tasks
-Survey tasks are used for pre-study or post-study questionnaires.
+Survey tasks collect demographic data, prior knowledge ratings, cognitive load feedback, or post-experiment reflections.
 
-![Survey Tasks Authoring](images/admin_guide/08_task_authoring_survey.png)
+![Survey Tasks Authoring](images/admin_guide/10_task_authoring_survey.png)
 
-You can create 1–5 scale questions, multiple-choice questions, or text inputs. You can customize the labels for the scales and choose whether a question is required.
+- **Item Formats**: Author 1–5 or 1–7 Likert rating scales, multiple-choice items, or open-ended reflection prompts.
+- **Custom Scale Anchors**: Customize endpoint labels (e.g., "1 - Strongly Disagree" to "5 - Strongly Agree") to match standard psychometric scales.
+- **Required Flags**: Mark essential questions as mandatory or allow optional responses.
 
 ---
 
 ## 5. Creating Experiment Workflows
 
-Workflows combine your individual tasks into a step-by-step study pipeline.
+Workflows connect modular tasks into a cohesive, sequential study pipeline with automated navigation, consent gates, and prompt allowances.
 
-![Experiment Workflow Library](images/admin_guide/09_experiment_workflow_library.png)
+### Workflow Library
+Navigate to **Experiment Tasks** &rarr; **Workflows** to access your study library.
 
-Navigate to **Experiment Tasks** &rarr; **Workflows**. Here you will see your Workflow Library, which lists all your existing workflows. Click **+ New Workflow** to create a new one.
+![Experiment Workflow Library](images/admin_guide/11_experiment_workflow_library.png)
 
-![Create Experiment Workflow](images/admin_guide/10_create_experiment_workflow.png)
+- View all existing workflows, publication versions, stage counts, and deployment statuses (`DRAFT`, `READY`).
+- Click **Import** to upload a previously exported workflow bundle (`.zip`).
+- Click **+ New Workflow** to author a new study pipeline.
 
-In the Workflow Editor, give your study a name and description. You can set the rules for how participants progress through the study, such as whether they must go in order (Strict sequential) or can jump around (Free navigation). You can also choose if participants must agree to a consent form first.
+### Workflow Editor & Navigation Progression
+Click on any workflow to open the full Workflow Editor.
 
-![Workflow Ordered Tasks](images/admin_guide/11_workflow_ordered_tasks.png)
+![Create Experiment Workflow](images/admin_guide/12_create_experiment_workflow.png)
 
-Scroll down to the **Ordered tasks** section to add stages to your workflow. Click **+ Essay**, **+ Question Task**, or **+ Survey** to add the tasks you created earlier. You can use the up and down arrows to easily reorder them.
+- **Metadata**: Provide a descriptive study title, internal notes, and administrative description.
+- **Progression Mode**:
+  - **Strict sequential**: Enforces linear progress. Participants must complete and submit each stage before the next stage unlocks, preventing skipping ahead.
+  - **Free navigation**: Allows participants to switch freely between unlocked stages.
+- **Consent Form & Briefing**: Enable mandatory informed consent. Participants must review and accept your consent form before entering the first study task.
+- **Action Toolbar**: Save revisions, export the workflow package as a `.zip` archive, or apply the workflow to participant cohorts.
+
+### Assembling Ordered Tasks
+Scroll down to the **Ordered tasks** section to structure your study stages.
+
+![Workflow Ordered Tasks](images/admin_guide/13_workflow_ordered_tasks.png)
+
+- **Add Stages**: Click **+ Essay**, **+ Question Task**, or **+ Survey** to insert pre-authored tasks into the workflow pipeline.
+- **Reorder Stages**: Use the up and down arrow buttons on each stage card to reorder tasks instantly.
+- **Stage Summaries**: Each card displays task metadata, stage numbers, and configured LLM prompt limits.
 
 ---
 
-### Student LLM prompt limits
+### Student LLM Prompt Limits
 
-Each essay or question task in a workflow has an **LLM prompt limit**, initially **100**. Essays use one limit for the whole task. For question tasks, choose **Whole task** or **Each question separately** and enter a limit for each question. Set **0** to disable student LLM requests for that task or question.
+Controlling AI assistance access is critical for educational and cognitive research. LLMScribe provides granular, stage-level and question-level prompt budget configuration.
 
-Students see prompts used, remaining allowance, and requests in progress beside their task and chat input. Only successfully completed responses count, including regenerations and continuations. Failed or cancelled requests restore the allowance. Switching tasks, questions, or chats does not reset usage; students can keep editing and submitting answers after reaching the limit.
+![Prompt Limit Configuration](images/admin_guide/14_prompt_limit_configuration.png)
 
-Existing workflow tasks are migrated to a limit of 100. Workflow exports use version 4 and preserve per-question limits when imported or applied to a group. Supported version 2 and version 3 archives are upgraded automatically with a task-wide limit of 100.
+#### Budgeting Models
+- **Task-Wide Limit (Essays)**:
+  - Essay stages use a single shared prompt limit across the entire task (initially default to **100**).
+  - Participants can distribute their prompt allowance freely across their writing and drafting process.
+- **Question Task Limit Modes**:
+  - **Whole task**: A single shared prompt allowance pooled across all questions in the test.
+  - **Each question separately**: Dedicated, independent prompt allowances configured individually for each question item in the task.
+- **Zero-Budget Behavior (`0` prompts)**:
+  - Setting a limit of **0** completely disables the LLM chat interface for that specific task or question.
+  - Use this setting to enforce unassisted baseline conditions (e.g., pre-tests, unaided essays, or retention quizzes) within an otherwise AI-assisted study workflow.
 
-### Whole-group conditions and combined behaviors
+#### Participant Experience & Accounting Rules
+- **Live Allowance Display**: Participants see prompts used, remaining allowance, and in-flight request spinners directly beside the task instructions and chat input field.
+- **Success-Only Deductions**: Only successfully completed LLM responses count against the budget. Prompt regenerations and continuations count toward the limit.
+- **Error & Cancellation Protection**: Network errors, server failures, or user-cancelled requests automatically restore the prompt allowance.
+- **State Persistence**: Switching between tasks, questions, or browser tabs does not reset prompt consumption.
+- **Limit Exhaustion**: When a participant's remaining allowance reaches 0, the chat input locks with an informative prompt-limit banner. Participants can continue reviewing existing chat histories, editing their drafts, and submitting their answers without penalty.
 
-In **LLM behavior and response perturbations**, allocations are whole percentages from **0% to 100%**. Enabled conditions must total **100%** and include exactly one control. The control may have **0%** allocation; conditions at 0% and disabled conditions are never assigned to new participants.
+#### Versioning & Migration
+- Existing workflows are automatically assigned a default limit of 100 upon migration.
+- Workflow exports use format version 4, fully preserving both task-wide and per-question prompt allocations when imported or deployed to groups.
 
-To give every new participant in a group reliability warnings and delayed responses together:
+---
 
-1. Set **Control** to **0%** and leave it enabled.
-2. Add a condition named **Warning + delay**, leave it enabled, and set its allocation to **100%**. Set any other enabled conditions to 0%.
-3. Within that condition, enable **Reliability-warning modal** and configure its message, acknowledgement, and cadence. For a warning after every prompt, choose **Every N prompts** with a value of **1**.
-4. Set **Response timing** to **Delayed reveal** and choose the delay in seconds. The delay applies to every response, independently of the warning cadence.
-5. Save the workflow and publish it to the target group. The same settings are available in the direct experiment-plan editor.
+### Whole-Group Conditions & Combined Behaviors
 
-Behaviors within a condition operate together. Separate groups can each use a different condition at 100%, making group membership determine the condition for new sessions. Participants whose sessions already exist keep their original plan and condition when a new version is published.
+Under **LLM behavior and response perturbations**, researchers can configure behavioral interventions across experimental conditions. Allocations are whole percentages from **0% to 100%**. Enabled conditions must total **100%** and include exactly one control condition. The control may be set to **0%** allocation if an all-intervention study is desired; conditions set to 0% or disabled conditions are never assigned to new participants.
+
+#### Combining Reliability Warnings and Response Delays
+To assign every participant in a cohort to receive both cognitive warnings and delayed responses:
+
+1. Set the **Control** condition allocation to **0%** and leave it enabled.
+2. Add a new condition named **Warning + Delay**, leave it enabled, and set its allocation to **100%**. Ensure any other conditions are set to 0% or disabled.
+3. Within the condition configuration, enable the **Reliability-warning modal**. Specify the dialog text, acknowledgement prompt, and display cadence (e.g., choose **Every N prompts** with a value of **1** to trigger a warning before every prompt).
+4. Set **Response timing** to **Delayed reveal** and specify the latency in seconds. The delay applies to every generated response, operating independently of the warning cadence.
+5. Save the workflow and publish it to the target group.
+
+All configured interventions within an active condition operate concurrently. Different user groups can each be assigned distinct workflows or conditions at 100%, allowing group assignment to dictate experimental conditions deterministically. Participants with active sessions maintain their original plan and condition snapshot even if a revised workflow version is published.
+
+---
 
 ## 6. Downloading and Uploading Workflows
 
-Workflows can be easily saved to your computer or shared with others. You can download an [example workflow zip file](https://drive.google.com/file/d/1o3GPGC1hqfreddtL3Q9bhgC8dqeHnB_B/view?usp=sharing) to test the import functionality.
+Workflows and their associated task libraries can be packaged, archived, and migrated across LLMScribe deployments.
 
-- **Downloading (Exporting)**: From the Workflow Library or the Workflow Editor, click the **Export** button. This will download a `.zip` file containing your workflow and all of its associated tasks.
-- **Uploading (Importing)**: In the Workflow Library, click the **Import** button and upload a `.zip` file to instantly restore a workflow and all of its tasks.
+- **Exporting (Downloading)**: From the Workflow Library or the Workflow Editor action toolbar, click the **Export** button. This downloads a self-contained `.zip` package containing the workflow configuration schema and all referenced essay, question, and survey task definitions.
+- **Importing (Uploading)**: In the Workflow Library, click **Import** and upload a valid `.zip` bundle to instantly restore the workflow and register all constituent tasks in your local library.
+- **Reference Archive**: You can download an [example workflow zip file](https://drive.google.com/file/d/1o3GPGC1hqfreddtL3Q9bhgC8dqeHnB_B/view?usp=sharing) to test import and verification capabilities.
 
 ---
 
 ## 7. Applying Workflows to User Groups
 
-Once your workflow is ready, you need to apply it to a User Group so participants can access it.
+Once your workflow authoring is complete and saved in a `READY` state, apply it to a User Group to activate it for participants.
 
-![Export and Apply Workflow](images/admin_guide/12_export_and_apply_workflow.png)
+![Export and Apply Workflow](images/admin_guide/15_export_and_apply_workflow.png)
 
-In the Workflow Editor, click the **Apply** button at the top right. A menu will appear where you can select the target User Group. Once you click **Confirm and publish**, the workflow will be active for all participants in that group.
+1. In the Workflow Editor header, ensure all edits are saved, then click the **Apply** button.
+2. In the deployment modal, select your target **User Group** (e.g., `Cohort Alpha`) from the dropdown menu.
+3. Click **Confirm and publish**.
+4. The workflow is immediately deployed to that group. When enrolled participants log in, they will be directed into the newly activated study pipeline.
