@@ -17,6 +17,13 @@ before launching Jupyter (or edit `EXPORT_PATH`) to analyze your own file; other
 cohort in `examples/grade10_cohort/` when present, then the small bundled example. Timelines default to the first
 exported session; change `SESSION_ID` to inspect another run.
 
+The case-study notebook `notebooks/grade10_condition_case_study.ipynb` shows a complete analysis of the cohort, from
+a research question to conclusions. It asks whether the four AI-delivery conditions (ordinary, tutor prompt,
+verification reminder, 3-second delay) change how students use the AI, how they score, and how they rate trust and
+workload. It covers manipulation checks, rule-based exclusions, count and ANCOVA models with robust standard errors,
+linking telemetry to the chat log, robustness checks and a power analysis. It is committed with its outputs, so it
+can be read without running it, and it needs the `analysis` extra (scipy, statsmodels).
+
 The toolbox is a standalone source package. It runs separately from the Open WebUI development servers and should be
 installed in its own Python 3.11-or-newer environment.
 
@@ -42,6 +49,13 @@ For the tutorial notebook and development tools:
 python3 -m pip install -e ".[notebook,test]"
 jupyter lab notebooks/full_session_analysis.ipynb
 python -m pytest            # includes executing the notebook against several export shapes
+```
+
+For the case-study notebook:
+
+```bash
+python3 -m pip install -e ".[notebook,analysis]"
+jupyter lab notebooks/grade10_condition_case_study.ipynb
 ```
 
 ## Quick start

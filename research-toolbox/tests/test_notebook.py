@@ -74,3 +74,26 @@ def test_notebook_runs_with_participant_exports(project_root, fixture_path, tmp_
         notebook, timeout=120, kernel_name="python3",
         resources={"metadata": {"path": str(project_root.parent)}},
     ).execute()
+
+
+def test_case_study_notebook_executes_on_cohort(project_root, monkeypatch):
+    pytest.importorskip("scipy")
+    pytest.importorskip("statsmodels")
+    import nbclient
+    import nbformat
+
+    exports = sorted((project_root / "examples" / "grade10_cohort").glob("experiment-full-sessions-*.json"))
+    if not exports:
+        pytest.skip("Grade 10 cohort export not present")
+    monkeypatch.setenv("RESEARCH_EXPORT_PATH", str(exports[-1]))
+    notebook = nbformat.read(project_root / "notebooks" / "grade10_condition_case_study.ipynb", as_version=4)
+    notebook.cells.append(nbformat.v4.new_code_cell(
+        "assert len(analysis) == len(df) - flags['never_started'].sum()\n"
+        "assert flags['never_started'].sum() == 1 and flags['dropped_out'].sum() == 3\n"
+        "assert flags.loc[analysis.index[analysis['participant_id'] == 'P-38B9DCB70D5F'], 'low_effort'].all()\n"
+        "assert family['p_holm'].between(0, 1).all()\n"
+    ))
+    nbclient.NotebookClient(
+        notebook, timeout=600, kernel_name="python3",
+        resources={"metadata": {"path": str(project_root / "notebooks")}},
+    ).execute()
