@@ -68,14 +68,56 @@ class ExperimentDataset:
     def essay_summary(self) -> pd.DataFrame:
         return analysis.essay_summary(self)
 
-    def chat_usage_summary(self) -> pd.DataFrame:
-        return analysis.chat_usage_summary(self)
+    def chat_usage_summary(self, by: Iterable[str] = ("session_id",)) -> pd.DataFrame:
+        return analysis.chat_usage_summary(self, by)
 
     def telemetry_timeline(self, session_id: str | None = None) -> pd.DataFrame:
         return analysis.telemetry_timeline(self, session_id)
 
     def session_timeline(self, session_id: str | None = None) -> pd.DataFrame:
         return analysis.session_timeline(self, session_id)
+
+    # Retrieval helpers -------------------------------------------------------
+    def session_context(self) -> pd.DataFrame:
+        return analysis.session_context(self)
+
+    def session_activity(self) -> pd.DataFrame:
+        return analysis.session_activity(self)
+
+    def question_answers(self) -> pd.DataFrame:
+        return analysis.question_answers(self)
+
+    def survey_answers(self) -> pd.DataFrame:
+        return analysis.survey_answers(self)
+
+    def essay_texts(self, include_drafts: bool = True) -> pd.DataFrame:
+        return analysis.essay_texts(self, include_drafts)
+
+    def chat_transcript(self, session_id: str | None = None) -> pd.DataFrame:
+        return analysis.chat_transcript(self, session_id)
+
+    def llm_request_timing(self) -> pd.DataFrame:
+        return analysis.llm_request_timing(self)
+
+    def telemetry_events_flat(self, event_types: Iterable[str] | None = None) -> pd.DataFrame:
+        return analysis.telemetry_events_flat(self, event_types)
+
+    def keystrokes(self) -> pd.DataFrame:
+        return analysis.keystrokes(self)
+
+    def keystroke_summary(
+        self, by: Iterable[str] = ("session_id", "task_id", "field_context"), pause_threshold_ms: int = 2000
+    ) -> pd.DataFrame:
+        return analysis.keystroke_summary(self, by, pause_threshold_ms)
+
+    def clipboard_events(self) -> pd.DataFrame:
+        return analysis.clipboard_events(self)
+
+    def tab_activity(self) -> pd.DataFrame:
+        return analysis.tab_activity(self)
+
+    def focus_periods(self) -> pd.DataFrame:
+        return analysis.focus_periods(self)
 
     def materialize(
         self,

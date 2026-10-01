@@ -158,8 +158,21 @@ def test_message_task_attribution_overrides_chat_task(fixture_path):
     chat["messages"][0]["experiment_session_task_id"] = "task-question"
     data = load_export(document, strict=True)
     assert data.messages.loc[0, "task_id"] == "task-question"
+    assert data.messages.loc[0, "task_id_source"] == "message"
     assert data.messages.loc[1, "task_id"] == "task-essay"
+    # Without a chat task, the assistant reply is still linked through its LLM request.
     chat["record"]["experiment_session_task_id"] = None
     data = load_export(document, strict=True)
     assert data.messages.loc[0, "task_id"] == "task-question"
+    assert data.messages.loc[1, "task_id"] == "task-essay"
+    assert data.messages.loc[1, "task_id_source"] == "llm_request"
+    # Without request evidence it falls back to its parent message.
+    document["sessions"][0]["perturbations"]["llm_requests"] = []
+    chat["messages"][1]["parent_id"] = chat["messages"][0]["id"]
+    data = load_export(document, strict=True)
+    assert data.messages.loc[1, "task_id"] == "task-question"
+    assert data.messages.loc[1, "task_id_source"] == "parent_message"
+    chat["messages"][1]["parent_id"] = None
+    data = load_export(document, strict=True)
     assert pd.isna(data.messages.loc[1, "task_id"])
+    assert pd.isna(data.messages.loc[1, "task_id_source"])

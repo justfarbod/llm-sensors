@@ -51,7 +51,7 @@ TABLE_COLUMNS: dict[str, list[str]] = {
     "survey_responses": ["session_id", "task_id", "submission_id", "response_id", "survey_question_id"],
     "survey_response_choices": ["response_id", "survey_question_id", "survey_choice_id"],
     "chats": ["session_id", "task_id", "chat_id"],
-    "messages": ["session_id", "task_id", "chat_id", "message_id"],
+    "messages": ["session_id", "task_id", "chat_id", "message_id", "history_message_id", "task_id_source"],
     "chat_attachments": ["chat_id", "file_id", "attachment_id"],
     "files": ["file_id"],
     "chat_embedded_files": ["chat_id", "file_id"],
@@ -573,12 +573,11 @@ def _collect_chats(collector: _Collector, chats: Any, session_id: str | None, se
         )
         for message_order, message in enumerate(_items(wrapper.get("messages"))):
             message_id = _definition_id(message)
-            message_task_id = (_record(message) or {}).get("experiment_session_task_id") or task_id
             collector.add(
                 "messages",
                 message,
                 context={
-                    **context, "task_id": message_task_id, "message_id": message_id, "_parent_order": message_order
+                    **context, "_chat_task_id": task_id, "message_id": message_id, "_parent_order": message_order
                 },
                 session_order=session_order,
             )
@@ -769,10 +768,12 @@ def _collect_session(collector: _Collector, value: Any, session_order: int) -> N
 
 def _timestamp_columns(table: str, frame: pd.DataFrame) -> dict[str, str]:
     if table == "session_summaries":
+        # Dashboard-derived values (start/completion time and survey, writing and task milestones)
+        # are exported as whole seconds, unlike the raw nanosecond experiment records.
         return {
             name: "s"
-            for name in ("session_start_time", "session_completion_time")
-            if name in frame.columns
+            for name in frame.columns
+            if name in ("session_start_time", "session_completion_time") or name.endswith("_at")
         }
     unit = "s" if table in SECOND_TABLES else "ns" if table in NANOSECOND_TABLES else None
     if unit is None:
@@ -783,12 +784,19 @@ def _timestamp_columns(table: str, frame: pd.DataFrame) -> dict[str, str]:
     return {name: unit for name in names}
 
 
-def _as_utc(value: Any, unit: str) -> pd.Timestamp | pd.NaT:
-    if value is None or value is pd.NA or isinstance(value, bool):
-        return pd.NaT
-    if not isinstance(value, Number):
-        return pd.NaT
-    return pd.to_datetime(value, unit=unit, utc=True, errors="coerce")
+def _as_utc(values: pd.Series, unit: str) -> pd.Series:
+    """Convert raw integer timestamps to UTC datetimes; non-numeric values become NaT."""
+    numbers = [
+        value if isinstance(value, Number) and not isinstance(value, bool) else None for value in values
+    ]
+    integral = all(value is None or float(value).is_integer() for value in numbers)
+    # Nanosecond integers exceed float precision, so keep exact integers whenever possible.
+    array = pd.array(
+        [None if value is None else (int(value) if integral else float(value)) for value in numbers],
+        dtype="Int64" if integral else "Float64",
+    )
+    converted = pd.to_datetime(array, unit=unit, utc=True, errors="coerce")
+    return pd.Series(converted, index=values.index, dtype="datetime64[ns, UTC]")
 
 
 def _frame(table: str, rows: list[dict[str, Any]]) -> pd.DataFrame:
@@ -800,12 +808,42 @@ def _frame(table: str, rows: list[dict[str, Any]]) -> pd.DataFrame:
     ordered = required + [column for column in frame.columns if column not in required]
     frame = frame.loc[:, ordered].convert_dtypes()
     for column, unit in _timestamp_columns(table, frame).items():
-        frame[f"{column}_dt"] = pd.Series(
-            [_as_utc(value, unit) for value in frame[column]],
-            index=frame.index,
-            dtype="datetime64[ns, UTC]",
-        )
+        frame[f"{column}_dt"] = _as_utc(frame[column], unit)
     return frame
+
+
+def _resolve_message_tasks(collector: _Collector) -> None:
+    """Attribute every message to a session task, recording which evidence was used.
+
+    Messages carry ``experiment_session_task_id`` when the platform stamped them. In shared
+    experiment chats the platform only stamps user messages and the first reply, so assistant
+    replies are linked through their LLM request (``assistant_message_id`` → ``session_task_id``),
+    then through their parent message, and finally through the chat's own task.
+    """
+    requests: dict[tuple[Any, Any], Any] = {}
+    for request in collector.rows["llm_requests"]:
+        for key in ("assistant_message_id", "user_message_id"):
+            if request.get(key) and request.get("session_task_id"):
+                requests[(request.get("session_id"), request[key])] = request["session_task_id"]
+    resolved: dict[tuple[Any, Any], Any] = {}
+    for message in collector.rows["messages"]:
+        chat_id = message.get("chat_id")
+        message_id = message.get("message_id")
+        history_id = message_id
+        if isinstance(message_id, str) and isinstance(chat_id, str) and message_id.startswith(f"{chat_id}-"):
+            history_id = message_id[len(chat_id) + 1:]
+        message["history_message_id"] = history_id
+        own = message.get("experiment_session_task_id")
+        linked = requests.get((message.get("session_id"), history_id))
+        parent = resolved.get((chat_id, message.get("parent_id")))
+        chat_task = message.pop("_chat_task_id", None)
+        for source, value in (("message", own), ("llm_request", linked), ("parent_message", parent), ("chat", chat_task)):
+            if value:
+                message["task_id"], message["task_id_source"] = value, source
+                break
+        else:
+            message["task_id"], message["task_id_source"] = None, None
+        resolved[(chat_id, history_id)] = message["task_id"]
 
 
 def normalize_export(document: dict[str, Any], *, strict: bool = False) -> tuple[dict[str, pd.DataFrame], list[str]]:
@@ -815,5 +853,6 @@ def normalize_export(document: dict[str, Any], *, strict: bool = False) -> tuple
         collector.problem("The export contains no sessions.")
     for session_order, session in enumerate(sessions):
         _collect_session(collector, session, session_order)
+    _resolve_message_tasks(collector)
     tables = {name: _frame(name, collector.rows[name]) for name in TABLE_COLUMNS}
     return tables, collector.warnings

@@ -1,0 +1,2128 @@
+[
+ {
+  "number": 31,
+  "condition": "Control",
+  "profile": "Average student; steady but not very thorough, uses AI a few times to confirm steps; skipped the optional waiting item",
+  "outcome": "completed",
+  "stop_task": null,
+  "task_minutes": [
+   2.2,
+   12,
+   17,
+   1.3,
+   26,
+   2.4
+  ],
+  "typing_interval_ms": 230,
+  "telemetry": "extension",
+  "answers": {
+   "B1": {
+    "choices": [
+     0
+    ]
+   },
+   "B2": {
+    "choices": [
+     0,
+     1
+    ]
+   },
+   "B3": {
+    "blanks": {
+     "percent": "8",
+     "direction": "into"
+    }
+   },
+   "B4": {
+    "text": "The student is wrong that the water stopped moving, the molecules keep moving in and out of the potato but the mean at 0.30 mol/L is 0% so its about the same amount each way. Also you cant say every cell is exactly 0.30 because it is only an average of five pieces. So 0.30 is roughly where it balances out.",
+    "rubric_points": [
+     1,
+     2,
+     1,
+     1
+    ],
+    "rationale": "Synthetic rubric review: graph evidence: 1 point(s); balanced two-way movement: 2 point(s); unsupported every-cell claim: 1 point(s); qualified interpretation: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "B5": {
+    "text": "It will be negative because the solution is more concentrated than the potato so water moves out of the cells. It might be around -8% but the graph might not keep going in a straight line. To test it I would put 5 potato pieces in 0.50 mol/L for 20 minutes at the same temperature and measure the mass before and after.",
+    "rubric_points": [
+     1,
+     1,
+     1,
+     0,
+     1,
+     0
+    ],
+    "rationale": "Synthetic rubric review: negative prediction: 1 point(s); outward water movement: 1 point(s); extrapolation uncertainty: 1 point(s); replication and comparison: 0 point(s); controlled variables: 1 point(s); mean percentage changes: 0 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G1": {
+    "choices": [
+     1
+    ]
+   },
+   "G2": {
+    "blanks": {
+     "factor": "1.5",
+     "length": "7.5"
+    }
+   },
+   "G3": {
+    "choices": [
+     0,
+     1
+    ]
+   },
+   "G4": {
+    "text": "You have to multiply by 3 twice because its area not length, so 3 x 3 = 9. 12 x 9 = 108 cm². It's cm² because area is square units.",
+    "rubric_points": [
+     1,
+     1,
+     1,
+     1,
+     0
+    ],
+    "rationale": "Synthetic rubric review: length/area distinction: 1 point(s); both dimensions scale: 1 point(s); area factor nine: 1 point(s); correct numerical area: 1 point(s); square units explained: 0 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G5": {
+    "choices": [
+     0
+    ]
+   },
+   "G6": {
+    "blanks": {
+     "xcoord": "1.5",
+     "ycoord": "2"
+    }
+   },
+   "G7": {
+    "choices": [
+     0,
+     2,
+     3
+    ]
+   },
+   "G8": {
+    "text": "Way 1: 12 x 8 = 96, 4 x 3 = 12, 96 - 12 = 84 m². Way 2: bottom rectangle 12 x 5 = 60 and the top left part 8 x 3 = 24, 60 + 24 = 84 m². Both ways give 84 m².",
+    "rubric_points": [
+     2,
+     2,
+     0,
+     1
+    ],
+    "rationale": "Synthetic rubric review: subtraction: 2 point(s); two-rectangle calculation: 2 point(s); no overlap or gaps: 0 point(s); correct area with units: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G9": {
+    "choices": [
+     2
+    ]
+   },
+   "G10": {
+    "text": "6 m: 3 x 6 = 18, 96 - 18 = 78 which is less than 80 so it doesn't work. 5 m: 3 x 5 = 15, 96 - 15 = 81 so that works. The biggest whole number is 5 m. The smaller the service area the more floor is left because you're taking away less.",
+    "rubric_points": [
+     2,
+     0,
+     1,
+     1,
+     1,
+     0
+    ],
+    "rationale": "Synthetic rubric review: test and reject six meters: 2 point(s); solve exact bound: 0 point(s); greatest whole-meter width: 1 point(s); verify 81 square meters: 1 point(s); inverse width/usable-area relation: 1 point(s); coherent recommendation: 0 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   }
+  },
+  "essay": "The school council should pick the books plan for the $6,000 grant. I think this because more students would be able to use it and they can take the books home.\n\nFirst, Source A says that a lot of students ask for books that the library doesn't have or that have long waiting lists. That shows there is already a need for more books. The plan would add 300 books, including books in different languages, so more kinds of students could find something for them.\n\nSecond, Source C shows that books can be borrowed and used outside of school, but the media equipment has to stay at school. Some students don't have internet at home, and a book still works without it. The media space only has 6 seats so only a few people could use it at once.\n\nSome people would say the media space is better because students can make podcasts and videos and they might not have that equipment at home (Source B). That is a good point. But six seats for 600 students is not very many, and it would need supervision all the time.\n\nOne problem with the evidence is that the poll only had 120 people out of 600 answer it. So the 72 votes for books doesn't mean most of the school wants books, it's just the people who voted.\n\nOverall the books plan helps more students and doesn't need as much supervising, so the council should choose it.",
+  "essay_draft": null,
+  "surveys": {
+   "0": [
+    [
+     0,
+     1,
+     2
+    ],
+    [
+     2
+    ],
+    3,
+    3,
+    "I look at my notes and see if it matches"
+   ],
+   "3": [
+    [
+     3
+    ],
+    3,
+    3
+   ],
+   "5": [
+    3,
+    3,
+    null,
+    [
+     0,
+     1
+    ],
+    "For G10 I asked if 6 m works and it said 78 m², I did 96 - 18 myself on paper and got the same. In the essay it told me to explain why 6 seats is a problem so I added the supervision part."
+   ]
+  },
+  "chats": [
+   {
+    "task": 1,
+    "question": "B3",
+    "user": "is percent change 0.8 divided by 10 times 100? so 8?",
+    "assistant": "Yes — (10.8 − 10.0) ÷ 10.0 × 100 = 8%. Since the piece gained mass, the net movement of water was into the potato cells."
+   },
+   {
+    "task": 2,
+    "user": "can you check if my counterargument part makes sense: Some people would say the media space is better because students can make podcasts and videos and they might not have that equipment at home (Source B). That is a good point. But six seats for 600 students is not very many",
+    "assistant": "It makes sense, and it's good that you name the strongest point for the other side and credit it to Source B. To make your response stronger, explain *why* six seats matters — for example, how often could one student realistically get a turn? You could also mention that the space needs supervision, which Source C lists as its main ongoing need."
+   },
+   {
+    "task": 4,
+    "question": "G8",
+    "user": "for the L shape can i do 12x5 and 8x3?",
+    "assistant": "Yes. The bottom rectangle is 12 m × 5 m = 60 m² (because 8 − 3 = 5), and the upper-left rectangle is 8 m × 3 m = 24 m² (because 12 − 4 = 8). 60 + 24 = 84 m², which matches 96 − 12."
+   },
+   {
+    "task": 4,
+    "question": "G10",
+    "user": "if the service area is 6 m wide does it still leave 80",
+    "assistant": "No. A 6 m × 3 m service area removes 18 m², so 96 − 18 = 78 m² is left. That's below the 80 m² minimum, so the 6 m proposal doesn't meet the requirement."
+   }
+  ],
+  "focus_away": [
+   {
+    "task": 4,
+    "seconds": 25,
+    "tab_title": "Desmos | Scientific Calculator",
+    "url": "https://www.desmos.com/scientific"
+   }
+  ],
+  "copies": []
+ },
+ {
+  "number": 32,
+  "condition": "Tutor",
+  "profile": "Struggling, low-confidence student with early misconceptions; improves through repeated tutor hints and does best in geometry",
+  "outcome": "completed",
+  "stop_task": null,
+  "task_minutes": [
+   3.4,
+   17.5,
+   21,
+   2.1,
+   33,
+   3.3
+  ],
+  "typing_interval_ms": 295,
+  "telemetry": "extension",
+  "answers": {
+   "B1": {
+    "choices": [
+     1
+    ]
+   },
+   "B2": {
+    "choices": [
+     0,
+     1,
+     3
+    ]
+   },
+   "B3": {
+    "blanks": {
+     "percent": "8",
+     "direction": "into"
+    }
+   },
+   "B4": {
+    "text": "the water didnt stop moving. at 0.30 the mean is 0% so the same amount of water goes in and out and it cancels out. but it doesnt prove every cell is 0.30",
+    "rubric_points": [
+     1,
+     2,
+     0,
+     0
+    ],
+    "rationale": "Synthetic rubric review: graph evidence: 1 point(s); balanced two-way movement: 2 point(s); unsupported every-cell claim: 0 point(s); qualified interpretation: 0 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "B5": {
+    "text": "It will be negative because the water goes out of the potato. I would test more pieces at 0.50.",
+    "rubric_points": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "rationale": "Synthetic rubric review: negative prediction: 1 point(s); outward water movement: 0 point(s); extrapolation uncertainty: 0 point(s); replication and comparison: 0 point(s); controlled variables: 0 point(s); mean percentage changes: 0 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G1": {
+    "choices": [
+     1
+    ]
+   },
+   "G2": {
+    "blanks": {
+     "factor": "1.5",
+     "length": "7.5"
+    }
+   },
+   "G3": {
+    "choices": [
+     0,
+     1,
+     2
+    ]
+   },
+   "G4": {
+    "text": "the mistake is they multiplied the area by 3 but the base gets 3 times bigger and the height gets 3 times bigger too. so its 3 x 3 = 9. 12 x 9 = 108 cm²",
+    "rubric_points": [
+     1,
+     2,
+     1,
+     1,
+     0
+    ],
+    "rationale": "Synthetic rubric review: length/area distinction: 1 point(s); both dimensions scale: 2 point(s); area factor nine: 1 point(s); correct numerical area: 1 point(s); square units explained: 0 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G5": {
+    "choices": [
+     0
+    ]
+   },
+   "G6": {
+    "blanks": {
+     "xcoord": "1.5",
+     "ycoord": "2"
+    }
+   },
+   "G7": {
+    "choices": [
+     0,
+     1
+    ]
+   },
+   "G8": {
+    "text": "12 x 8 = 96 and 4 x 3 = 12 so 96 - 12 = 84 m². second way 12 x 5 = 60 and 8 x 3 = 24, 60 + 24 = 84. the rectangles dont overlap because they only touch at the line",
+    "rubric_points": [
+     2,
+     2,
+     1,
+     1
+    ],
+    "rationale": "Synthetic rubric review: subtraction: 2 point(s); two-rectangle calculation: 2 point(s); no overlap or gaps: 1 point(s); correct area with units: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G9": {
+    "choices": [
+     2
+    ]
+   },
+   "G10": {
+    "text": "6 m: 96 - 18 = 78, thats less than 80 so 6 m is too big. 96 - 3w = 80 so 3w = 16 and w = 5.33. the biggest whole number is 5 m and 96 - 15 = 81 which is ok. a smaller width takes away less floor so theres more left",
+    "rubric_points": [
+     2,
+     1,
+     1,
+     1,
+     1,
+     0
+    ],
+    "rationale": "Synthetic rubric review: test and reject six meters: 2 point(s); solve exact bound: 1 point(s); greatest whole-meter width: 1 point(s); verify 81 square meters: 1 point(s); inverse width/usable-area relation: 1 point(s); coherent recommendation: 0 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   }
+  },
+  "essay": "I think the school should pick the creative media space because some students dont have computers or equipment at home and this would help them.\n\nSource B says the media space could let students record podcasts, edit video and work on presentations even if they dont have that stuff at home. That is important because some students cant do projects as good as other people who have better computers. It would be fair for everyone.\n\nAlso source B says students could learn from each other across different subjects. So its not just for the media club, the club says all students can book it.\n\nSome people might say books are better because you can take them home and you dont need internet (Source A and C). That is true. But the library already has books and the media space would be something new that the school doesnt have yet.\n\nA problem is that the space only has 6 seats and it needs to be booked with supervision so not that many people can use it at the same time. Also the poll had 72 votes for books and 48 for media but only 120 people voted so we dont really know what everyone wants.\n\nIn conclusion the school should get the media space because it gives students equipment they might not have.",
+  "essay_draft": null,
+  "surveys": {
+   "0": [
+    [
+     0,
+     1
+    ],
+    [
+     1
+    ],
+    2,
+    4,
+    "ask my friend or look at the notes"
+   ],
+   "3": [
+    [
+     2
+    ],
+    4,
+    4
+   ],
+   "5": [
+    3,
+    3,
+    2,
+    [
+     1,
+     2
+    ],
+    "On B3 it kept asking me questions instead of telling me but then I figured out I had to divide by 10 not 10.8 and got 8. On G4 the squares thing helped me see why its 9."
+   ]
+  },
+  "chats": [
+   {
+    "task": 1,
+    "question": "B3",
+    "user": "idk how to do the percent one",
+    "assistant": "Let's start with the difference. What is the final mass minus the initial mass? Once you have that, what do you think you divide it by?"
+   },
+   {
+    "task": 1,
+    "question": "B3",
+    "user": "0.8. divide by 10.8?",
+    "assistant": "Good, 0.8 g is the change. Check the formula in the question: it divides by the *initial* mass. Which of the two masses was the starting one?"
+   },
+   {
+    "task": 1,
+    "question": "B3",
+    "user": "oh 10 so 0.08 x 100 = 8",
+    "assistant": "Exactly — 8%. Now the second blank: the piece got heavier. If the change is due to water, did water end up going into or out of the cells?"
+   },
+   {
+    "task": 1,
+    "question": "B4",
+    "user": "for b4 is the student right that water stops",
+    "assistant": "What do you think happens to individual water molecules — can they just stop moving? Think about what a zero mean change could mean if water is crossing the membrane in both directions."
+   },
+   {
+    "task": 1,
+    "question": "B4",
+    "user": "so its the same amount going in and out?",
+    "assistant": "Yes, that's the key idea: water keeps moving both ways at roughly equal rates, so the *net* change is about zero. Now the second problem: does an average of five pieces tell you what is inside every single cell? What else could be dissolved in a potato cell besides sucrose?"
+   },
+   {
+    "task": 2,
+    "user": "i dont know what to pick for the essay",
+    "assistant": "Both plans can earn a strong essay. Which source detail stood out to you most when you read the packet? Try telling me in one sentence which plan you lean toward and why."
+   },
+   {
+    "task": 2,
+    "user": "media i guess because some people dont have computers at home",
+    "assistant": "That's a real reason, and it comes from Source B. Can you write your claim sentence now? Then think: what is the strongest reason someone might pick books instead?"
+   },
+   {
+    "task": 2,
+    "user": "books can go home?",
+    "assistant": "Right — Sources A and C say books can be borrowed and used without internet, while the media equipment stays at school. How would you answer that point in your essay?"
+   },
+   {
+    "task": 4,
+    "question": "G2",
+    "user": "is the factor 6/4 or 4/6",
+    "assistant": "Which triangle are you going *from*, and which one *to*? The factor from ABC to DEF is what you multiply ABC's sides by to get DEF's. What do you multiply 4 by to get 6?"
+   },
+   {
+    "task": 4,
+    "question": "G4",
+    "user": "g4 isnt it just 36?",
+    "assistant": "Try a quick test: draw a 1 by 1 square, then make every side 3 times longer. How many of the original squares fit inside the new one? What does that suggest about the triangle's area when both base and height triple?"
+   },
+   {
+    "task": 4,
+    "question": "G4",
+    "user": "9 squares. so 12 x 9",
+    "assistant": "That's the idea. Can you explain in your answer *why* it's 9 — what happens to the base and what happens to the height?"
+   },
+   {
+    "task": 4,
+    "question": "G10",
+    "user": "how do i find the biggest width",
+    "assistant": "What expression gives the usable area for a width w? Start from 96 and subtract the service area. Then, what must that expression be at least?"
+   }
+  ],
+  "focus_away": [
+   {
+    "task": 1,
+    "seconds": 40,
+    "tab_title": "Instagram",
+    "url": "https://www.instagram.com/"
+   },
+   {
+    "task": 4,
+    "seconds": 18,
+    "tab_title": "Desmos | Scientific Calculator",
+    "url": "https://www.desmos.com/scientific"
+   }
+  ],
+  "copies": []
+ },
+ {
+  "number": 33,
+  "condition": "Control",
+  "profile": "Average student, stronger in biology; left the exam open in another tab for over two hours during geometry, otherwise ordinary work",
+  "outcome": "completed",
+  "stop_task": null,
+  "task_minutes": [
+   3.0,
+   13,
+   17,
+   1.8,
+   172,
+   2.6
+  ],
+  "typing_interval_ms": 240,
+  "telemetry": "extension",
+  "answers": {
+   "B1": {
+    "choices": [
+     0
+    ]
+   },
+   "B2": {
+    "choices": [
+     0,
+     1,
+     2
+    ]
+   },
+   "B3": {
+    "blanks": {
+     "percent": "8",
+     "direction": "out of"
+    }
+   },
+   "B4": {
+    "text": "The student's explanation has two problems. Water doesn't stop moving at 0.30 mol/L, there is just no net movement. Also a mean of 0% comes from five pieces so some pieces could have gained and some lost, so you can't say every cell has exactly 0.30. The graph shows the change goes from +4% at 0.20 to −4% at 0.40, so the balance point is around 0.30.",
+    "rubric_points": [
+     1,
+     1,
+     2,
+     1
+    ],
+    "rationale": "Synthetic rubric review: graph evidence: 1 point(s); balanced two-way movement: 1 point(s); unsupported every-cell claim: 2 point(s); qualified interpretation: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "B5": {
+    "text": "Negative, probably more negative than −4%. The water would move out of the potato because the solution outside is more concentrated. We don't know if the graph keeps going in a straight line after 0.40. I'd test 0.50 and 0.40 with five pieces each and keep the time and temperature the same, then compare the average % change.",
+    "rubric_points": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "rationale": "Synthetic rubric review: negative prediction: 1 point(s); outward water movement: 1 point(s); extrapolation uncertainty: 1 point(s); replication and comparison: 1 point(s); controlled variables: 1 point(s); mean percentage changes: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G1": {
+    "choices": [
+     1
+    ]
+   },
+   "G2": {
+    "blanks": {
+     "factor": "1.5",
+     "length": "7.5"
+    }
+   },
+   "G3": {
+    "choices": [
+     0,
+     1,
+     2
+    ]
+   },
+   "G4": {
+    "text": "The draft only multiplied by 3 but area uses base times height, and both of those triple, so the area goes up by 9. 12 × 9 = 108 cm². Since area is a length times a length, it's measured in square centimeters.",
+    "rubric_points": [
+     1,
+     2,
+     1,
+     1,
+     1
+    ],
+    "rationale": "Synthetic rubric review: length/area distinction: 1 point(s); both dimensions scale: 2 point(s); area factor nine: 1 point(s); correct numerical area: 1 point(s); square units explained: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G5": {
+    "choices": [
+     0
+    ]
+   },
+   "G6": {
+    "blanks": {
+     "xcoord": "1.5",
+     "ycoord": "2"
+    }
+   },
+   "G7": {
+    "choices": [
+     0
+    ]
+   },
+   "G8": {
+    "text": "12 × 8 − 4 × 3 = 84 m². Or 8 × 8 = 64 plus 4 × 5 = 20, 64 + 20 = 84 m².",
+    "rubric_points": [
+     2,
+     2,
+     0,
+     1
+    ],
+    "rationale": "Synthetic rubric review: subtraction: 2 point(s); two-rectangle calculation: 2 point(s); no overlap or gaps: 0 point(s); correct area with units: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G9": {
+    "choices": [
+     2
+    ]
+   },
+   "G10": {
+    "text": "6 m wide: 96 − 18 = 78 m², not enough. Max width: 16 ÷ 3 = 5.3 m. So 5 m, which leaves 81 m². Smaller service area = more usable floor.",
+    "rubric_points": [
+     2,
+     1,
+     1,
+     1,
+     0,
+     0
+    ],
+    "rationale": "Synthetic rubric review: test and reject six meters: 2 point(s); solve exact bound: 1 point(s); greatest whole-meter width: 1 point(s); verify 81 square meters: 1 point(s); inverse width/usable-area relation: 0 point(s); coherent recommendation: 0 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   }
+  },
+  "essay": "Riverton High should spend the $6,000 grant on the creative media space. It gives students something the library can't offer right now: a place to actually create projects with real equipment.\n\nThe biggest reason is access. According to Source B, the space would let students record podcasts, edit videos, and work on presentations even if they don't have the equipment at home. Students who already own laptops and microphones have an advantage on these projects, and this space would help close that gap. Source B also says students could learn from each other across subjects.\n\nSource C shows the cost is the same for both plans, so the choice should be about which plan adds something new. The books plan adds 300 books, which is helpful, but it mostly adds more of what the library already does.\n\nThe strongest argument against my side is that books can be borrowed and taken home, while the media equipment stays at school, and the space only has six seats (Sources A and C). This is a fair concern. However, Source B says the club wants scheduled booking open to all students, which would help share the seats fairly.\n\nIt's also important to remember the limits of the poll. Books got 72 votes and media got 48, but only 120 out of 600 students answered, so the poll can't tell us what most students want.\n\nOverall, the media space is the better investment because it gives every student a chance to use tools they may not have.",
+  "essay_draft": null,
+  "surveys": {
+   "0": [
+    [
+     0,
+     1,
+     2
+    ],
+    [
+     3
+    ],
+    3,
+    3,
+    "see if it makes sense with what we did in class"
+   ],
+   "3": [
+    [
+     2
+    ],
+    3,
+    2
+   ],
+   "5": [
+    3,
+    3,
+    1,
+    [
+     0,
+     1
+    ],
+    "On G3 it told me one side being twice as long isn't enough for similar triangles, which made sense when I pictured two different triangles. For G10 I just used it to divide 16 by 3."
+   ]
+  },
+  "chats": [
+   {
+    "task": 1,
+    "question": "B2",
+    "user": "does random assignment matter for this experiment?",
+    "assistant": "Yes. Randomly assigning pieces to concentrations helps prevent hidden differences between pieces (like which part of the potato they came from) from lining up with one concentration. Testing several pieces per concentration also lets you average out natural variation."
+   },
+   {
+    "task": 2,
+    "user": "give me 3 reasons someone might support the media space using the sources",
+    "assistant": "1. **Access to equipment** — Source B says students without equipment at home could record podcasts and edit video at school.\n2. **Learning across subjects** — Source B says students could learn from each other on projects for different classes.\n3. **Same cost** — Source C shows both plans cost $6,000, so the media space isn't the more expensive choice."
+   },
+   {
+    "task": 4,
+    "question": "G3",
+    "user": "if one side is twice the other triangles side is that enough for similar",
+    "assistant": "No — one pair of sides in a 2:1 ratio doesn't fix the shape. Two triangles can have one side twice as long and still have completely different angles. You need all three side ratios equal (SSS similarity) or two pairs of equal angles (AA)."
+   },
+   {
+    "task": 4,
+    "question": "G10",
+    "user": "96-3w=80 whats w",
+    "assistant": "Subtract 80 from 96 to get 3w = 16, so w = 16 ÷ 3 ≈ 5.33 m."
+   }
+  ],
+  "focus_away": [
+   {
+    "task": 1,
+    "seconds": 14,
+    "tab_title": "Google",
+    "url": "https://www.google.com/"
+   },
+   {
+    "task": 4,
+    "seconds": 8100,
+    "tab_title": "YouTube",
+    "url": "https://www.youtube.com/"
+   }
+  ],
+  "copies": []
+ },
+ {
+  "number": 34,
+  "condition": "Delay",
+  "profile": "Low-effort student who pastes AI output for the whole essay and most free-text answers, types very little, and reports only moderate AI use",
+  "outcome": "completed",
+  "stop_task": null,
+  "task_minutes": [
+   1.6,
+   9.5,
+   11,
+   0.8,
+   19,
+   1.5
+  ],
+  "typing_interval_ms": 260,
+  "telemetry": "extension",
+  "answers": {
+   "B1": {
+    "choices": [
+     0
+    ]
+   },
+   "B2": {
+    "choices": [
+     0,
+     1
+    ]
+   },
+   "B3": {
+    "blanks": {
+     "percent": "8",
+     "direction": "into"
+    }
+   },
+   "B4": {
+    "text": "First, water molecules never stop moving; at 0.30 mol/L the mean mass change is 0%, which means water is moving into and out of the cells at roughly equal rates, so there is no net movement. Second, a mean of zero across five pieces does not show that every cell is identical — some pieces may have gained slightly and others lost, and potato cells contain a mixture of solutes, not just sucrose. A better explanation is that around 0.30 mol/L the potato tissue is approximately balanced with the solution, so net water movement is close to zero even though individual molecules keep moving.",
+    "rubric_points": [
+     1,
+     2,
+     2,
+     1
+    ],
+    "rationale": "Synthetic rubric review: graph evidence: 1 point(s); balanced two-way movement: 2 point(s); unsupported every-cell claim: 2 point(s); qualified interpretation: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "B5": {
+    "text": "negative because water leaves the potato. test it with more potatos",
+    "rubric_points": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "rationale": "Synthetic rubric review: negative prediction: 1 point(s); outward water movement: 0 point(s); extrapolation uncertainty: 0 point(s); replication and comparison: 0 point(s); controlled variables: 0 point(s); mean percentage changes: 0 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G1": {
+    "choices": [
+     1
+    ]
+   },
+   "G2": {
+    "blanks": {
+     "factor": "1.5",
+     "length": "7.5"
+    }
+   },
+   "G3": {
+    "choices": [
+     0,
+     1
+    ]
+   },
+   "G4": {
+    "text": "The draft multiplies the area by 3, but 3 is the scale factor for lengths, not area. When every side triples, the base becomes 3b and the height becomes 3h, so the new area is ½(3b)(3h) = 9 × ½bh. The correct area is 9 × 12 = 108 cm². The units are square centimeters because area measures how much two-dimensional surface is covered, found by multiplying one length in cm by another length in cm.",
+    "rubric_points": [
+     1,
+     2,
+     1,
+     1,
+     1
+    ],
+    "rationale": "Synthetic rubric review: length/area distinction: 1 point(s); both dimensions scale: 2 point(s); area factor nine: 1 point(s); correct numerical area: 1 point(s); square units explained: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G5": {
+    "choices": [
+     0
+    ]
+   },
+   "G6": {
+    "blanks": {
+     "xcoord": "1.5",
+     "ycoord": "2"
+    }
+   },
+   "G7": {
+    "choices": [
+     0,
+     1,
+     2
+    ]
+   },
+   "G8": {
+    "text": "12x8=96 4x3=12 96-12=84 m2",
+    "rubric_points": [
+     2,
+     0,
+     0,
+     1
+    ],
+    "rationale": "Synthetic rubric review: subtraction: 2 point(s); two-rectangle calculation: 0 point(s); no overlap or gaps: 0 point(s); correct area with units: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G9": {
+    "choices": [
+     0
+    ]
+   },
+   "G10": {
+    "text": "The designer's 6 m width leaves 96 − 18 = 78 m², which is below the 80 m² minimum, so it fails. Solving 96 − 3w ≥ 80 gives 3w ≤ 16, so w ≤ 16/3 m (about 5.33 m). The greatest whole-meter width is 5 m, which leaves 96 − 15 = 81 m², so it meets the requirement. A smaller service area leaves more usable floor because the usable area is the total minus the service area, so shrinking what is removed increases what is left.",
+    "rubric_points": [
+     2,
+     2,
+     1,
+     1,
+     1,
+     0
+    ],
+    "rationale": "Synthetic rubric review: test and reject six meters: 2 point(s); solve exact bound: 2 point(s); greatest whole-meter width: 1 point(s); verify 81 square meters: 1 point(s); inverse width/usable-area relation: 1 point(s); coherent recommendation: 0 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   }
+  },
+  "essay": "Riverton High School should use its one-time $6,000 grant to fund the books plan. This option meets a clear, existing need and gives students access to learning resources both at school and at home.\n\nFirst, Source A explains that many students request books that are unavailable or have long waiting lists. The books plan would add 300 print books, including current fiction, practical nonfiction, and titles in several languages. This directly addresses a demand students have already expressed. Research consistently shows that reading for pleasure improves vocabulary and academic performance.\n\nSecond, Source C shows that books can be borrowed and taken home, while the media equipment must stay at school. Students without an internet connection can still use a book anywhere. In contrast, the creative media space has only six seats and requires supervised booking, which limits how many students can benefit at one time.\n\nSupporters of the media space argue that it would give students without equipment at home a chance to record podcasts and edit videos (Source B). This is a valid point, and creative skills matter. However, with only six seats for a school of 600 students, access would be limited, especially during busy periods, as Source A notes.\n\nIt is important to recognize a limitation in the evidence. The student poll showed 72 votes for books and 48 for media, but only 120 of 600 students responded, and participation was voluntary. The results may not represent the whole school.\n\nIn conclusion, the books plan offers broader access, meets a documented need, and provides lasting value for every student at Riverton High. I think this is the best choice for our school.",
+  "essay_draft": null,
+  "surveys": {
+   "0": [
+    [
+     0,
+     1,
+     2
+    ],
+    [
+     2
+    ],
+    4,
+    3,
+    "I reread it to see if it sounds right"
+   ],
+   "3": [
+    [
+     2
+    ],
+    2,
+    2
+   ],
+   "5": [
+    4,
+    3,
+    3,
+    [
+     0
+    ],
+    "For the essay I used AI to get ideas and then compared them with the sources to make sure the numbers like 72 and 48 were right. The waiting was kind of annoying."
+   ]
+  },
+  "chats": [
+   {
+    "task": 1,
+    "question": "B3",
+    "user": "percent change 10.0 to 10.8 g",
+    "assistant": "(10.8 − 10.0) ÷ 10.0 × 100 = 8%. Because the piece gained mass, the net movement of water was into the cells."
+   },
+   {
+    "task": 1,
+    "question": "B4",
+    "user": "explain whats wrong with this in 3-4 sentences: At 0.30 mol/L, water molecules stopped moving, and this proves that every potato cell contains exactly 0.30 mol/L sucrose.",
+    "assistant": "There are two problems with this explanation. First, water molecules never stop moving; at 0.30 mol/L the mean mass change is 0%, which means water is moving into and out of the cells at roughly equal rates, so there is no net movement. Second, a mean of zero across five pieces does not show that every cell is identical — some pieces may have gained slightly and others lost, and potato cells contain a mixture of solutes, not just sucrose. A better explanation is that around 0.30 mol/L the potato tissue is approximately balanced with the solution, so net water movement is close to zero even though individual molecules keep moving.",
+    "paste_into_answer": "First, water molecules never stop moving; at 0.30 mol/L the mean mass change is 0%, which means water is moving into and out of the cells at roughly equal rates, so there is no net movement. Second, a mean of zero across five pieces does not show that every cell is identical — some pieces may have gained slightly and others lost, and potato cells contain a mixture of solutes, not just sucrose. A better explanation is that around 0.30 mol/L the potato tissue is approximately balanced with the solution, so net water movement is close to zero even though individual molecules keep moving."
+   },
+   {
+    "task": 2,
+    "user": "write a 250 word argument essay recommending the books plan for riverton high using sources A B and C. include a counterargument and a limitation",
+    "assistant": "Here's a 250-word argument essay you can use:\n\n**Investing in Books: The Best Choice for Riverton High**\n\nRiverton High School should use its one-time $6,000 grant to fund the books plan. This option meets a clear, existing need and gives students access to learning resources both at school and at home.\n\nFirst, Source A explains that many students request books that are unavailable or have long waiting lists. The books plan would add 300 print books, including current fiction, practical nonfiction, and titles in several languages. This directly addresses a demand students have already expressed. Research consistently shows that reading for pleasure improves vocabulary and academic performance.\n\nSecond, Source C shows that books can be borrowed and taken home, while the media equipment must stay at school. Students without an internet connection can still use a book anywhere. In contrast, the creative media space has only six seats and requires supervised booking, which limits how many students can benefit at one time.\n\nSupporters of the media space argue that it would give students without equipment at home a chance to record podcasts and edit videos (Source B). This is a valid point, and creative skills matter. However, with only six seats for a school of 600 students, access would be limited, especially during busy periods, as Source A notes.\n\nIt is important to recognize a limitation in the evidence. The student poll showed 72 votes for books and 48 for media, but only 120 of 600 students responded, and participation was voluntary. The results may not represent the whole school.\n\nIn conclusion, the books plan offers broader access, meets a documented need, and provides lasting value for every student at Riverton High.",
+    "paste_into_essay": "Riverton High School should use its one-time $6,000 grant to fund the books plan. This option meets a clear, existing need and gives students access to learning resources both at school and at home.\n\nFirst, Source A explains that many students request books that are unavailable or have long waiting lists. The books plan would add 300 print books, including current fiction, practical nonfiction, and titles in several languages. This directly addresses a demand students have already expressed. Research consistently shows that reading for pleasure improves vocabulary and academic performance.\n\nSecond, Source C shows that books can be borrowed and taken home, while the media equipment must stay at school. Students without an internet connection can still use a book anywhere. In contrast, the creative media space has only six seats and requires supervised booking, which limits how many students can benefit at one time.\n\nSupporters of the media space argue that it would give students without equipment at home a chance to record podcasts and edit videos (Source B). This is a valid point, and creative skills matter. However, with only six seats for a school of 600 students, access would be limited, especially during busy periods, as Source A notes.\n\nIt is important to recognize a limitation in the evidence. The student poll showed 72 votes for books and 48 for media, but only 120 of 600 students responded, and participation was voluntary. The results may not represent the whole school.\n\nIn conclusion, the books plan offers broader access, meets a documented need, and provides lasting value for every student at Riverton High."
+   },
+   {
+    "task": 4,
+    "question": "G2",
+    "user": "enlargement factor from 4 to 6? (this is taking forever)",
+    "assistant": "6 ÷ 4 = 1.5, so the enlargement factor is 1.5 and EF = 5 × 1.5 = 7.5 cm."
+   },
+   {
+    "task": 4,
+    "question": "G4",
+    "user": "An original triangular sign has area 12 cm². A designer makes a similar sign with every side length three times as large. explain the error in the draft that says 36 cm² and give the right area and why its cm²",
+    "assistant": "The draft multiplies the area by 3, but 3 is the scale factor for lengths, not area. When every side triples, the base becomes 3b and the height becomes 3h, so the new area is ½(3b)(3h) = 9 × ½bh. The correct area is 9 × 12 = 108 cm². The units are square centimeters because area measures how much two-dimensional surface is covered, found by multiplying one length in cm by another length in cm.",
+    "paste_into_answer": "The draft multiplies the area by 3, but 3 is the scale factor for lengths, not area. When every side triples, the base becomes 3b and the height becomes 3h, so the new area is ½(3b)(3h) = 9 × ½bh. The correct area is 9 × 12 = 108 cm². The units are square centimeters because area measures how much two-dimensional surface is covered, found by multiplying one length in cm by another length in cm."
+   },
+   {
+    "task": 4,
+    "question": "G10",
+    "user": "12 by 8 room, service area 3 m deep in the corner, need 80 m² left. does 6 m wide work, whats the max width and best whole number width",
+    "assistant": "Here's how to check it:\n\nThe designer's 6 m width leaves 96 − 18 = 78 m², which is below the 80 m² minimum, so it fails. Solving 96 − 3w ≥ 80 gives 3w ≤ 16, so w ≤ 16/3 m (about 5.33 m). The greatest whole-meter width is 5 m, which leaves 96 − 15 = 81 m², so it meets the requirement. A smaller service area leaves more usable floor because the usable area is the total minus the service area, so shrinking what is removed increases what is left.",
+    "paste_into_answer": "The designer's 6 m width leaves 96 − 18 = 78 m², which is below the 80 m² minimum, so it fails. Solving 96 − 3w ≥ 80 gives 3w ≤ 16, so w ≤ 16/3 m (about 5.33 m). The greatest whole-meter width is 5 m, which leaves 96 − 15 = 81 m², so it meets the requirement. A smaller service area leaves more usable floor because the usable area is the total minus the service area, so shrinking what is removed increases what is left."
+   }
+  ],
+  "focus_away": [
+   {
+    "task": 2,
+    "seconds": 55,
+    "tab_title": "Instagram",
+    "url": "https://www.instagram.com/"
+   },
+   {
+    "task": 4,
+    "seconds": 30,
+    "tab_title": "Snapchat",
+    "url": "https://web.snapchat.com/"
+   }
+  ],
+  "copies": [
+   {
+    "task": 1,
+    "text": "At 0.30 mol/L, water molecules stopped moving, and this proves that every potato cell contains exactly 0.30 mol/L sucrose."
+   },
+   {
+    "task": 4,
+    "text": "An original triangular sign has area 12 cm². A designer makes a similar sign with every side length three times as large."
+   }
+  ]
+ },
+ {
+  "number": 35,
+  "condition": "Delay",
+  "profile": "Average, selective AI user who asks only about specific steps and checks replies; catches an AI error on G7 and notices the delay",
+  "outcome": "completed",
+  "stop_task": null,
+  "task_minutes": [
+   2.4,
+   13.5,
+   18,
+   1.5,
+   25,
+   2.9
+  ],
+  "typing_interval_ms": 215,
+  "telemetry": "extension",
+  "answers": {
+   "B1": {
+    "choices": [
+     0
+    ]
+   },
+   "B2": {
+    "choices": [
+     0,
+     1,
+     2
+    ]
+   },
+   "B3": {
+    "blanks": {
+     "percent": "8",
+     "direction": "into"
+    }
+   },
+   "B4": {
+    "text": "Water molecules do not stop moving at 0.30 mol/L. They keep crossing the membrane in both directions, and at about 0.30 the amount going in and the amount going out is balanced, so the mean change is 0%. The second problem is that the claim says every cell has exactly 0.30 mol/L sucrose, but 0% is only the mean of five pieces. So the most we can say is that the potato is roughly balanced with a 0.30 solution.",
+    "rubric_points": [
+     1,
+     2,
+     1,
+     1
+    ],
+    "rationale": "Synthetic rubric review: graph evidence: 1 point(s); balanced two-way movement: 2 point(s); unsupported every-cell claim: 1 point(s); qualified interpretation: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "B5": {
+    "text": "I predict negative, because 0.50 is more concentrated than inside the cells so water moves out by osmosis. The line suggests about −8% but that is only a guess because 0.50 is outside what was tested. Fair test: five pieces at 0.50 and five at 0.40 for the same 20 minutes, then compare the average percent change.",
+    "rubric_points": [
+     1,
+     1,
+     1,
+     1,
+     0,
+     1
+    ],
+    "rationale": "Synthetic rubric review: negative prediction: 1 point(s); outward water movement: 1 point(s); extrapolation uncertainty: 1 point(s); replication and comparison: 1 point(s); controlled variables: 0 point(s); mean percentage changes: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G1": {
+    "choices": [
+     1
+    ]
+   },
+   "G2": {
+    "blanks": {
+     "factor": "1.5",
+     "length": "7.5"
+    }
+   },
+   "G3": {
+    "choices": [
+     0,
+     1
+    ]
+   },
+   "G4": {
+    "text": "The draft multiplied by 3, but that's the scale for the sides, not the area. Base goes to 3b and height to 3h so area = ½ × 3b × 3h, which is 9 times the original. 12 × 9 = 108 cm².",
+    "rubric_points": [
+     1,
+     2,
+     1,
+     1,
+     0
+    ],
+    "rationale": "Synthetic rubric review: length/area distinction: 1 point(s); both dimensions scale: 2 point(s); area factor nine: 1 point(s); correct numerical area: 1 point(s); square units explained: 0 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G5": {
+    "choices": [
+     0
+    ]
+   },
+   "G6": {
+    "blanks": {
+     "xcoord": "1.5",
+     "ycoord": "2"
+    }
+   },
+   "G7": {
+    "choices": [
+     0,
+     2
+    ]
+   },
+   "G8": {
+    "text": "Method 1: 12 × 8 = 96 m², minus the service area 4 × 3 = 12 m², gives 84 m². Method 2: left rectangle 8 × 8 = 64 m² and the bottom right rectangle 4 × 5 = 20 m², total 84 m². The two rectangles only share the line at x = 8 so nothing is counted twice, and together they make the whole L.",
+    "rubric_points": [
+     2,
+     2,
+     1,
+     1
+    ],
+    "rationale": "Synthetic rubric review: subtraction: 2 point(s); two-rectangle calculation: 2 point(s); no overlap or gaps: 1 point(s); correct area with units: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G9": {
+    "choices": [
+     2
+    ]
+   },
+   "G10": {
+    "text": "At 6 m: 96 − 3(6) = 78 m², which is below 80, so the designer's idea doesn't work. 96 − 3w ≥ 80 → 3w ≤ 16 → w ≤ 16/3 m. The largest whole number is 5 m, and 96 − 15 = 81 m² ≥ 80. A narrower service area cuts out less floor, so more is usable.",
+    "rubric_points": [
+     2,
+     2,
+     1,
+     1,
+     1,
+     0
+    ],
+    "rationale": "Synthetic rubric review: test and reject six meters: 2 point(s); solve exact bound: 2 point(s); greatest whole-meter width: 1 point(s); verify 81 square meters: 1 point(s); inverse width/usable-area relation: 1 point(s); coherent recommendation: 0 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   }
+  },
+  "essay": "My recommendation is that Riverton spend the grant on the creative media space.\n\nSource B points out that the space would allow students to record podcasts, edit video, and build presentations even if they have no equipment at home. For those students, this could be the only place they can do this kind of work, which makes it a matter of fairness. A new book is great, but recording and editing tools are much harder for a student to get on their own.\n\nThe media space would also be shared across the whole school. Source B says the club supports scheduled access for all students instead of priority for its own members, and that students could learn from each other across subjects. That means it wouldn't just be a club room.\n\nThe best argument for the books plan is that books leave the building. Source C says books can be borrowed, while media equipment stays at school, and Source A worries that six seats could be hard to access at busy times. I agree that six seats is small. Still, a fair booking system could spread the time out.\n\nThe evidence does have limits. The poll favored books 72 to 48, but only 120 out of 600 students voted, and it was voluntary, so it may not show what most students want. Neither plan has proof that it improves learning.\n\nSince both cost $6,000, I think the media space is the better choice because it adds something students can't easily get anywhere else.",
+  "essay_draft": null,
+  "surveys": {
+   "0": [
+    [
+     0,
+     1,
+     2
+    ],
+    [
+     2
+    ],
+    3,
+    2,
+    "redo the math myself"
+   ],
+   "3": [
+    [
+     1
+    ],
+    3,
+    3
+   ],
+   "5": [
+    4,
+    2,
+    4,
+    [
+     0,
+     1,
+     3
+    ],
+    "On G7 the AI said the diagonals were perpendicular and it was a square, but I found AB = √20 and BC = √5 so the sides aren't equal, and then it admitted it's a rectangle. The 3 second wait made me lose my place a few times."
+   ]
+  },
+  "chats": [
+   {
+    "task": 1,
+    "question": "B5",
+    "user": "for b5 is -8% for sure? the pattern goes down 4 each time",
+    "assistant": "It's a reasonable estimate if the pattern stays linear: each 0.10 mol/L step lowers the change by 4 percentage points, so 0.50 would give about −8%. But 0.50 is outside the tested range, so treat −8% as a prediction to test, not a certain result."
+   },
+   {
+    "task": 2,
+    "user": "does source C say the media equipment can be taken home or not",
+    "assistant": "Source C says the equipment stays at school — only the books may be borrowed for use outside school."
+   },
+   {
+    "task": 4,
+    "question": "G7",
+    "user": "for g7 i got both diagonals = 5. does that make it a square?",
+    "assistant": "Equal diagonals plus the right angle at B do point to a square — in a square the diagonals are equal and perpendicular. So the statements about equal diagonals and perpendicular diagonals would both be true."
+   },
+   {
+    "task": 4,
+    "question": "G7",
+    "user": "but AB is √20 and BC is √5 so the sides arent equal??",
+    "assistant": "You're right — I made an error. AB = √(16 + 4) = √20 and BC = √(1 + 4) = √5, so the sides are not all equal and it isn't a square. It's a rectangle: both pairs of opposite sides are parallel and the diagonals are equal (both 5), but the diagonals are not perpendicular, since AC has slope 4/3 and BD is horizontal."
+   }
+  ],
+  "focus_away": [
+   {
+    "task": 4,
+    "seconds": 22,
+    "tab_title": "Desmos | Graphing Calculator",
+    "url": "https://www.desmos.com/calculator"
+   }
+  ],
+  "copies": [
+   {
+    "task": 2,
+    "text": "Equipment stays at school"
+   }
+  ]
+ },
+ {
+  "number": 36,
+  "condition": "Tutor",
+  "profile": "Average, impatient student who keeps asking the tutor to just give answers, gets annoyed, then starts engaging and does better in geometry",
+  "outcome": "completed",
+  "stop_task": null,
+  "task_minutes": [
+   2.0,
+   12.5,
+   16,
+   1.2,
+   27,
+   2.2
+  ],
+  "typing_interval_ms": 185,
+  "telemetry": "extension",
+  "answers": {
+   "B1": {
+    "choices": [
+     0
+    ]
+   },
+   "B2": {
+    "choices": [
+     0,
+     1,
+     4
+    ]
+   },
+   "B3": {
+    "blanks": {
+     "percent": "8",
+     "direction": "into"
+    }
+   },
+   "B4": {
+    "text": "The first problem is water doesnt stop moving, it keeps going in and out of the cells but the amounts are equal so theres no net change at 0.30 mol/L (0% on the graph). Second, the 0% is a mean of five pieces, so it doesnt mean every cell is exactly 0.30.",
+    "rubric_points": [
+     1,
+     2,
+     1,
+     0
+    ],
+    "rationale": "Synthetic rubric review: graph evidence: 1 point(s); balanced two-way movement: 2 point(s); unsupported every-cell claim: 1 point(s); qualified interpretation: 0 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "B5": {
+    "text": "Negative, because the solution is stronger than the potato so water leaves the cells. I would test it with 5 pieces and compare to 0.40, same time and temp.",
+    "rubric_points": [
+     1,
+     1,
+     0,
+     1,
+     1,
+     0
+    ],
+    "rationale": "Synthetic rubric review: negative prediction: 1 point(s); outward water movement: 1 point(s); extrapolation uncertainty: 0 point(s); replication and comparison: 1 point(s); controlled variables: 1 point(s); mean percentage changes: 0 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G1": {
+    "choices": [
+     1
+    ]
+   },
+   "G2": {
+    "blanks": {
+     "factor": "1.5",
+     "length": "7.5"
+    }
+   },
+   "G3": {
+    "choices": [
+     0,
+     1
+    ]
+   },
+   "G4": {
+    "text": "The draft is wrong because it only did ×3 but base and height both go ×3 so it's ×9. 12×9 = 108 cm². cm² since its a 2D area, it covers a flat surface.",
+    "rubric_points": [
+     1,
+     2,
+     1,
+     1,
+     1
+    ],
+    "rationale": "Synthetic rubric review: length/area distinction: 1 point(s); both dimensions scale: 2 point(s); area factor nine: 1 point(s); correct numerical area: 1 point(s); square units explained: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G5": {
+    "choices": [
+     0
+    ]
+   },
+   "G6": {
+    "blanks": {
+     "xcoord": "1.5",
+     "ycoord": "2"
+    }
+   },
+   "G7": {
+    "choices": [
+     0,
+     2
+    ]
+   },
+   "G8": {
+    "text": "Subtract: 96 - 12 = 84m². Split: 12x5 = 60 and 8x3=24, 60+24 = 84 m².",
+    "rubric_points": [
+     1,
+     2,
+     0,
+     1
+    ],
+    "rationale": "Synthetic rubric review: subtraction: 1 point(s); two-rectangle calculation: 2 point(s); no overlap or gaps: 0 point(s); correct area with units: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G9": {
+    "choices": [
+     2
+    ]
+   },
+   "G10": {
+    "text": "6 m: 96 - 18 = 78 m² so it fails. 96 - 3w ≥ 80 means 3w ≤ 16 so w ≤ 16/3 = 5.33 m. The best whole meter width is 5 m and 96 - 15 = 81 m² so it works. So I'd go from the original 4 m to 5 m, not 6 m. Smaller service area means less gets cut out so more usable floor.",
+    "rubric_points": [
+     2,
+     2,
+     1,
+     1,
+     1,
+     1
+    ],
+    "rationale": "Synthetic rubric review: test and reject six meters: 2 point(s); solve exact bound: 2 point(s); greatest whole-meter width: 1 point(s); verify 81 square meters: 1 point(s); inverse width/usable-area relation: 1 point(s); coherent recommendation: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   }
+  },
+  "essay": "The school council should choose the books plan. Books can be used by way more students and they can be taken home, which the media space can't do.\n\nSource A says lots of students ask for books that the library doesn't have or that have long waitlists. So there is already demand. 300 new books (Source C) including books in different languages would help a lot of different students, not just a few.\n\nSource C also says books can be borrowed, but the media equipment stays at school. If a student doesn't have internet at home they can still read a book. That makes books more useful outside of school hours.\n\nThe media club would argue that the media space helps students who don't have equipment at home (Source B). That is true and it matters. But the space only has 6 seats and needs supervision, so most students would rarely get a turn.\n\nIn the poll 72 students picked books and 48 picked media. That shows some support for books, but only 120 out of 600 students voted and it was voluntary, so it doesn't prove what the whole school wants.\n\nFor these reasons the books plan is the better choice, because more students can actually use it.",
+  "essay_draft": null,
+  "surveys": {
+   "0": [
+    [
+     0,
+     1,
+     2
+    ],
+    [
+     3
+    ],
+    3,
+    4,
+    "i dont usually check tbh"
+   ],
+   "3": [
+    [
+     2
+    ],
+    3,
+    2
+   ],
+   "5": [
+    3,
+    4,
+    2,
+    [
+     2,
+     3
+    ],
+    "G10 the tutor kept asking me questions which was annoying at first but I set up 96-3w≥80 myself and got 16/3. For the essay it pointed out the poll was only 120 people so I changed how I used the votes."
+   ]
+  },
+  "chats": [
+   {
+    "task": 1,
+    "question": "B1",
+    "user": "which one is the independent variable",
+    "assistant": "What did the class *choose* to change on purpose, and what did they measure afterward? Tell me which option you're leaning toward and why."
+   },
+   {
+    "task": 1,
+    "question": "B1",
+    "user": "can u just tell me",
+    "assistant": "I get that you want to move quickly! I'm here to help you figure it out, though. Quick check: is the percentage change in mass something they set before the experiment, or something they recorded after?"
+   },
+   {
+    "task": 1,
+    "question": "B1",
+    "user": "recorded after. so its sucrose",
+    "assistant": "Yes — they changed the sucrose concentration on purpose, so that's the independent variable. Nice reasoning."
+   },
+   {
+    "task": 1,
+    "question": "B4",
+    "user": "just tell me the 2 problems with the students explanation pls",
+    "assistant": "Let's find the first one together: do you think water molecules can actually stop moving? What would a zero mean change look like if water kept moving both ways?"
+   },
+   {
+    "task": 1,
+    "question": "B4",
+    "user": "ugh fine. water keeps moving but equal in and out?",
+    "assistant": "Exactly, that's the first problem. For the second: the graph shows a *mean* of five pieces. Does an average tell you what's inside every single cell?"
+   },
+   {
+    "task": 2,
+    "user": "just write me an intro for the books plan",
+    "assistant": "I won't write it for you, but I can help you make yours strong. What's the main reason you'd pick books? Give me one sentence and I'll help you sharpen it."
+   },
+   {
+    "task": 2,
+    "user": "books can be taken home and more people voted for them",
+    "assistant": "Good — the take-home point is backed by Sources A and C. Be careful with the votes, though: Source C says only 120 of 600 students answered a voluntary poll. How could you use the 72 votes without claiming it's what the whole school wants?"
+   },
+   {
+    "task": 4,
+    "question": "G10",
+    "user": "ok for g10 i think 6m gives 78 so its no good. how do i get the max",
+    "assistant": "Nice, 78 m² is right and it fails. Now, what expression gives the usable area for any width w? Set it to be at least 80 and solve."
+   },
+   {
+    "task": 4,
+    "question": "G10",
+    "user": "96-3w>=80 so w<=16/3?",
+    "assistant": "Exactly. 16/3 m is about 5.33 m. What whole-meter width would you recommend, and what usable area does it leave?"
+   }
+  ],
+  "focus_away": [
+   {
+    "task": 2,
+    "seconds": 35,
+    "tab_title": "Spotify – Web Player",
+    "url": "https://open.spotify.com/"
+   }
+  ],
+  "copies": []
+ },
+ {
+  "number": 37,
+  "condition": "Tutor",
+  "profile": "Strong, efficient student who works independently and uses the tutor only twice to confirm reasoning",
+  "outcome": "completed",
+  "stop_task": null,
+  "task_minutes": [
+   1.7,
+   8.5,
+   13.5,
+   0.9,
+   17,
+   2.0
+  ],
+  "typing_interval_ms": 150,
+  "telemetry": "extension",
+  "answers": {
+   "B1": {
+    "choices": [
+     0
+    ]
+   },
+   "B2": {
+    "choices": [
+     0,
+     1,
+     2
+    ]
+   },
+   "B3": {
+    "blanks": {
+     "percent": "8",
+     "direction": "into"
+    }
+   },
+   "B4": {
+    "text": "Two problems: water molecules don't stop moving at 0.30 mol/L, and a zero mean can't prove what every individual cell contains. On the graph the mean change goes from +4% at 0.20 to 0% at 0.30 to −4% at 0.40, so around 0.30 mol/L water is entering and leaving the tissue at roughly equal rates — the net movement is zero while individual molecules keep crossing in both directions. Since 0% is an average of five pieces, some pieces could have gained slightly and others lost, and cells contain many solutes besides sucrose, so the fairest conclusion is that the tissue is approximately balanced with a 0.30 mol/L solution under these conditions.",
+    "rubric_points": [
+     1,
+     2,
+     2,
+     1
+    ],
+    "rationale": "Synthetic rubric review: graph evidence: 1 point(s); balanced two-way movement: 2 point(s); unsupported every-cell claim: 2 point(s); qualified interpretation: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "B5": {
+    "text": "The mean change should be negative, since 0.50 mol/L is even more concentrated than 0.40 (which already gave −4%), so there will be net movement of water out of the cells. A straight-line extrapolation suggests about −8%, but 0.50 is outside the tested range and the tissue can only lose so much water, so the real value could differ. To test it, I'd randomly assign five similar-sized pieces to 0.50 mol/L and five to 0.40 mol/L, keep the same 20 minutes, temperature, solution volume and blotting method, and compare the mean percentage mass changes.",
+    "rubric_points": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "rationale": "Synthetic rubric review: negative prediction: 1 point(s); outward water movement: 1 point(s); extrapolation uncertainty: 1 point(s); replication and comparison: 1 point(s); controlled variables: 1 point(s); mean percentage changes: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G1": {
+    "choices": [
+     1
+    ]
+   },
+   "G2": {
+    "blanks": {
+     "factor": "1.5",
+     "length": "7.5"
+    }
+   },
+   "G3": {
+    "choices": [
+     0,
+     1
+    ]
+   },
+   "G4": {
+    "text": "The draft applied the length scale factor to area. Area = ½bh, and both b and h are tripled, so new area = ½(3b)(3h) = 9 · ½bh = 9 × 12 = 108 cm². The units are cm² because area counts how many 1 cm × 1 cm squares cover the sign — it's two-dimensional.",
+    "rubric_points": [
+     1,
+     2,
+     1,
+     1,
+     1
+    ],
+    "rationale": "Synthetic rubric review: length/area distinction: 1 point(s); both dimensions scale: 2 point(s); area factor nine: 1 point(s); correct numerical area: 1 point(s); square units explained: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G5": {
+    "choices": [
+     0
+    ]
+   },
+   "G6": {
+    "blanks": {
+     "xcoord": "1.5",
+     "ycoord": "2"
+    }
+   },
+   "G7": {
+    "choices": [
+     0,
+     2
+    ]
+   },
+   "G8": {
+    "text": "(1) 12 × 8 − 4 × 3 = 96 − 12 = 84 m². (2) Cut horizontally 3 m below the top: bottom rectangle 12 × 5 = 60 m², top-left rectangle (12 − 4) × 3 = 8 × 3 = 24 m², total 84 m². The cut line is the only shared boundary, so they don't overlap, and together they cover every part of the L with nothing left out. Usable area: 84 m².",
+    "rubric_points": [
+     2,
+     2,
+     1,
+     1
+    ],
+    "rationale": "Synthetic rubric review: subtraction: 2 point(s); two-rectangle calculation: 2 point(s); no overlap or gaps: 1 point(s); correct area with units: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G9": {
+    "choices": [
+     2
+    ]
+   },
+   "G10": {
+    "text": "Usable area = 96 − 3w. Proposed w = 6: 96 − 18 = 78 m² < 80, so it fails. 96 − 3w ≥ 80 → 3w ≤ 16 → w ≤ 16/3 m (5⅓ m). Greatest whole-meter width: 5 m, giving 96 − 15 = 81 m² ≥ 80. So I'd recommend widening from the original 4 m to 5 m, not the proposed 6 m; a narrower service strip removes less of the rectangle, so more floor stays usable.",
+    "rubric_points": [
+     2,
+     2,
+     1,
+     1,
+     1,
+     1
+    ],
+    "rationale": "Synthetic rubric review: test and reject six meters: 2 point(s); solve exact bound: 2 point(s); greatest whole-meter width: 1 point(s); verify 81 square meters: 1 point(s); inverse width/usable-area relation: 1 point(s); coherent recommendation: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   }
+  },
+  "essay": "Riverton High should spend its $6,000 grant on the books plan. While the creative media space offers real opportunities, the books plan meets a need students have already shown and reaches more of them, both at school and at home.\n\nThe strongest evidence is demand. Source A reports that many students request books that are unavailable or have long waiting lists, which means the library is currently failing to supply something students actively want. The plan's 300 print books would include current fiction, practical nonfiction, and books in several languages (Sources A and C), so it would serve readers with different interests rather than a single group.\n\nAccess matters just as much. According to Source C, books may be borrowed, while media equipment stays at school. A borrowed book keeps working over the weekend or in a home without internet, as Source A points out. By contrast, the media space has six seats and requires supervised booking, so only a handful of students could use it at any moment.\n\nSupporters of the media space make a fair point: Source B notes that some students lack recording or editing equipment at home, and the space would let them create podcasts and videos. That inequality is real. However, six seats cannot meaningfully serve a school of 600, and the need for supervision could limit hours even further.\n\nThe evidence has limits. The poll favored books 72 to 48, but only 120 of 600 students responded voluntarily, so it reflects the students who chose to answer, not the whole school. Neither source shows how much either plan would improve learning.\n\nEven with that uncertainty, the books plan offers wider, longer-lasting access, making it the stronger use of a one-time grant.",
+  "essay_draft": null,
+  "surveys": {
+   "0": [
+    [
+     0,
+     1,
+     2
+    ],
+    [
+     2
+    ],
+    4,
+    2,
+    "Work the problem a second way"
+   ],
+   "3": [
+    [
+     1
+    ],
+    3,
+    2
+   ],
+   "5": [
+    5,
+    2,
+    1,
+    [
+     0,
+     2
+    ],
+    "On G9 the tutor asked why the 90/360 fraction applies to area instead of arc length; I explained it to myself and kept 9π. In the essay I kept the poll but framed it as only the students who responded."
+   ]
+  },
+  "chats": [
+   {
+    "task": 2,
+    "user": "I'm arguing for the books plan. Is it fair to use the 72 vs 48 poll as evidence if I also say it only had 120 respondents, or does that undercut my point?",
+    "assistant": "That's a thoughtful question. What does the poll actually show, and what doesn't it show? If you frame it as \"among students who chose to respond,\" does it still support your claim — and where in your essay would the limitation fit best?"
+   },
+   {
+    "task": 4,
+    "question": "G9",
+    "user": "Checking G9: sector area = (90/360)·π·6² = 9π, right? Not the circumference.",
+    "assistant": "What does the 90/360 fraction represent, and which formula are you taking that fraction of? If you can explain why it's the area formula and not arc length, you've got it."
+   }
+  ],
+  "focus_away": [],
+  "copies": [
+   {
+    "task": 2,
+    "text": "Books may be borrowed"
+   }
+  ]
+ },
+ {
+  "number": 38,
+  "condition": "Delay",
+  "profile": "Average, somewhat disorganized student; a few AI requests, copies a wrong sector-area reply on G9; skipped the optional waiting item",
+  "outcome": "completed",
+  "stop_task": null,
+  "task_minutes": [
+   2.8,
+   14,
+   19.5,
+   1.6,
+   28,
+   3.0
+  ],
+  "typing_interval_ms": 250,
+  "telemetry": "extension",
+  "answers": {
+   "B1": {
+    "choices": [
+     0
+    ]
+   },
+   "B2": {
+    "choices": [
+     0,
+     1
+    ]
+   },
+   "B3": {
+    "blanks": {
+     "percent": "8",
+     "direction": "into"
+    }
+   },
+   "B4": {
+    "text": "At 0.30 mol/L the mass change is 0% which means there is no net movement of water. The water is still moving, it just moves in and out the same amount. The student is also wrong because you cant know the concentration of every cell from this.",
+    "rubric_points": [
+     1,
+     2,
+     0,
+     0
+    ],
+    "rationale": "Synthetic rubric review: graph evidence: 1 point(s); balanced two-way movement: 2 point(s); unsupported every-cell claim: 0 point(s); qualified interpretation: 0 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "B5": {
+    "text": "It would be negative, like -8%, because the pattern keeps going down by 4. Water will go out of the cells because there is more sugar outside. To test, do 0.50 with a few pieces for 20 minutes and see if it loses mass.",
+    "rubric_points": [
+     1,
+     1,
+     0,
+     0,
+     0,
+     0
+    ],
+    "rationale": "Synthetic rubric review: negative prediction: 1 point(s); outward water movement: 1 point(s); extrapolation uncertainty: 0 point(s); replication and comparison: 0 point(s); controlled variables: 0 point(s); mean percentage changes: 0 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G1": {
+    "choices": [
+     1
+    ]
+   },
+   "G2": {
+    "blanks": {
+     "factor": "1.5",
+     "length": "7.5"
+    }
+   },
+   "G3": {
+    "choices": [
+     0,
+     1,
+     2
+    ]
+   },
+   "G4": {
+    "text": "They multiplied the area by 3 but when you make the sides 3 times bigger the area gets 9 times bigger because both the base and the height get bigger. So the area is 108 cm². The unit is cm² because area is cm times cm, it covers a flat space.",
+    "rubric_points": [
+     1,
+     2,
+     1,
+     1,
+     1
+    ],
+    "rationale": "Synthetic rubric review: length/area distinction: 1 point(s); both dimensions scale: 2 point(s); area factor nine: 1 point(s); correct numerical area: 1 point(s); square units explained: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G5": {
+    "choices": [
+     0
+    ]
+   },
+   "G6": {
+    "blanks": {
+     "xcoord": "1.5",
+     "ycoord": "2"
+    }
+   },
+   "G7": {
+    "choices": [
+     0,
+     1,
+     2
+    ]
+   },
+   "G8": {
+    "text": "12 x 8 = 96 - (4 x 3) = 84 m². The two rectangles are 8 x 8 = 64 and 4 x 5 = 20 so 64 + 20 = 84.",
+    "rubric_points": [
+     2,
+     2,
+     0,
+     1
+    ],
+    "rationale": "Synthetic rubric review: subtraction: 2 point(s); two-rectangle calculation: 2 point(s); no overlap or gaps: 0 point(s); correct area with units: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G9": {
+    "choices": [
+     0
+    ]
+   },
+   "G10": {
+    "text": "6 m doesn't work because 96 - 18 = 78. 5 m works because it leaves 81. So the answer is 5 m.",
+    "rubric_points": [
+     2,
+     0,
+     1,
+     1,
+     0,
+     0
+    ],
+    "rationale": "Synthetic rubric review: test and reject six meters: 2 point(s); solve exact bound: 0 point(s); greatest whole-meter width: 1 point(s); verify 81 square meters: 1 point(s); inverse width/usable-area relation: 0 point(s); coherent recommendation: 0 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   }
+  },
+  "essay": "I think Riverton should use the grant for the creative media space.\n\nMy first reason is from Source B. It says students could record podcasts, edit videos and work on presentations even if they don't have the equipment at home. A lot of school projects are presentations and videos so this would be useful for many classes. Students could also help each other, which Source B says too.\n\nMy second reason is that the media club said they want everyone to be able to book it, not just the club. So it would be fair for all students.\n\nSome people would say the books plan is better because it had more votes, 72 to 48 in Source C, and books can be taken home. I understand that, but the poll only had 120 students out of 600, so most students didn't even vote. The result might be different if everyone voted.\n\nOne problem with my plan is that there are only 6 seats and it needs someone to supervise it (Source C). The school would need to figure out a schedule so it doesn't get too crowded.\n\nOverall I still think the media space is a better choice because it gives students a chance to learn new skills that they cant learn from a book.",
+  "essay_draft": null,
+  "surveys": {
+   "0": [
+    [
+     1,
+     2
+    ],
+    [
+     2
+    ],
+    3,
+    3,
+    "Ask a friend"
+   ],
+   "3": [
+    [
+     1
+    ],
+    3,
+    4
+   ],
+   "5": [
+    3,
+    3,
+    null,
+    [
+     0
+    ],
+    "For the essay I asked where the 6 seats was mentioned and checked it in Source C. For G9 it said 3π and I just went with that."
+   ]
+  },
+  "chats": [
+   {
+    "task": 1,
+    "question": "B2",
+    "user": "if one potato piece is really different from the others can i just take it out",
+    "assistant": "Only if you can identify a procedural error (for example, it wasn't blotted or was left in too long). Removing results just because they disagree with your prediction biases the experiment. Having several pieces per concentration helps you spot real outliers."
+   },
+   {
+    "task": 2,
+    "user": "is the 6 seats thing in source b or c",
+    "assistant": "Both mention it: Source B says the proposed space has only six seats and requires supervised booking, and Source C's table lists it as a \"6-seat recording/editing space.\""
+   },
+   {
+    "task": 4,
+    "question": "G9",
+    "user": "sector 90 degrees radius 6 whats the area",
+    "assistant": "A 90° sector is one quarter of the circle. The circumference is 2π × 6 = 12π, so one quarter of it is 3π. The sector area is 3π ft²."
+   },
+   {
+    "task": 4,
+    "question": "G10",
+    "user": "does 5 m work for g10",
+    "assistant": "Yes: a 5 m × 3 m service area removes 15 m², so 96 − 15 = 81 m² is usable, which is at least 80 m²."
+   }
+  ],
+  "focus_away": [
+   {
+    "task": 1,
+    "seconds": 45,
+    "tab_title": "Inbox - Gmail",
+    "url": "https://mail.google.com/mail/u/0/#inbox"
+   },
+   {
+    "task": 4,
+    "seconds": 60,
+    "tab_title": "YouTube",
+    "url": "https://www.youtube.com/"
+   }
+  ],
+  "copies": []
+ },
+ {
+  "number": 39,
+  "condition": "Tutor",
+  "profile": "Average student with moderate tutor use; follows hints on biology and G8 and writes a plain but complete books essay",
+  "outcome": "completed",
+  "stop_task": null,
+  "task_minutes": [
+   2.5,
+   11,
+   18,
+   1.4,
+   24,
+   2.5
+  ],
+  "typing_interval_ms": 225,
+  "telemetry": "extension",
+  "answers": {
+   "B1": {
+    "choices": [
+     0
+    ]
+   },
+   "B2": {
+    "choices": [
+     0,
+     1,
+     2
+    ]
+   },
+   "B3": {
+    "blanks": {
+     "percent": "8.0",
+     "direction": "into"
+    }
+   },
+   "B4": {
+    "text": "The student is wrong that the water stopped. At 0.30 mol/L the graph shows 0%, so water is going into and out of the cells at about the same rate. Also you can't say every potato cell has exactly 0.30 mol/L because potato cells have other things dissolved in them, not only sucrose. It's better to say the cells are about balanced with the 0.30 solution.",
+    "rubric_points": [
+     1,
+     2,
+     2,
+     1
+    ],
+    "rationale": "Synthetic rubric review: graph evidence: 1 point(s); balanced two-way movement: 2 point(s); unsupported every-cell claim: 2 point(s); qualified interpretation: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "B5": {
+    "text": "Negative because the 0.50 solution is more concentrated than the cells, so water leaves by osmosis. I'd compare 5 pieces at 0.50 with 5 pieces at 0.40, keeping the temperature and the time the same, and find the mean percent change for each.",
+    "rubric_points": [
+     1,
+     1,
+     0,
+     1,
+     1,
+     1
+    ],
+    "rationale": "Synthetic rubric review: negative prediction: 1 point(s); outward water movement: 1 point(s); extrapolation uncertainty: 0 point(s); replication and comparison: 1 point(s); controlled variables: 1 point(s); mean percentage changes: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G1": {
+    "choices": [
+     1
+    ]
+   },
+   "G2": {
+    "blanks": {
+     "factor": "1.5",
+     "length": "7.5"
+    }
+   },
+   "G3": {
+    "choices": [
+     0,
+     1
+    ]
+   },
+   "G4": {
+    "text": "The error is multiplying the area by 3. The base is 3 times longer and the height is 3 times longer, so you multiply by 3 and by 3 again, which is 9. 12 × 9 = 108 cm².",
+    "rubric_points": [
+     1,
+     2,
+     1,
+     1,
+     0
+    ],
+    "rationale": "Synthetic rubric review: length/area distinction: 1 point(s); both dimensions scale: 2 point(s); area factor nine: 1 point(s); correct numerical area: 1 point(s); square units explained: 0 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G5": {
+    "choices": [
+     0
+    ]
+   },
+   "G6": {
+    "blanks": {
+     "xcoord": "1.5",
+     "ycoord": "2"
+    }
+   },
+   "G7": {
+    "choices": [
+     0
+    ]
+   },
+   "G8": {
+    "text": "Method 1: 12 × 8 = 96, 4 × 3 = 12, 96 − 12 = 84 m². Method 2: bottom rectangle 12 × 5 = 60 and top rectangle 8 × 3 = 24, 60 + 24 = 84 m². They only share one edge so they don't overlap, and they fill the whole L shape.",
+    "rubric_points": [
+     2,
+     2,
+     1,
+     1
+    ],
+    "rationale": "Synthetic rubric review: subtraction: 2 point(s); two-rectangle calculation: 2 point(s); no overlap or gaps: 1 point(s); correct area with units: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G9": {
+    "choices": [
+     2
+    ]
+   },
+   "G10": {
+    "text": "6 m: 96 − 18 = 78, too small. Largest width: 96 − 80 = 16 m² can be used for the service area, 16 ÷ 3 = 5.33 m. So 5 m, which gives 81 m². When the service area is smaller you take less away.",
+    "rubric_points": [
+     2,
+     2,
+     1,
+     1,
+     1,
+     0
+    ],
+    "rationale": "Synthetic rubric review: test and reject six meters: 2 point(s); solve exact bound: 2 point(s); greatest whole-meter width: 1 point(s); verify 81 square meters: 1 point(s); inverse width/usable-area relation: 1 point(s); coherent recommendation: 0 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   }
+  },
+  "essay": "The school should choose the books plan because it helps more students read and learn at home, since Source C shows that books can be borrowed.\n\nSource A says many students ask for books that the library doesn't have or that have long waiting lists. The books plan adds 300 print books, so students wouldn't have to wait as long. It would also have books in several languages, which helps students who speak other languages at home.\n\nBorrowing is important because some students don't have internet at home. Source A says books can be used at home without an internet connection. The media equipment has to stay at school according to Source C, so students could only use it during school.\n\nOn the other hand, the media space would give students without equipment a place to make podcasts and videos (Source B). This is a good idea. However, it has only six seats and needs supervised booking, so only a few students could use it at a time.\n\nA limitation is that the student poll had only 120 responses from 600 students. Books got 72 votes and media got 48, but because the poll was voluntary, we can't be sure this is what most students want.\n\nIn conclusion, the books plan is the better choice because it meets a need that already exists and students can use the books anywhere.",
+  "essay_draft": null,
+  "surveys": {
+   "0": [
+    [
+     0,
+     2
+    ],
+    [
+     2
+    ],
+    3,
+    3,
+    "Check it against the examples from class"
+   ],
+   "3": [
+    [
+     3
+    ],
+    3,
+    3
+   ],
+   "5": [
+    3,
+    3,
+    2,
+    [
+     0,
+     1,
+     2
+    ],
+    "On G8 the tutor told me to draw a line across where the cutout ends, and I got 12 × 5 and 8 × 3. I checked that 60 + 24 matched the 84 from subtracting."
+   ]
+  },
+  "chats": [
+   {
+    "task": 1,
+    "question": "B4",
+    "user": "is 0.30 where the potato and the solution are equal?",
+    "assistant": "That's a reasonable starting idea. What does the graph show at 0.30 mol/L, and does \"equal\" mean water stops moving or something else? Try explaining what individual water molecules are doing."
+   },
+   {
+    "task": 1,
+    "question": "B5",
+    "user": "b5 i think its negative. how do i describe a fair test",
+    "assistant": "Good prediction. What would you compare the 0.50 result with, and how many pieces would you use at each concentration? Also list two things you'd keep the same."
+   },
+   {
+    "task": 2,
+    "user": "does my claim sound ok: The school should choose the books plan because it helps more students read and learn at home.",
+    "assistant": "It's clear and takes a side. Which source backs up \"at home\"? Consider naming it and adding a few words about *why* home access matters."
+   },
+   {
+    "task": 4,
+    "question": "G8",
+    "user": "how do i split an L shape into 2 rectangles",
+    "assistant": "Picture the missing corner in the top right. If you draw a line straight across the shape where the cutout ends, what two rectangles do you get? What are their dimensions?"
+   },
+   {
+    "task": 4,
+    "question": "G8",
+    "user": "12 by 5 and 8 by 3?",
+    "assistant": "Yes — now check: do they add up to the same area as your subtraction method? And do they share anything besides an edge?"
+   }
+  ],
+  "focus_away": [
+   {
+    "task": 2,
+    "seconds": 20,
+    "tab_title": "Google Docs",
+    "url": "https://docs.google.com/document/u/0/"
+   }
+  ],
+  "copies": []
+ },
+ {
+  "number": 40,
+  "condition": "Tutor",
+  "profile": "Above-average writer who uses the tutor thoughtfully to find and answer the strongest counterargument for the media plan; solid in math",
+  "outcome": "completed",
+  "stop_task": null,
+  "task_minutes": [
+   2.1,
+   10,
+   20,
+   1.3,
+   22,
+   2.7
+  ],
+  "typing_interval_ms": 175,
+  "telemetry": "extension",
+  "answers": {
+   "B1": {
+    "choices": [
+     0
+    ]
+   },
+   "B2": {
+    "choices": [
+     0,
+     1,
+     2
+    ]
+   },
+   "B3": {
+    "blanks": {
+     "percent": "8",
+     "direction": "into"
+    }
+   },
+   "B4": {
+    "text": "The first problem is that water molecules don't stop moving — at 0.30 mol/L the graph shows a mean change of 0%, which means water entered and left the cells at about the same rate, so there was no net change. The second problem is that a mean of five pieces can't prove every cell contains exactly 0.30 mol/L sucrose; some pieces may have gained and others lost, and cells contain other solutes too. A better interpretation is that the potato tissue is roughly in balance with a 0.30 mol/L solution.",
+    "rubric_points": [
+     1,
+     2,
+     2,
+     1
+    ],
+    "rationale": "Synthetic rubric review: graph evidence: 1 point(s); balanced two-way movement: 2 point(s); unsupported every-cell claim: 2 point(s); qualified interpretation: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "B5": {
+    "text": "I predict a negative mean mass change, because the 0.50 mol/L solution is more concentrated than the cell contents, so there would be net movement of water out of the cells. Following the pattern gives an estimate of about −8%, but 0.50 is outside the tested range and the trend might not stay linear. To test it, I would put five similar pieces in 0.50 mol/L and five in 0.40 mol/L, keep the time at 20 minutes and use the same temperature and potato, and compare the mean percentage changes.",
+    "rubric_points": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "rationale": "Synthetic rubric review: negative prediction: 1 point(s); outward water movement: 1 point(s); extrapolation uncertainty: 1 point(s); replication and comparison: 1 point(s); controlled variables: 1 point(s); mean percentage changes: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G1": {
+    "choices": [
+     1
+    ]
+   },
+   "G2": {
+    "blanks": {
+     "factor": "1.5",
+     "length": "7.5"
+    }
+   },
+   "G3": {
+    "choices": [
+     0,
+     1
+    ]
+   },
+   "G4": {
+    "text": "The draft treats area like a length. When every side is tripled, the base and height are both multiplied by 3, so the area is multiplied by 3 × 3 = 9: ½(3b)(3h) = 9(½bh). So the area is 12 × 9 = 108 cm².",
+    "rubric_points": [
+     1,
+     2,
+     1,
+     1,
+     0
+    ],
+    "rationale": "Synthetic rubric review: length/area distinction: 1 point(s); both dimensions scale: 2 point(s); area factor nine: 1 point(s); correct numerical area: 1 point(s); square units explained: 0 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G5": {
+    "choices": [
+     0
+    ]
+   },
+   "G6": {
+    "blanks": {
+     "xcoord": "1.5",
+     "ycoord": "2"
+    }
+   },
+   "G7": {
+    "choices": [
+     0,
+     2
+    ]
+   },
+   "G8": {
+    "text": "Subtraction: 12 × 8 − 4 × 3 = 96 − 12 = 84 m². Two rectangles: 8 × 8 = 64 m² on the left and 4 × 5 = 20 m² under the service area; 64 + 20 = 84 m². They meet only along the vertical line x = 8, so there's no overlap, and together they cover the whole L-shape. Usable area = 84 m².",
+    "rubric_points": [
+     2,
+     2,
+     1,
+     1
+    ],
+    "rationale": "Synthetic rubric review: subtraction: 2 point(s); two-rectangle calculation: 2 point(s); no overlap or gaps: 1 point(s); correct area with units: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   },
+   "G9": {
+    "choices": [
+     2
+    ]
+   },
+   "G10": {
+    "text": "Usable = 96 − 3w. For 6 m: 96 − 18 = 78 m², below 80, so reject it. 96 − 3w ≥ 80 gives w ≤ 16/3 ≈ 5.33 m (rounded down so the area stays at least 80). The greatest whole-meter width is 5 m: 96 − 15 = 81 m². So instead of the designer's 6 m, the service area could grow from the original 4 m to 5 m. A smaller service area subtracts less from 96, so more floor stays usable.",
+    "rubric_points": [
+     2,
+     2,
+     1,
+     1,
+     1,
+     1
+    ],
+    "rationale": "Synthetic rubric review: test and reject six meters: 2 point(s); solve exact bound: 2 point(s); greatest whole-meter width: 1 point(s); verify 81 square meters: 1 point(s); inverse width/usable-area relation: 1 point(s); coherent recommendation: 1 point(s). Credit is limited to the reasoning stated in the submitted answer."
+   }
+  },
+  "essay": "Riverton High should use its $6,000 grant for the creative media space. Both plans have value, but the media space gives students a resource many of them cannot get anywhere else.\n\nAccording to Source B, the space would let students record podcasts, edit video, and work on presentations even if they lack the equipment at home. For a student without a computer or microphone, a video project is either impossible or much harder. The space would give those students the same starting point as classmates with better technology.\n\nThe space would also serve the whole school. Source B says the media club supports scheduled access for all students rather than priority for its members, and that students could learn from each other across subjects.\n\nThe strongest argument against this plan is about access. Sources A and C point out that books can be borrowed and used at home without internet, while the media equipment stays at school. That challenges my own reason, because the space helps students without resources only while they are in the building. However, books and recording equipment fill different gaps. A student who wants more books still has the current library, but a student without editing tools has no option at all. The six-seat limit is real, so the school should use the supervised booking system Source B describes.\n\nThe evidence also has limits. The 72-to-48 poll result came from only 120 of 600 students who chose to respond, and no source measures how much either plan would improve learning.\n\nBecause it closes a gap nothing else in the school addresses, the media space is the better investment.",
+  "essay_draft": null,
+  "surveys": {
+   "0": [
+    [
+     0,
+     1,
+     2
+    ],
+    [
+     2
+    ],
+    4,
+    2,
+    "I redo the key step myself"
+   ],
+   "3": [
+    [
+     2
+    ],
+    4,
+    2
+   ],
+   "5": [
+    4,
+    2,
+    2,
+    [
+     0,
+     1,
+     3
+    ],
+    "In the essay, the tutor helped me see that the take-home point in Sources A and C actually undercut my main reason, so I rewrote my response to explain that books and equipment fill different gaps. For G10 I checked 5.34 myself and saw it leaves less than 80 m², so I rounded down."
+   ]
+  },
+  "chats": [
+   {
+    "task": 1,
+    "question": "B5",
+    "user": "Is it valid to say the change at 0.50 would be about -8% if I call it an estimate?",
+    "assistant": "What assumption are you making when you extend the pattern to 0.50? If you can name that assumption and explain why it might not hold, \"about −8%\" as an estimate is reasonable."
+   },
+   {
+    "task": 2,
+    "user": "I'm arguing for the media space. What's the strongest counterargument I should address?",
+    "assistant": "Good instinct to look for the strongest one rather than the easiest. Look at Sources A and C: what can books do that the media space can't? Which of those differences would matter most to a student who doesn't have much at home?"
+   },
+   {
+    "task": 2,
+    "user": "Probably that books can be borrowed and used without internet, but the media equipment stays at school. That kind of hurts my argument since I'm saying media helps students without resources.",
+    "assistant": "Exactly — that's a sharp observation, because it hits your own main reason. How might you respond? Think about what *kind* of resource each plan provides: is a student without a laptop helped by a book in the same way?"
+   },
+   {
+    "task": 2,
+    "user": "Maybe: books help with reading, but a student without a computer can't do a video project at all without the space. And six seats is a real problem, so I could suggest the booking system from Source B.",
+    "assistant": "That's a meaningful response: you concede the access point and then explain why the media space fills a different gap. Make sure you don't overclaim — does any source say how much the space would improve learning? That could become your limitation."
+   },
+   {
+    "task": 4,
+    "question": "G5",
+    "user": "slope of AB is 2/4 = 1/2, BC is (4-2)/(3-4) = -2. product is -1 so perpendicular?",
+    "assistant": "Your slopes look right. What does a product of −1 tell you about the two lines, and which answer choice gives exactly that reasoning?"
+   },
+   {
+    "task": 4,
+    "question": "G10",
+    "user": "For G10, should I round 16/3 down to 5.33 or up to 5.34 for the max width?",
+    "assistant": "Think about the constraint: at least 80 m² must remain. If you use 5.34, what happens to the usable area — is it above or below 80? That tells you which direction of rounding is safe."
+   }
+  ],
+  "focus_away": [
+   {
+    "task": 1,
+    "seconds": 12,
+    "tab_title": "Google",
+    "url": "https://www.google.com/"
+   },
+   {
+    "task": 4,
+    "seconds": 28,
+    "tab_title": "Desmos | Scientific Calculator",
+    "url": "https://www.desmos.com/scientific"
+   }
+  ],
+  "copies": []
+ }
+]

@@ -31,12 +31,13 @@ def test_synthetic_fixture_contains_no_explicit_account_fields(fixture_path):
     assert '"path"' not in serialized
 
 
-@pytest.mark.parametrize("variant", ["current", "sparse", "empty", "historical"])
+@pytest.mark.parametrize("variant", ["current", "platform", "sparse", "empty", "historical"])
 def test_notebook_runs_with_participant_exports(project_root, fixture_path, tmp_path, monkeypatch, variant):
     import nbclient
     import nbformat
 
-    document = json.loads(fixture_path.read_text())
+    source = project_root / "tests" / "fixtures" / "platform_export_sample.json" if variant == "platform" else fixture_path
+    document = json.loads(source.read_text())
     if variant == "empty":
         document["sessions"] = []
     elif variant == "sparse":
@@ -44,7 +45,7 @@ def test_notebook_runs_with_participant_exports(project_root, fixture_path, tmp_
         document["sessions"][0]["tasks"] = []
     elif variant == "historical":
         document["sessions"] = [{"session": {"id": "historical-run"}}]
-    else:
+    elif variant == "current":
         # Ensure the tutorial uses the selected export, not the bundled session ID.
         serialized = json.dumps(document).replace("session-complete", "participant-run-42")
         document = json.loads(serialized)
@@ -56,9 +57,17 @@ def test_notebook_runs_with_participant_exports(project_root, fixture_path, tmp_
     if variant == "current":
         assertions += (
             "assert SESSION_ID == 'participant-run-42'\n"
-            "assert response_details['title'].notna().all()\n"
+            "assert response_details['question_title'].notna().all()\n"
             "assert not timeline.empty\n"
             "assert overview.loc[0, 'workflow_id'] == 'workflow-transport'\n"
+        )
+    if variant == "platform":
+        assertions += (
+            "assert len(activity) == 5 and set(activity['state']) >= {'COMPLETED', 'IN_PROGRESS', 'TASK_REQUIRED'}\n"
+            "assert response_details['answer_text'].notna().any()\n"
+            "assert surveys['prompt'].notna().all()\n"
+            "assert not timing.empty and not timeline.empty\n"
+            "assert data.messages['task_id'].notna().all()\n"
         )
     notebook.cells.append(nbformat.v4.new_code_cell(assertions))
     nbclient.NotebookClient(
